@@ -1,15 +1,15 @@
-# Yet Another GGUF Converter
+# Yet Another GGUF GUI (convert to GGUF)
 
 There are simultaneously too many and not enough GGUF Converters in the world. I can fix this.
 
 ## Features
 
-- **All Python** - No extra binaries or compiling
-- **Convert** safetensors and PyTorch models to GGUF format
-- **Quantize** to multiple formats at once
-- **Cross-platform** - Works on Windows, Mac, and Linux
-- **Two interfaces** - CLI for automation, GUI for ease of use
-- **Fast** - Parallel quantization makes up for python and then some
+- **llama.cpp under the hood** - So you can trust that part
+- **Convert** - safetensors and PyTorch models to GGUF format
+- **Quantize** - to multiple formats at once
+- **Cross-platform** - scripts install on Windows, Mac, and Linux 
+- **No compiling** - installs llama.cpp binaries
+- **No mess** - it all lives in one folder/venv
 
 ## Quantization Types
 Pretend there's a list here.
@@ -20,9 +20,10 @@ Pretend there's a list here.
 # Clone the repository
 git clone https://github.com/usrname0/Yet_Another_GGUF_Converter.git
 cd Yet_Another_GGUF_Converter
-
-# Install dependencies
-pip install -r requirements.txt
+# Windows (run_gui.bat automatically runs a setup script if no venv detected)
+run_gui.bat
+# Linux / Mac (run_gui.sh automatically runs a setup script if no venv detected)
+run_gui.sh
 ```
 
 ## Usage
@@ -87,18 +88,6 @@ python -m gguf_converter ~/models/model output/ --no-quantize --output-type f16
 - Python 3.8 or higher
 - 8GB+ RAM (more for larger models)
 - Disk space for models and outputs
-
-### Python Dependencies
-
-All installed automatically with `pip install -r requirements.txt`:
-
-- `huggingface-hub` - Model downloading
-- `numpy` - Numerical operations
-- `gguf` - GGUF file format support
-- `torch` - Model conversion (used by llama.cpp convert script)
-- `transformers` - Model loading (used by llama.cpp convert script)
-- `streamlit` (optional) - GUI
-
 
 ## Troubleshooting
 
