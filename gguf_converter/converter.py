@@ -460,21 +460,12 @@ class GGUFConverter:
                 print(f"Generating importance matrix for {model_name}...")
 
                 # Find calibration file
-                calibration_file = None
-                # Look for calibration_sample.txt in project root
-                project_root = Path(__file__).parent.parent
-                possible_paths = [
-                    project_root / "calibration_sample.txt",
-                    Path.cwd() / "calibration_sample.txt",
-                ]
+                module_dir = Path(__file__).parent
+                calibration_file = module_dir / "calibration_sample.txt"
 
-                for path in possible_paths:
-                    if path.exists():
-                        calibration_file = path
-                        break
-
-                if not calibration_file:
-                    print("Warning: calibration_sample.txt not found, using built-in calibration data")
+                if not calibration_file.exists():
+                    print("Warning: calibration_sample.txt not found in gguf_converter folder, using built-in calibration data")
+                    calibration_file = None
 
                 self.generate_imatrix(
                     model_path=intermediate_file,

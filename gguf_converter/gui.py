@@ -31,7 +31,7 @@ def get_default_config():
 
         # Imatrix generation settings
         "imatrix_ctx_size": 512,
-        "imatrix_chunks": None,  # None = all chunks
+        "imatrix_chunks": 100,  # 100-200 recommended, 0 = all chunks
         "imatrix_collect_output_weight": False,
 
         # Convert & Quantize tab
@@ -117,14 +117,15 @@ def main():
         st.markdown("**Performance:**")
         import multiprocessing
         max_workers = multiprocessing.cpu_count()
+        default_threads = max(1, max_workers - 1)  # Leave one core free for system
 
         nthreads = st.number_input(
             "Thread count",
             min_value=1,
             max_value=max_workers,
-            value=int(config.get("nthreads") or max_workers),
+            value=int(config.get("nthreads") or default_threads),
             step=1,
-            help=f"Number of threads for llama.cpp (CPU cores: {max_workers})"
+            help=f"Number of threads for llama.cpp (CPU cores: {max_workers}, default: {default_threads} to keep system responsive)"
         )
 
         st.markdown("---")
@@ -142,9 +143,9 @@ def main():
             "Chunks to process",
             min_value=0,
             max_value=10000,
-            value=int(config.get("imatrix_chunks") or 0),
+            value=int(config.get("imatrix_chunks") or 100),
             step=10,
-            help="Number of chunks to process from calibration file. 0 = process all. More chunks = better coverage but slower."
+            help="Number of chunks to process from calibration file. 0 = process all. 100-200 recommended for good coverage. More chunks = better coverage but slower with diminishing returns."
         )
 
         imatrix_collect_output = st.checkbox(
@@ -204,7 +205,7 @@ def main():
                 help="Where to save the converted files"
             )
 
-            st.markdown("**Conversion Options:**")
+            st.subheader("Conversion Options")
             intermediate_type = st.radio(
                 "Intermediate format",
                 ["F16", "F32"],
@@ -213,11 +214,11 @@ def main():
                 horizontal=True
             )
 
-            st.markdown("**Importance Matrix:**")
+            st.subheader("Importance Matrix (imatrix)")
             use_imatrix = st.checkbox(
-                "Generate importance matrix",
+                "Use importance matrix (Generate if necessary)",
                 value=config.get("use_imatrix", False),
-                help="Generate importance matrix for better low-bit quantization (IQ2, IQ3).  \nRequired for best IQ2/IQ3 quality. Will be generated and saved in output directory."
+                help="Use importance matrix for better low-bit quantization (IQ2, IQ3).  \nRequired for best IQ2/IQ3 quality. Will be generated and saved in output directory."
             )
 
             keep_imatrix = st.checkbox(
