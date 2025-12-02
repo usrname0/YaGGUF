@@ -40,7 +40,7 @@ double-click run_gui.sh
 ```bash
 streamlit run gguf_converter/gui.py
 ```
-Then open your browser to http://localhost:8501
+Then open your browser to `http://localhost:8501`
 
 ### CLI (Recommended for nerds)
 
