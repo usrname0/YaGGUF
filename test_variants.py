@@ -2,6 +2,7 @@
 """
 Test all quantized GGUF variants with llama-server
 Loads each variant in llama-server, waits for manual testing, then moves to next
+python test_variants.py E:\\LLM\\lmstudio-community\\Qwen3-VL-4B-Instruct-GGUF --exclude f16
 """
 
 import subprocess
