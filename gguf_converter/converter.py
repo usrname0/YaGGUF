@@ -1,0 +1,517 @@
+"""
+Core GGUF conversion and quantization functionality
+"""
+
+import os
+import subprocess
+import sys
+from pathlib import Path
+from typing import Optional, Union, List
+from huggingface_hub import snapshot_download
+from .binary_manager import BinaryManager
+
+
+class GGUFConverter:
+    """
+    GGUF converter that wraps llama.cpp for conversion and quantization
+    No C++ compilation required - binaries are auto-downloaded
+    """
+
+    # Supported quantization types (from llama.cpp)
+    QUANTIZATION_TYPES = [
+        "Q4_0", "Q4_1", "Q5_0", "Q5_1", "Q8_0",
+        "Q2_K", "Q2_K_S",
+        "Q3_K", "Q3_K_S", "Q3_K_M", "Q3_K_L",
+        "Q4_K", "Q4_K_S", "Q4_K_M",
+        "Q5_K", "Q5_K_S", "Q5_K_M",
+        "Q6_K",
+        "IQ1_S", "IQ1_M", "IQ2_XXS", "IQ2_XS", "IQ2_S", "IQ2_M",
+        "IQ3_XXS", "IQ3_XS", "IQ3_S", "IQ3_M",
+        "IQ4_XS", "IQ4_NL",
+        "F16", "BF16", "F32",
+    ]
+
+    def __init__(self):
+        """Initialize the converter and binary manager"""
+        self.binary_manager = BinaryManager()
+        # Ensure binaries are available on init
+        if not self.binary_manager.ensure_binaries():
+            raise RuntimeError(
+                "Failed to get llama.cpp binaries. "
+                "Please check your internet connection or install llama.cpp manually."
+            )
+
+    def download_model(
+        self,
+        repo_id: str,
+        output_dir: Union[str, Path],
+        revision: Optional[str] = None
+    ) -> Path:
+        """
+        Download a model from HuggingFace
+
+        Args:
+            repo_id: HuggingFace repo ID (e.g., "username/model-name")
+            output_dir: Directory to save the model
+            revision: Specific revision/branch to download
+
+        Returns:
+            Path to the downloaded model directory
+        """
+        output_dir = Path(output_dir)
+        output_dir.mkdir(parents=True, exist_ok=True)
+
+        print(f"Downloading {repo_id} from HuggingFace...")
+        model_path = snapshot_download(
+            repo_id=repo_id,
+            local_dir=output_dir / Path(repo_id).name,
+            revision=revision
+        )
+
+        return Path(model_path)
+
+    def convert_to_gguf(
+        self,
+        model_path: Union[str, Path],
+        output_path: Union[str, Path],
+        output_type: str = "f16",
+        vocab_only: bool = False,
+        verbose: bool = False
+    ) -> Path:
+        """
+        Convert a model to GGUF format
+
+        Args:
+            model_path: Path to the input model (safetensors/pytorch)
+            output_path: Path for the output GGUF file
+            output_type: Output precision (f32, f16, bf16, q8_0, auto)
+            vocab_only: Only extract vocabulary
+            verbose: Enable verbose logging
+
+        Returns:
+            Path to the created GGUF file
+        """
+        model_path = Path(model_path)
+        output_path = Path(output_path)
+
+        if not model_path.exists():
+            raise FileNotFoundError(f"Model not found: {model_path}")
+
+        # Ensure output directory exists
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+
+        # Build command to run convert_hf_to_gguf.py
+        # We need to find the convert script from llama.cpp
+        convert_script = self._find_convert_script()
+
+        if not convert_script:
+            raise RuntimeError(
+                "Could not find convert_hf_to_gguf.py script. "
+                "The llama.cpp repository should have been auto-cloned. "
+                "Please check your git installation or manually clone llama.cpp."
+            )
+
+        cmd = [
+            sys.executable,
+            str(convert_script),
+            str(model_path),
+            "--outfile", str(output_path),
+            "--outtype", output_type,
+        ]
+
+        if vocab_only:
+            cmd.append("--vocab-only")
+        if verbose:
+            cmd.append("--verbose")
+
+        print(f"Converting {model_path.name} to GGUF format...")
+        print(f"Command: {' '.join(cmd)}")
+
+        result = subprocess.run(cmd, capture_output=not verbose, text=True)
+
+        if result.returncode != 0:
+            raise RuntimeError(f"Conversion failed: {result.stderr if result.stderr else 'Unknown error'}")
+
+        if verbose and result.stdout:
+            print(result.stdout)
+
+        print(f"Conversion complete: {output_path}")
+        return output_path
+
+    def _find_convert_script(self) -> Optional[Path]:
+        """Find the convert_hf_to_gguf.py script"""
+        # Try to find it in common locations
+        possible_locations = [
+            # In llama-cpp-python package
+            Path(__file__).parent.parent / "llama.cpp" / "convert_hf_to_gguf.py",
+            # System-wide llama.cpp installation
+            Path.home() / "llama.cpp" / "convert_hf_to_gguf.py",
+            # Current directory
+            Path.cwd() / "llama.cpp" / "convert_hf_to_gguf.py",
+        ]
+
+        for location in possible_locations:
+            if location.exists():
+                return location
+
+        # Try to clone llama.cpp if not found
+        llama_cpp_dir = Path(__file__).parent.parent / "llama.cpp"
+        if not llama_cpp_dir.exists():
+            print("Cloning llama.cpp repository...")
+            subprocess.run([
+                "git", "clone",
+                "https://github.com/ggerganov/llama.cpp.git",
+                "--depth=1",
+                str(llama_cpp_dir)
+            ], check=True)
+
+        convert_script = llama_cpp_dir / "convert_hf_to_gguf.py"
+        return convert_script if convert_script.exists() else None
+
+
+    def quantize(
+        self,
+        input_path: Union[str, Path],
+        output_path: Union[str, Path],
+        quantization_type: str = "Q4_K_M",
+        imatrix_path: Optional[Union[str, Path]] = None,
+        nthreads: Optional[int] = None,
+        verbose: bool = True,
+        parallel: bool = True,
+        num_workers: Optional[int] = None,
+        scalar_optimization: bool = False
+    ) -> Path:
+        """
+        Quantize a GGUF model using llama.cpp
+
+        Args:
+            input_path: Path to input GGUF file (f16/f32)
+            output_path: Path for quantized output file
+            quantization_type: Quantization type (e.g., Q4_0, Q4_K_M, IQ3_XXS, etc.)
+            imatrix_path: Optional importance matrix file for better quality
+            nthreads: Number of threads to use (passed to llama-quantize)
+            verbose: Enable verbose output
+            parallel: Ignored (kept for API compatibility)
+            num_workers: Ignored (kept for API compatibility)
+            scalar_optimization: Ignored (kept for API compatibility)
+
+        Returns:
+            Path to the quantized GGUF file
+        """
+        input_path = Path(input_path)
+        output_path = Path(output_path)
+
+        if not input_path.exists():
+            raise FileNotFoundError(f"Input file not found: {input_path}")
+
+        if quantization_type not in self.QUANTIZATION_TYPES:
+            raise ValueError(
+                f"Invalid quantization type: {quantization_type}. "
+                f"Available: {', '.join(self.QUANTIZATION_TYPES)}"
+            )
+
+        # Ensure output directory exists
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+
+        print(f"Quantizing {input_path.name} to {quantization_type}...")
+
+        import time
+        start_time = time.time()
+
+        # Build llama-quantize command
+        quantize_bin = self.binary_manager.get_quantize_path()
+        cmd = [str(quantize_bin), str(input_path), str(output_path), quantization_type]
+
+        # Add nthreads (positional argument, comes before optional flags)
+        if nthreads:
+            cmd.append(str(nthreads))
+
+        # Add optional flags (must come after positional arguments)
+        if imatrix_path:
+            imatrix_path = Path(imatrix_path)
+            if not imatrix_path.exists():
+                raise FileNotFoundError(f"Imatrix file not found: {imatrix_path}")
+            cmd.extend(["--imatrix", str(imatrix_path)])
+
+        print(f"Running: {' '.join(cmd)}")
+        print()
+
+        # Run llama-quantize
+        try:
+            result = subprocess.run(
+                cmd,
+                capture_output=not verbose,
+                text=True,
+                check=True
+            )
+
+            if verbose and result.stdout:
+                print(result.stdout)
+
+        except subprocess.CalledProcessError as e:
+            error_msg = e.stderr if e.stderr else str(e)
+            raise RuntimeError(f"Quantization failed: {error_msg}")
+
+        elapsed = time.time() - start_time
+
+        # Print summary
+        if output_path.exists():
+            input_size = input_path.stat().st_size / (1024**3)
+            output_size = output_path.stat().st_size / (1024**3)
+            ratio = input_size / output_size if output_size > 0 else 0
+
+            print(f"\nQuantization complete: {output_path}")
+            print(f"Time taken: {elapsed:.2f}s ({elapsed/60:.2f} minutes)")
+            print(f"Size: {input_size:.2f} GB -> {output_size:.2f} GB ({ratio:.2f}x compression)")
+        else:
+            raise RuntimeError("Quantization appeared to succeed but output file not found")
+
+        return output_path
+
+    def generate_imatrix(
+        self,
+        model_path: Union[str, Path],
+        output_path: Union[str, Path],
+        calibration_file: Optional[Union[str, Path]] = None,
+        ctx_size: int = 512,
+        nthreads: Optional[int] = None,
+        verbose: bool = True,
+        chunks: Optional[int] = None,
+        collect_output_weight: bool = False
+    ) -> Path:
+        """
+        Generate importance matrix (imatrix) for better quantization quality
+
+        Args:
+            model_path: Path to GGUF model file (f16/f32)
+            output_path: Path for output imatrix file
+            calibration_file: Text file with calibration data (default: uses built-in)
+            ctx_size: Context window size for processing (default: 512)
+            nthreads: Number of threads to use
+            verbose: Enable verbose output
+            chunks: Number of chunks to process (None = process all)
+            collect_output_weight: Collect importance matrix for output.weight tensor
+
+        Returns:
+            Path to the generated imatrix file
+        """
+        model_path = Path(model_path)
+        output_path = Path(output_path)
+
+        if not model_path.exists():
+            raise FileNotFoundError(f"Model not found: {model_path}")
+
+        if calibration_file:
+            calibration_file = Path(calibration_file)
+            if not calibration_file.exists():
+                raise FileNotFoundError(f"Calibration file not found: {calibration_file}")
+
+        # Ensure output directory exists
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+
+        print(f"Generating importance matrix for {model_path.name}...")
+        print(f"This may take a while...")
+
+        import time
+        start_time = time.time()
+
+        # Build llama-imatrix command
+        imatrix_bin = self.binary_manager.get_imatrix_path()
+        cmd = [
+            str(imatrix_bin),
+            "-m", str(model_path),
+            "-o", str(output_path),
+            "-c", str(ctx_size)
+        ]
+
+        # Add optional arguments
+        if calibration_file:
+            cmd.extend(["-f", str(calibration_file)])
+
+        if chunks:
+            cmd.extend(["--chunks", str(chunks)])
+
+        if collect_output_weight:
+            cmd.append("--collect-output-weight")
+
+        if nthreads:
+            cmd.extend(["-t", str(nthreads)])
+
+        print(f"Running: {' '.join(cmd)}")
+        print()
+
+        # Run llama-imatrix
+        try:
+            result = subprocess.run(
+                cmd,
+                capture_output=not verbose,
+                text=True,
+                check=True
+            )
+
+            if verbose and result.stdout:
+                print(result.stdout)
+
+        except subprocess.CalledProcessError as e:
+            error_msg = e.stderr if e.stderr else str(e)
+            raise RuntimeError(f"Imatrix generation failed: {error_msg}")
+
+        elapsed = time.time() - start_time
+
+        # Print summary
+        if output_path.exists():
+            print(f"\nImatrix generation complete: {output_path}")
+            print(f"Time taken: {elapsed:.2f}s ({elapsed/60:.2f} minutes)")
+        else:
+            raise RuntimeError("Imatrix generation appeared to succeed but output file not found")
+
+        return output_path
+
+    def convert_and_quantize(
+        self,
+        model_path: Union[str, Path],
+        output_dir: Union[str, Path],
+        quantization_types: List[str] = ["Q4_K_M"],
+        intermediate_type: str = "f16",
+        keep_intermediate: bool = False,
+        verbose: bool = False,
+        parallel: bool = True,
+        num_workers: Optional[int] = None,
+        scalar_optimization: bool = False,
+        imatrix_path: Optional[Union[str, Path]] = None,
+        nthreads: Optional[int] = None,
+        generate_imatrix: bool = False,
+        keep_imatrix: bool = True,
+        imatrix_ctx_size: int = 512,
+        imatrix_chunks: Optional[int] = None,
+        imatrix_collect_output: bool = False
+    ) -> List[Path]:
+        """
+        Convert to GGUF and quantize in one go
+
+        Args:
+            model_path: Path to input model or HuggingFace repo ID
+            output_dir: Directory for output files
+            quantization_types: List of quantization types to create
+            intermediate_type: Intermediate format (f16 or f32)
+            keep_intermediate: Keep the intermediate f16/f32 file
+            verbose: Enable verbose logging
+            parallel: Ignored (kept for API compatibility)
+            num_workers: Ignored (kept for API compatibility)
+            scalar_optimization: Ignored (kept for API compatibility)
+            imatrix_path: Optional importance matrix file for low-bit quants (deprecated, use generate_imatrix)
+            nthreads: Number of threads for llama.cpp (None = auto)
+            generate_imatrix: Auto-generate importance matrix in output directory
+            keep_imatrix: Keep the generated .imatrix file after quantization (default: True)
+            imatrix_ctx_size: Context window size for imatrix generation (default: 512)
+            imatrix_chunks: Number of chunks to process for imatrix (None = all)
+            imatrix_collect_output: Collect output.weight tensor in imatrix
+
+        Returns:
+            List of paths to created quantized files
+        """
+        # Keep original string to check for HuggingFace repo ID format
+        model_path_str = str(model_path)
+        model_path = Path(model_path)
+        output_dir = Path(output_dir)
+        output_dir.mkdir(parents=True, exist_ok=True)
+
+        # Check if it's a HuggingFace repo ID (before Path conversion changes the separators)
+        if not model_path.exists() and "/" in model_path_str:
+            print(f"Downloading from HuggingFace: {model_path_str}")
+            model_path = self.download_model(model_path_str, output_dir / "downloads")
+
+        # Check if input is already a GGUF file
+        is_already_gguf = model_path.is_file() and model_path.suffix == '.gguf'
+
+        if is_already_gguf:
+            print(f"Input is already a GGUF file: {model_path.name}")
+            print("Skipping conversion, going straight to quantization...")
+            intermediate_file = model_path
+            model_name = model_path.stem  # Remove .gguf extension
+        else:
+            model_name = model_path.name
+
+            # Step 1: Convert to GGUF
+            intermediate_file = output_dir / f"{model_name}_{intermediate_type}.gguf"
+
+            # Check if intermediate file already exists
+            if intermediate_file.exists():
+                print(f"Intermediate file already exists: {intermediate_file.name}")
+                print("Skipping conversion, using existing file...")
+            else:
+                print(f"Converting {model_name} to GGUF...")
+                self.convert_to_gguf(
+                    model_path=model_path,
+                    output_path=intermediate_file,
+                    output_type=intermediate_type,
+                    verbose=verbose
+                )
+
+        # Step 1.5: Generate importance matrix if requested
+        if generate_imatrix:
+            imatrix_file = output_dir / f"{model_name}.imatrix"
+
+            # Check if imatrix already exists
+            if imatrix_file.exists():
+                print(f"Importance matrix already exists: {imatrix_file.name}")
+                print("Skipping imatrix generation, using existing file...")
+            else:
+                print(f"Generating importance matrix for {model_name}...")
+
+                # Find calibration file
+                calibration_file = None
+                # Look for calibration_sample.txt in project root
+                project_root = Path(__file__).parent.parent
+                possible_paths = [
+                    project_root / "calibration_sample.txt",
+                    Path.cwd() / "calibration_sample.txt",
+                ]
+
+                for path in possible_paths:
+                    if path.exists():
+                        calibration_file = path
+                        break
+
+                if not calibration_file:
+                    print("Warning: calibration_sample.txt not found, using built-in calibration data")
+
+                self.generate_imatrix(
+                    model_path=intermediate_file,
+                    output_path=imatrix_file,
+                    calibration_file=calibration_file,
+                    ctx_size=imatrix_ctx_size,
+                    nthreads=nthreads,
+                    verbose=verbose,
+                    chunks=imatrix_chunks,
+                    collect_output_weight=imatrix_collect_output
+                )
+
+            # Use the generated imatrix
+            imatrix_path = imatrix_file
+
+        # Step 2: Quantize to requested types
+        quantized_files = []
+        for quant_type in quantization_types:
+            output_file = output_dir / f"{model_name}_{quant_type}.gguf"
+            self.quantize(
+                input_path=intermediate_file,
+                output_path=output_file,
+                quantization_type=quant_type,
+                verbose=verbose,
+                imatrix_path=imatrix_path,
+                nthreads=nthreads
+            )
+            quantized_files.append(output_file)
+
+        # Optionally remove intermediate file (but never delete the original input!)
+        if not keep_intermediate and intermediate_file.exists() and not is_already_gguf:
+            print(f"Removing intermediate file: {intermediate_file}")
+            intermediate_file.unlink()
+
+        # Optionally remove imatrix file
+        if not keep_imatrix and generate_imatrix and imatrix_path and Path(imatrix_path).exists():
+            print(f"Removing imatrix file: {imatrix_path}")
+            Path(imatrix_path).unlink()
+
+        return quantized_files

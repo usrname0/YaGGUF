@@ -1,0 +1,14 @@
+test_variants.py will load all your quantized files for testing. Here's how to use it:
+
+  Usage
+
+  # Basic usage (auto-finds llama.cpp)
+  python test_variants.py output/my-model/
+
+  # Specify llama.cpp location
+  python test_variants.py output/my-model/ llama.cpp/build/bin/llama-cli.exe
+
+
+Will launch each file in folder into llama-server for a quick test.  Hit enter launches next gguf.
+example:
+python test_variants.py E:\LLM\lmstudio-community\Qwen3-VL-4B-Instruct-GGUF --exclude f16
