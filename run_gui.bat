@@ -13,7 +13,7 @@ if not exist venv (
     echo Press any key to run setup now, or Ctrl+C to cancel...
     pause >nul
     echo.
-    call setup_windows.bat
+    call setup\setup_windows.bat
     if errorlevel 1 (
         echo.
         echo Setup failed. Please check the errors above.

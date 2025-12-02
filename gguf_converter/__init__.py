@@ -1,5 +1,5 @@
 """
-Yet Another GGUF Converter - Pure Python GGUF conversion and quantization
+Yet Another GGUF Converter - GGUF conversion leveraging llama.cpp
 """
 
 __version__ = "0.1.0"

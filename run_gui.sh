@@ -12,7 +12,7 @@ if [ ! -d "venv" ]; then
     echo ""
     read -p "Press Enter to run setup now, or Ctrl+C to cancel..."
     echo ""
-    ./setup_linux.sh
+    ./setup/setup_linux.sh
     if [ $? -ne 0 ]; then
         echo ""
         echo "Setup failed. Please check the errors above."
