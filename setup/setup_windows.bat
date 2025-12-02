@@ -47,7 +47,16 @@ echo Upgrading pip...
 python -m pip install --upgrade pip
 
 echo.
-echo Installing requirements...
+echo Installing PyTorch (CPU-only version to save space)...
+pip install "torch>=2.0.0" --index-url https://download.pytorch.org/whl/cpu
+if errorlevel 1 (
+    echo ERROR: Failed to install PyTorch
+    pause
+    exit /b 1
+)
+
+echo.
+echo Installing remaining requirements...
 pip install -r requirements.txt
 if errorlevel 1 (
     echo ERROR: Failed to install requirements

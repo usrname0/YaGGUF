@@ -112,5 +112,5 @@ MIT License - see LICENSE file for details
 
 ## Credits
 
-- [llama.cpp](https://github.com/ggerganov/llama.cpp) - GGUF format and conversion tools
-- [HuggingFace](https://huggingface.co/) - Model hosting
+- [llama.cpp](https://github.com/ggerganov/llama.cpp) - GGUF format and conversion/quantization tools
+- [HuggingFace](https://huggingface.co/) - Model hosting and transformers library
