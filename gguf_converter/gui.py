@@ -38,8 +38,7 @@ def get_default_config():
         "hf_repo": "",
         "model_path": "",
         "output_dir": "",
-        "intermediate_type": "f16",
-        "keep_intermediate": False,
+        "intermediate_type": "F16",
 
         # Quantization types - all stored in other_quants dict
         "other_quants": {
@@ -206,17 +205,12 @@ def main():
             )
 
             st.markdown("**Conversion Options:**")
-            intermediate_type = st.selectbox(
+            intermediate_type = st.radio(
                 "Intermediate format",
-                ["f16", "f32"],
-                index=0 if config.get("intermediate_type", "f16") == "f16" else 1,
-                help="Format used before quantization (f32=better but bigger, f16=smaller but ok)"
-            )
-
-            keep_intermediate = st.checkbox(
-                "Keep intermediate file",
-                value=config.get("keep_intermediate", False),
-                help="Keep the f16/f32 file after quantization"
+                ["F16", "F32"],
+                index=0 if config.get("intermediate_type", "F16").upper() == "F16" else 1,
+                help="Format used before quantization (F32=better but bigger, F16=smaller but ok)",
+                horizontal=True
             )
 
             st.markdown("**Importance Matrix:**")
@@ -236,9 +230,27 @@ def main():
             st.subheader("Quantization Types")
             st.markdown("Select one or more quantization types:")
 
+            # Full Precision Outputs
+            st.markdown("**Full Precision Outputs:**")
+            full_cols = st.columns(3)
+            full_quants = {
+                "F32": "32-bit float (full precision)",
+                "F16": "16-bit float (half precision)",
+                "BF16": "16-bit bfloat (brain float)",
+            }
+            full_checkboxes = {}
+            for idx, (qtype, tooltip) in enumerate(full_quants.items()):
+                with full_cols[idx]:
+                    full_checkboxes[qtype] = st.checkbox(
+                        qtype,
+                        value=config.get("other_quants", {}).get(qtype, False),
+                        help=tooltip,
+                        key=f"full_{qtype}"
+                    )
+
             # Traditional Quants
             st.markdown("**Traditional Quants:**")
-            trad_cols = st.columns(5)
+            trad_cols = st.columns(3)
             trad_quants = {
                 "Q4_0": "4-bit legacy",
                 "Q4_1": "4-bit legacy improved",
@@ -248,7 +260,7 @@ def main():
             }
             trad_checkboxes = {}
             for idx, (qtype, tooltip) in enumerate(trad_quants.items()):
-                with trad_cols[idx]:
+                with trad_cols[idx % 3]:
                     trad_checkboxes[qtype] = st.checkbox(
                         qtype,
                         value=config.get("other_quants", {}).get(qtype, qtype == "Q8_0" if qtype == "Q8_0" else False),
@@ -311,6 +323,9 @@ def main():
 
         # Collect selected quantization types
         selected_quants = []
+        for qtype, checked in full_checkboxes.items():
+            if checked:
+                selected_quants.append(qtype)
         for qtype, checked in trad_checkboxes.items():
             if checked:
                 selected_quants.append(qtype)
@@ -340,10 +355,10 @@ def main():
                 config["model_path"] = model_path
                 config["output_dir"] = output_dir
                 config["intermediate_type"] = intermediate_type
-                config["keep_intermediate"] = keep_intermediate
 
                 # Save all quantization selections in other_quants
                 all_quant_selections = {}
+                all_quant_selections.update(full_checkboxes)
                 all_quant_selections.update(trad_checkboxes)
                 all_quant_selections.update(k_checkboxes)
                 all_quant_selections.update(i_checkboxes)
@@ -370,7 +385,7 @@ def main():
                             output_dir=output_dir,
                             quantization_types=selected_quants,
                             intermediate_type=intermediate_type,
-                            keep_intermediate=keep_intermediate,
+                            keep_intermediate=False,
                             verbose=verbose,
                             generate_imatrix=use_imatrix,
                             keep_imatrix=keep_imatrix,

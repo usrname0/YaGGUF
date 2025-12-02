@@ -433,7 +433,7 @@ class GGUFConverter:
             model_name = model_path.name
 
             # Step 1: Convert to GGUF
-            intermediate_file = output_dir / f"{model_name}_{intermediate_type}.gguf"
+            intermediate_file = output_dir / f"{model_name}_{intermediate_type.upper()}.gguf"
 
             # Check if intermediate file already exists
             if intermediate_file.exists():
@@ -494,18 +494,56 @@ class GGUFConverter:
         quantized_files = []
         for quant_type in quantization_types:
             output_file = output_dir / f"{model_name}_{quant_type}.gguf"
-            self.quantize(
-                input_path=intermediate_file,
-                output_path=output_file,
-                quantization_type=quant_type,
-                verbose=verbose,
-                imatrix_path=imatrix_path,
-                nthreads=nthreads
-            )
-            quantized_files.append(output_file)
 
-        # Optionally remove intermediate file (but never delete the original input!)
-        if not keep_intermediate and intermediate_file.exists() and not is_already_gguf:
+            # Handle F16/F32/BF16 specially - these are intermediate formats
+            if quant_type.upper() in ["F16", "F32", "BF16"]:
+                # If the requested format matches the intermediate format, just use that file
+                if quant_type.upper() == intermediate_type.upper():
+                    # Check if output file would be same as intermediate (case-insensitive check)
+                    if output_file.resolve() == intermediate_file.resolve():
+                        print(f"{quant_type} output already exists as intermediate file...")
+                        quantized_files.append(intermediate_file)
+                    else:
+                        import shutil
+                        print(f"Creating {quant_type} output (copying intermediate file)...")
+                        shutil.copy2(intermediate_file, output_file)
+                        quantized_files.append(output_file)
+                else:
+                    # Different format requested - need to convert (e.g., F16 -> F32)
+                    # Try using quantize command which might support format conversion
+                    try:
+                        print(f"Converting from {intermediate_type} to {quant_type}...")
+                        self.quantize(
+                            input_path=intermediate_file,
+                            output_path=output_file,
+                            quantization_type=quant_type,
+                            verbose=verbose,
+                            imatrix_path=None,  # Don't use imatrix for format conversion
+                            nthreads=nthreads
+                        )
+                        quantized_files.append(output_file)
+                    except Exception as e:
+                        print(f"Warning: Could not convert {intermediate_type} to {quant_type}: {e}")
+                        print(f"Suggestion: Use '{quant_type.lower()}' as the intermediate format instead")
+                        raise RuntimeError(
+                            f"Cannot convert from {intermediate_type} to {quant_type}. "
+                            f"Please set the intermediate format to '{quant_type.lower()}' instead."
+                        )
+            else:
+                self.quantize(
+                    input_path=intermediate_file,
+                    output_path=output_file,
+                    quantization_type=quant_type,
+                    verbose=verbose,
+                    imatrix_path=imatrix_path,
+                    nthreads=nthreads
+                )
+                quantized_files.append(output_file)
+
+        # Optionally remove intermediate file (but never delete the original input or requested outputs!)
+        # Don't delete if the intermediate file was requested as an output (F16/F32)
+        intermediate_is_output = any(f.resolve() == intermediate_file.resolve() for f in quantized_files)
+        if not keep_intermediate and intermediate_file.exists() and not is_already_gguf and not intermediate_is_output:
             print(f"Removing intermediate file: {intermediate_file}")
             intermediate_file.unlink()
 
