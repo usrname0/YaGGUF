@@ -248,15 +248,15 @@ def main():
                         key=f"full_{qtype}"
                     )
 
-            # Traditional Quants
-            st.markdown("**Traditional Quants:**")
+            # Legacy Quants
+            st.markdown("**Legacy Quants:**")
             trad_cols = st.columns(3)
             trad_quants = {
-                "Q4_0": "4-bit legacy",
-                "Q4_1": "4-bit legacy improved",
-                "Q5_0": "5-bit legacy",
-                "Q5_1": "5-bit legacy improved",
                 "Q8_0": "8-bit (highest quality)",
+                "Q5_1": "5-bit improved",
+                "Q5_0": "5-bit",
+                "Q4_1": "4-bit improved",
+                "Q4_0": "4-bit",
             }
             trad_checkboxes = {}
             for idx, (qtype, tooltip) in enumerate(trad_quants.items()):
@@ -271,16 +271,16 @@ def main():
             # K Quants
             st.markdown("**K Quants (Recommended):**")
             k_quants = {
-                "Q2_K": "2-bit K",
-                "Q2_K_S": "2-bit K small",
-                "Q3_K_S": "3-bit K small",
-                "Q3_K_M": "3-bit K medium",
-                "Q3_K_L": "3-bit K large",
-                "Q4_K_S": "4-bit K small",
-                "Q4_K_M": "4-bit K medium (best balance)",
-                "Q5_K_S": "5-bit K small",
-                "Q5_K_M": "5-bit K medium",
                 "Q6_K": "6-bit K (very high quality)",
+                "Q5_K_M": "5-bit K medium",
+                "Q5_K_S": "5-bit K small",
+                "Q4_K_M": "4-bit K medium (best balance)",
+                "Q4_K_S": "4-bit K small",
+                "Q3_K_L": "3-bit K large",
+                "Q3_K_M": "3-bit K medium",
+                "Q3_K_S": "3-bit K small",
+                "Q2_K_S": "2-bit K small",
+                "Q2_K": "2-bit K",
             }
             k_checkboxes = {}
             k_cols = st.columns(3)
@@ -297,18 +297,18 @@ def main():
             # I Quants
             st.markdown("**I Quants (Importance Matrix Recommended):**")
             i_quants = {
-                "IQ1_S": "1-bit IQ small",
-                "IQ1_M": "1-bit IQ medium",
-                "IQ2_XXS": "2-bit IQ extra-extra-small",
-                "IQ2_XS": "2-bit IQ extra-small",
-                "IQ2_S": "2-bit IQ small",
-                "IQ2_M": "2-bit IQ medium",
-                "IQ3_XXS": "3-bit IQ extra-extra-small",
-                "IQ3_XS": "3-bit IQ extra-small",
-                "IQ3_S": "3.4-bit IQ small",
-                "IQ3_M": "3-bit IQ medium",
-                "IQ4_XS": "4-bit IQ extra-small",
                 "IQ4_NL": "4-bit IQ non-linear",
+                "IQ4_XS": "4-bit IQ extra-small",
+                "IQ3_M": "3-bit IQ medium",
+                "IQ3_S": "3.4-bit IQ small",
+                "IQ3_XS": "3-bit IQ extra-small",
+                "IQ3_XXS": "3-bit IQ extra-extra-small",
+                "IQ2_M": "2-bit IQ medium",
+                "IQ2_S": "2-bit IQ small",
+                "IQ2_XS": "2-bit IQ extra-small",
+                "IQ2_XXS": "2-bit IQ extra-extra-small",
+                "IQ1_M": "1-bit IQ medium",
+                "IQ1_S": "1-bit IQ small",
             }
             i_checkboxes = {}
             i_cols = st.columns(3)

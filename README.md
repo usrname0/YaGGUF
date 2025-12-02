@@ -20,7 +20,11 @@ All quantization types from llama.cpp are supported. Choose based on your size/q
 | **F32** | Largest | Original | Full Precision | Full 32-bit precision |
 | **F16** | Large | Near-original | Full Precision | Half precision, minimal quality loss |
 | BF16 | Large | Near-original | Full Precision | Brain float 16-bit |
-| Q8_0 | Very Large | Excellent | K-Quant | Near-original quality |
+| Q8_0 | Very Large | Excellent | Legacy | Near-original quality, 8-bit |
+| Q5_1 | Medium | Good | Legacy | Legacy 5-bit improved |
+| Q5_0 | Medium | Good | Legacy | Legacy 5-bit |
+| Q4_1 | Small | Fair | Legacy | Legacy 4-bit improved |
+| Q4_0 | Small | Fair | Legacy | Legacy 4-bit |
 | **Q6_K** | Large | Very High | K-Quant | Near-F16 quality, larger size |
 | **Q5_K_M** | Medium | Better | K-Quant | Higher quality with acceptable size |
 | Q5_K_S | Medium | Better | K-Quant | 5-bit K small |
@@ -43,10 +47,7 @@ All quantization types from llama.cpp are supported. Choose based on your size/q
 | IQ2_XXS | Tiny | Minimal | I-Quant | 2-bit extra-extra-small (use imatrix) |
 | IQ1_M | Extreme | Poor | I-Quant | 1-bit medium, experimental (use imatrix) |
 | IQ1_S | Extreme | Poor | I-Quant | 1-bit small, experimental (use imatrix) |
-| Q5_1 | Medium | Good | Legacy | Legacy 5-bit improved |
-| Q5_0 | Medium | Good | Legacy | Legacy 5-bit |
-| Q4_1 | Small | Fair | Legacy | Legacy 4-bit improved |
-| Q4_0 | Small | Fair | Legacy | Legacy 4-bit |
+
 
 **Quick Guide:**
 - Just starting? Use **Q4_K_M**
