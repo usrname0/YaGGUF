@@ -47,16 +47,7 @@ echo Upgrading pip...
 python -m pip install --upgrade pip
 
 echo.
-echo Installing PyTorch (CPU-only version to save 1.8GB)...
-pip install "torch>=2.0.0" --index-url https://download.pytorch.org/whl/cpu
-if errorlevel 1 (
-    echo ERROR: Failed to install PyTorch
-    pause
-    exit /b 1
-)
-
-echo.
-echo Installing remaining requirements...
+echo Installing requirements...
 pip install -r requirements.txt
 if errorlevel 1 (
     echo ERROR: Failed to install requirements
@@ -73,30 +64,6 @@ if errorlevel 1 (
     pause
     exit /b 1
 )
-
-echo.
-echo Checking PyTorch installation...
-python -c "import torch; print('PyTorch version:', torch.__version__)" 2>nul
-if errorlevel 1 (
-    echo.
-    echo ========================================
-    echo WARNING: PyTorch DLL Error Detected!
-    echo ========================================
-    echo.
-    echo PyTorch installed but cannot load DLL files.
-    echo This is usually caused by missing Visual C++ Redistributables.
-    echo.
-    echo Please download and install BOTH of these:
-    echo   1. VC++ 2015-2022 x64: https://aka.ms/vs/17/release/vc_redist.x64.exe
-    echo   2. VC++ 2015-2022 x86: https://aka.ms/vs/17/release/vc_redist.x86.exe
-    echo.
-    echo After installing, RESTART YOUR COMPUTER, then run this setup again.
-    echo.
-    pause
-    exit /b 1
-)
-
-echo PyTorch is working correctly!
 
 echo.
 echo ========================================
