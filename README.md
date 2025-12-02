@@ -15,48 +15,44 @@ There are simultaneously too many and not enough GGUF Converters in the world. I
 
 All quantization types from llama.cpp are supported. Choose based on your size/quality tradeoff:
 
-### Full Precision (No Quantization)
-| Type | Size | Quality | Notes |
-|------|------|---------|-------|
-| F32 | Largest | Original | Full 32-bit precision |
-| F16 | Large | Near-original | Half precision, minimal quality loss |
-| BF16 | Large | Near-original | Brain float 16-bit |
-
-### Recommended K-Quants (Best Quality/Size Balance)
-| Type | Size | Quality | Best For |
-|------|------|---------|----------|
-| Q4_K_M | Small | Good | **Default recommendation** - best balance |
-| Q5_K_M | Medium | Better | Higher quality with acceptable size |
-| Q6_K | Large | Very High | Near-F16 quality, larger size |
-| Q8_0 | Very Large | Excellent | Near-original quality |
-| Q3_K_M | Very Small | Fair | Aggressive compression |
-| Q2_K | Tiny | Minimal | Maximum compression |
-
-### Traditional Quants (Legacy)
-| Type | Size | Quality | Notes |
-|------|------|---------|-------|
-| Q4_0 | Small | Fair | Legacy 4-bit |
-| Q4_1 | Small | Fair | Legacy 4-bit improved |
-| Q5_0 | Medium | Good | Legacy 5-bit |
-| Q5_1 | Medium | Good | Legacy 5-bit improved |
-
-### I-Quants (Importance Matrix - Advanced)
-Requires generating an importance matrix for best results. Better quality at ultra-low bit rates.
-
-| Type | Size | Quality | Notes |
-|------|------|---------|-------|
-| IQ4_NL | Small | Good | 4-bit non-linear |
-| IQ3_M | Very Small | Fair | 3-bit medium |
-| IQ3_S | Very Small | Fair+ | 3.4-bit compression |
-| IQ2_M | Tiny | Minimal | 2-bit medium |
-| IQ2_S | Tiny | Minimal | 2-bit small |
-| IQ1_M | Extreme | Poor | 1-bit, experimental |
+| Type | Size | Quality | Category | Notes |
+|------|------|---------|----------|-------|
+| **F32** | Largest | Original | Full Precision | Full 32-bit precision |
+| **F16** | Large | Near-original | Full Precision | Half precision, minimal quality loss |
+| BF16 | Large | Near-original | Full Precision | Brain float 16-bit |
+| Q8_0 | Very Large | Excellent | K-Quant | Near-original quality |
+| **Q6_K** | Large | Very High | K-Quant | Near-F16 quality, larger size |
+| **Q5_K_M** | Medium | Better | K-Quant | Higher quality with acceptable size |
+| Q5_K_S | Medium | Better | K-Quant | 5-bit K small |
+| **Q4_K_M** | Small | Good | K-Quant | **Default recommendation** - best balance |
+| Q4_K_S | Small | Good | K-Quant | 4-bit K small |
+| Q3_K_M | Very Small | Fair | K-Quant | Aggressive compression |
+| Q3_K_L | Very Small | Fair | K-Quant | 3-bit K large |
+| Q3_K_S | Very Small | Fair | K-Quant | 3-bit K small |
+| Q2_K | Tiny | Minimal | K-Quant | Maximum compression |
+| Q2_K_S | Tiny | Minimal | K-Quant | 2-bit K small |
+| IQ4_NL | Small | Good | I-Quant | 4-bit non-linear (use imatrix) |
+| IQ4_XS | Small | Good | I-Quant | 4-bit extra-small (use imatrix) |
+| IQ3_M | Very Small | Fair | I-Quant | 3-bit medium (use imatrix) |
+| IQ3_S | Very Small | Fair+ | I-Quant | 3.4-bit compression (use imatrix) |
+| IQ3_XS | Very Small | Fair | I-Quant | 3-bit extra-small (use imatrix) |
+| IQ3_XXS | Very Small | Fair | I-Quant | 3-bit extra-extra-small (use imatrix) |
+| IQ2_M | Tiny | Minimal | I-Quant | 2-bit medium (use imatrix) |
+| IQ2_S | Tiny | Minimal | I-Quant | 2-bit small (use imatrix) |
+| IQ2_XS | Tiny | Minimal | I-Quant | 2-bit extra-small (use imatrix) |
+| IQ2_XXS | Tiny | Minimal | I-Quant | 2-bit extra-extra-small (use imatrix) |
+| IQ1_M | Extreme | Poor | I-Quant | 1-bit medium, experimental (use imatrix) |
+| IQ1_S | Extreme | Poor | I-Quant | 1-bit small, experimental (use imatrix) |
+| Q5_1 | Medium | Good | Legacy | Legacy 5-bit improved |
+| Q5_0 | Medium | Good | Legacy | Legacy 5-bit |
+| Q4_1 | Small | Fair | Legacy | Legacy 4-bit improved |
+| Q4_0 | Small | Fair | Legacy | Legacy 4-bit |
 
 **Quick Guide:**
 - Just starting? Use **Q4_K_M**
 - Want better quality? Use **Q5_K_M** or **Q6_K**
 - Need original quality? Use **Q8_0** or **F16**
-- Want smallest size? Use **IQ3_M** or **IQ2_M** with importance matrix
+- Want smallest size? Use IQ3_M or IQ2_M with importance matrix
 
 ## Installation
 
