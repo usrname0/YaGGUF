@@ -116,7 +116,7 @@ class GGUFConverter:
             str(convert_script),
             str(model_path),
             "--outfile", str(output_path),
-            "--outtype", output_type,
+            "--outtype", output_type.lower(),
         ]
 
         if vocab_only:
