@@ -1,5 +1,12 @@
 ## Project: Yet Another GGUF Converter
 
+### Essential Project Rules
+1. Research things before guessing
+2. Use docstrings
+3. No emojis or unicode characters in production code
+4. Discuss big changes before going ahead
+5. We are in a Windows environment but target all platforms
+
 ### Goal
 User-friendly GGUF converter that shields users from llama.cpp complexity - no manual compilation or terminal commands required!
 
@@ -34,9 +41,3 @@ User-friendly GGUF converter that shields users from llama.cpp complexity - no m
 4. **Full compatibility**: All llama.cpp quantization types and features
 5. **Cross-platform**: Windows, Mac, Linux with platform-specific binaries
 
-### Essential Project Rules
-1. Research things before guessing
-2. Use docstrings
-3. No emojis or unicode characters in production code
-4. Discuss big changes before going ahead
-5. We are in a Windows environment but target all platforms

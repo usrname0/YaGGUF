@@ -103,5 +103,6 @@ After activating your virtual environment:
         *   `quantization/`: Contains definitions for various quantization types and related logic.
     *   `llama.cpp/`: Cloned `llama.cpp` repository (if not already present) for scripts like `convert_hf_to_gguf.py`.
     *   `bin/`: Directory where downloaded `llama.cpp` executables are stored.
-    *   `calibration_sample.txt`: Example calibration data for importance matrix generation.
+    *   `calibration_data/`: Directory containing calibration text files for importance matrix generation.
+        *   `_default.txt`: Default calibration data file.
     *   `run_gui.bat`, `run_gui.sh`: Platform-specific scripts for easy setup and GUI launch.

@@ -71,12 +71,6 @@ Examples:
     )
 
     parser.add_argument(
-        "--keep-intermediate",
-        action="store_true",
-        help="Keep the intermediate f16/f32 GGUF file"
-    )
-
-    parser.add_argument(
         "--output-type",
         choices=["f16", "f32", "bf16", "q8_0", "auto"],
         help="Output type if --no-quantize is used (default: f16)"
@@ -161,7 +155,6 @@ Examples:
                 output_dir=args.output,
                 quantization_types=args.quantize,
                 intermediate_type=args.intermediate,
-                keep_intermediate=args.keep_intermediate,
                 verbose=args.verbose,
                 parallel=not args.serial,
                 num_workers=args.workers

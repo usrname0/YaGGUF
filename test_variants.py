@@ -59,7 +59,7 @@ def test_gguf_file(gguf_path: Path, server_path: Path, mmproj_path: Path = None,
         while waited < max_wait:
             # Check if process crashed
             if process.poll() is not None:
-                print(f"\n✗ Server failed to start (exit code: {process.returncode})")
+                print(f"\nServer failed to start (exit code: {process.returncode})")
                 return
 
             # Try to connect to the server to see if it's ready
@@ -78,12 +78,12 @@ def test_gguf_file(gguf_path: Path, server_path: Path, mmproj_path: Path = None,
             waited += 1
 
         if waited >= max_wait:
-            print(f"\n✗ Server did not start within {max_wait} seconds")
+            print(f"\nServer did not start within {max_wait} seconds")
             process.terminate()
             return
 
         print(f"\n{'='*70}")
-        print(f"✓ Server is ready!")
+        print(f"Server is ready!")
         print(f"\nServer URL: http://127.0.0.1:{port}")
         print(f"\nOpening browser automatically...")
         print(f"Press ENTER when you're done testing to move to the next model...")
@@ -108,7 +108,7 @@ def test_gguf_file(gguf_path: Path, server_path: Path, mmproj_path: Path = None,
             process.kill()
             process.wait()
 
-        print(f"✓ Server stopped")
+        print(f"Server stopped")
 
     except KeyboardInterrupt:
         print(f"\n\nInterrupted by user. Stopping server...")
@@ -119,7 +119,7 @@ def test_gguf_file(gguf_path: Path, server_path: Path, mmproj_path: Path = None,
             process.kill()
         raise
     except Exception as e:
-        print(f"✗ ERROR: {e}")
+        print(f"ERROR: {e}")
         if 'process' in locals():
             try:
                 process.terminate()

@@ -277,7 +277,13 @@ class GGUFConverter:
         nthreads: Optional[int] = None,
         verbose: bool = True,
         chunks: Optional[int] = None,
-        collect_output_weight: bool = False
+        collect_output_weight: bool = False,
+        ngl: Optional[int] = None,
+        verbosity: Optional[int] = None,
+        from_chunk: Optional[int] = None,
+        no_ppl: bool = False,
+        parse_special: bool = False,
+        output_frequency: Optional[int] = None
     ) -> Path:
         """
         Generate importance matrix (imatrix) for better quantization quality
@@ -288,9 +294,15 @@ class GGUFConverter:
             calibration_file: Text file with calibration data (default: uses built-in)
             ctx_size: Context window size for processing (default: 512)
             nthreads: Number of threads to use
-            verbose: Enable verbose output
+            verbose: Verbosity control (False=normal/1, True=debug/2)
             chunks: Number of chunks to process (None = process all)
             collect_output_weight: Collect importance matrix for output.weight tensor
+            ngl: Number of GPU layers to offload (None = CPU only)
+            verbosity: Verbosity level (0=quiet, 1=normal, 2+=debug, overrides verbose if set)
+            from_chunk: Skip first N chunks (useful for resuming)
+            no_ppl: Disable perplexity calculation (speeds up processing)
+            parse_special: Parse special tokens
+            output_frequency: Save interval in chunks (default: 10)
 
         Returns:
             Path to the generated imatrix file
@@ -331,11 +343,33 @@ class GGUFConverter:
         if chunks:
             cmd.extend(["--chunks", str(chunks)])
 
+        if from_chunk:
+            cmd.extend(["--chunk", str(from_chunk)])
+
         if collect_output_weight:
-            cmd.append("--collect-output-weight")
+            cmd.append("--process-output")
 
         if nthreads:
             cmd.extend(["-t", str(nthreads)])
+
+        if ngl is not None:
+            cmd.extend(["-ngl", str(ngl)])
+
+        # Handle verbosity - new verbosity param overrides old verbose bool
+        if verbosity is not None:
+            cmd.extend(["-lv", str(verbosity)])
+        else:
+            # Map verbose boolean: False=1 (normal), True=2 (verbose)
+            cmd.extend(["-lv", "2" if verbose else "1"])
+
+        if no_ppl:
+            cmd.append("--no-ppl")
+
+        if parse_special:
+            cmd.append("--parse-special")
+
+        if output_frequency:
+            cmd.extend(["-ofreq", str(output_frequency)])
 
         print(f"Running: {' '.join(cmd)}")
         print()
@@ -367,13 +401,93 @@ class GGUFConverter:
 
         return output_path
 
+    def show_imatrix_statistics(
+        self,
+        imatrix_path: Union[str, Path],
+        model_path: Union[str, Path],
+        verbose: bool = False
+    ) -> str:
+        """
+        Show statistics about an imatrix file
+
+        Args:
+            imatrix_path: Path to imatrix file
+            model_path: Path to model file (required by llama-imatrix)
+            verbose: If True, print output to terminal in real-time
+
+        Returns:
+            Statistics output as string
+        """
+        imatrix_path = Path(imatrix_path)
+        model_path = Path(model_path)
+
+        if not imatrix_path.exists():
+            raise FileNotFoundError(f"Imatrix file not found: {imatrix_path}")
+
+        if not model_path.exists():
+            raise FileNotFoundError(f"Model not found: {model_path}")
+
+        # Build llama-imatrix command with --show-statistics
+        # Note: llama-imatrix requires a model even for showing statistics
+        imatrix_bin = self.binary_manager.get_imatrix_path()
+        cmd = [
+            str(imatrix_bin),
+            "-m", str(model_path),
+            "--in-file", str(imatrix_path),
+            "--show-statistics"
+        ]
+
+        if verbose:
+            print(f"\nRunning: {' '.join(cmd)}\n", flush=True)
+
+        try:
+            if verbose:
+                # Stream output to terminal in real-time AND capture for GUI
+                process = subprocess.Popen(
+                    cmd,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.STDOUT,
+                    text=True,
+                    encoding='utf-8',
+                    bufsize=1
+                )
+
+                # Collect output while streaming to terminal
+                output_lines = []
+                for line in process.stdout:
+                    print(line, end='', flush=True)  # Real-time terminal output
+                    output_lines.append(line)  # Capture for GUI
+
+                # Wait for process to complete
+                process.wait()
+
+                if process.returncode != 0:
+                    raise subprocess.CalledProcessError(process.returncode, cmd)
+
+                output = ''.join(output_lines)
+                return output if output.strip() else "No statistics output (file may be empty or incompatible)"
+            else:
+                # Capture output for display in GUI only
+                result = subprocess.run(
+                    cmd,
+                    capture_output=True,
+                    text=True,
+                    encoding='utf-8',
+                    check=True
+                )
+                # Combine stdout and stderr since llama-imatrix may output to either
+                output = result.stdout + result.stderr
+                return output if output.strip() else "No statistics output (file may be empty or incompatible)"
+        except subprocess.CalledProcessError as e:
+            error_msg = e.stderr if e.stderr else str(e)
+            raise RuntimeError(f"Failed to show statistics: {error_msg}")
+
     def convert_and_quantize(
         self,
         model_path: Union[str, Path],
         output_dir: Union[str, Path],
         quantization_types: List[str] = ["Q4_K_M"],
         intermediate_type: str = "f16",
-        keep_intermediate: bool = False,
         verbose: bool = False,
         parallel: bool = True,
         num_workers: Optional[int] = None,
@@ -381,10 +495,10 @@ class GGUFConverter:
         imatrix_path: Optional[Union[str, Path]] = None,
         nthreads: Optional[int] = None,
         generate_imatrix: bool = False,
-        keep_imatrix: bool = True,
         imatrix_ctx_size: int = 512,
         imatrix_chunks: Optional[int] = None,
-        imatrix_collect_output: bool = False
+        imatrix_collect_output: bool = False,
+        imatrix_calibration_file: Optional[Union[str, Path]] = None
     ) -> List[Path]:
         """
         Convert to GGUF and quantize in one go
@@ -394,7 +508,6 @@ class GGUFConverter:
             output_dir: Directory for output files
             quantization_types: List of quantization types to create
             intermediate_type: Intermediate format (f16 or f32)
-            keep_intermediate: Keep the intermediate f16/f32 file
             verbose: Enable verbose logging
             parallel: Ignored (kept for API compatibility)
             num_workers: Ignored (kept for API compatibility)
@@ -402,10 +515,10 @@ class GGUFConverter:
             imatrix_path: Optional importance matrix file for low-bit quants (deprecated, use generate_imatrix)
             nthreads: Number of threads for llama.cpp (None = auto)
             generate_imatrix: Auto-generate importance matrix in output directory
-            keep_imatrix: Keep the generated .imatrix file after quantization (default: True)
             imatrix_ctx_size: Context window size for imatrix generation (default: 512)
             imatrix_chunks: Number of chunks to process for imatrix (None = all)
             imatrix_collect_output: Collect output.weight tensor in imatrix
+            imatrix_calibration_file: Path to calibration file for imatrix generation (None = use default)
 
         Returns:
             List of paths to created quantized files
@@ -459,13 +572,24 @@ class GGUFConverter:
             else:
                 print(f"Generating importance matrix for {model_name}...")
 
-                # Find calibration file
-                module_dir = Path(__file__).parent
-                calibration_file = module_dir / "calibration_sample.txt"
+                # Determine calibration file to use
+                calibration_file = None
+                if imatrix_calibration_file:
+                    calibration_file = Path(imatrix_calibration_file)
+                    if not calibration_file.exists():
+                        print(f"Warning: Specified calibration file not found: {calibration_file}")
+                        print("Falling back to default calibration file...")
+                        calibration_file = None
 
-                if not calibration_file.exists():
-                    print("Warning: calibration_sample.txt not found in gguf_converter folder, using built-in calibration data")
-                    calibration_file = None
+                # Use default if no file specified or if specified file doesn't exist
+                if not calibration_file:
+                    # Look in calibration_data folder at project root (one level up from gguf_converter module)
+                    project_root = Path(__file__).parent.parent
+                    calibration_file = project_root / "calibration_data" / "_default.txt"
+
+                    if not calibration_file.exists():
+                        print("Warning: _default.txt not found in calibration_data folder, using built-in calibration data")
+                        calibration_file = None
 
                 self.generate_imatrix(
                     model_path=intermediate_file,
@@ -530,17 +654,5 @@ class GGUFConverter:
                     nthreads=nthreads
                 )
                 quantized_files.append(output_file)
-
-        # Optionally remove intermediate file (but never delete the original input or requested outputs!)
-        # Don't delete if the intermediate file was requested as an output (F16/F32)
-        intermediate_is_output = any(f.resolve() == intermediate_file.resolve() for f in quantized_files)
-        if not keep_intermediate and intermediate_file.exists() and not is_already_gguf and not intermediate_is_output:
-            print(f"Removing intermediate file: {intermediate_file}")
-            intermediate_file.unlink()
-
-        # Optionally remove imatrix file
-        if not keep_imatrix and generate_imatrix and imatrix_path and Path(imatrix_path).exists():
-            print(f"Removing imatrix file: {imatrix_path}")
-            Path(imatrix_path).unlink()
 
         return quantized_files
