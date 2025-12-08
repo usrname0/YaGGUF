@@ -28,11 +28,11 @@ def get_default_config():
     return {
         # Sidebar settings
         "verbose": False,
-        "use_imatrix": False,
+        "use_imatrix": True,
         "nthreads": None,  # None = auto-detect
 
         # Imatrix mode (on Convert & Quantize tab)
-        "imatrix_mode": "generate",  # "generate" or "reuse"
+        "imatrix_mode": "generate",  # "generate", "generate_custom", or "reuse"
         "imatrix_generate_name": "",  # Custom filename for generated imatrix (empty = auto)
         "imatrix_reuse_path": "",  # Filename of imatrix to reuse from output directory
 
@@ -210,6 +210,8 @@ def main():
                 # Update config with current values
                 config["verbose"] = verbose
                 config["nthreads"] = int(nthreads)
+                # Note: use_imatrix and imatrix_mode are saved in the Convert & Quantize tab
+                # when the user makes changes there
                 save_config(config)
                 st.success("Settings saved!")
 
@@ -327,10 +329,18 @@ def main():
             )
 
             st.subheader("Importance Matrix (imatrix)")
+
+            # Callback to save imatrix checkbox state
+            def save_use_imatrix():
+                config["use_imatrix"] = st.session_state[f"use_imatrix_checkbox_{st.session_state.reset_count}"]
+                save_config(config)
+
             use_imatrix = st.checkbox(
                 "Use importance matrix",
                 value=config.get("use_imatrix", False),
-                help="Use importance matrix for better low-bit quantization (IQ2, IQ3).  \nRequired for best IQ2/IQ3 quality."
+                help="Use importance matrix for better low-bit quantization (IQ2, IQ3).  \nRequired for best IQ2/IQ3 quality.",
+                key=f"use_imatrix_checkbox_{st.session_state.reset_count}",
+                on_change=save_use_imatrix
             )
 
             # Show imatrix options when enabled
@@ -344,7 +354,7 @@ def main():
                 if output_dir_clean and Path(output_dir_clean).exists():
                     imatrix_files = sorted([f.name for f in Path(output_dir_clean).glob("*.imatrix")])
 
-                # Radio button for Generate vs Generate custom vs Reuse
+                # Radio button for Generate vs Generate (custom name) vs Reuse
                 saved_mode = config.get("imatrix_mode", "generate")
                 if saved_mode == "generate":
                     mode_index = 0
@@ -353,17 +363,30 @@ def main():
                 else:  # reuse
                     mode_index = 2
 
+                # Callback to save imatrix mode state
+                def save_imatrix_mode():
+                    mode = st.session_state[f"imatrix_mode_radio_{st.session_state.reset_count}"]
+                    if mode == "Generate":
+                        config["imatrix_mode"] = "generate"
+                    elif mode == "Generate (custom name)":
+                        config["imatrix_mode"] = "generate_custom"
+                    else:  # Reuse existing
+                        config["imatrix_mode"] = "reuse"
+                    save_config(config)
+
                 imatrix_mode = st.radio(
                     "Imatrix mode",
-                    ["Generate", "Generate custom", "Reuse existing"],
+                    ["Generate", "Generate (custom name)", "Reuse existing"],
                     index=mode_index,
                     help="Generate with default name, custom name, or reuse an existing imatrix file",
                     horizontal=True,
-                    label_visibility="collapsed"
+                    label_visibility="collapsed",
+                    key=f"imatrix_mode_radio_{st.session_state.reset_count}",
+                    on_change=save_imatrix_mode
                 )
 
                 # Show appropriate field based on mode
-                if imatrix_mode == "Generate custom":
+                if imatrix_mode == "Generate (custom name)":
                     # Text field for custom imatrix filename with Set to default button
                     col_imatrix_name, col_imatrix_default = st.columns([5, 1])
                     with col_imatrix_name:
@@ -582,12 +605,12 @@ def main():
                         # Save imatrix settings to config
                         if imatrix_mode == "Generate":
                             config["imatrix_mode"] = "generate"
-                        elif imatrix_mode == "Generate custom":
+                        elif imatrix_mode == "Generate (custom name)":
                             config["imatrix_mode"] = "generate_custom"
                         else:
                             config["imatrix_mode"] = "reuse"
 
-                        if imatrix_mode in ["Generate", "Generate custom"]:
+                        if imatrix_mode in ["Generate", "Generate (custom name)"]:
                             generate_imatrix_flag = True
                             config["imatrix_generate_name"] = imatrix_generate_name
                             imatrix_output_filename = imatrix_generate_name if imatrix_generate_name else None
@@ -633,7 +656,7 @@ def main():
                     if use_imatrix:
                         # Determine which imatrix file was used
                         actual_imatrix_path = None
-                        if imatrix_mode in ["Generate", "Generate custom"]:
+                        if imatrix_mode in ["Generate", "Generate (custom name)"]:
                             # Use the generated imatrix file
                             if imatrix_output_filename:
                                 actual_imatrix_path = Path(output_dir_clean) / imatrix_output_filename
