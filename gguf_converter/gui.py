@@ -33,7 +33,7 @@ def get_default_config():
 
         # Imatrix Settings tab
         "imatrix_ctx_size": 512,
-        "imatrix_chunks": 200,  # 100-200 recommended, 0 = all chunks
+        "imatrix_chunks": 150,  # 100-200 recommended, 0 = all chunks
         "imatrix_collect_output_weight": False,
         "imatrix_calibration_file": "_default.txt",  # Selected calibration file from the directory
         "imatrix_calibration_dir": "",  # Directory to scan for calibration files (empty = use default)
@@ -773,16 +773,6 @@ def main():
         with col2:
             st.subheader("Calibration Preview")
 
-            # Add CSS for word wrap in calibration preview
-            st.markdown("""
-                <style>
-                .calibration-preview pre {
-                    white-space: pre-wrap !important;
-                    word-wrap: break-word !important;
-                }
-                </style>
-            """, unsafe_allow_html=True)
-
             # Get the calibration file path
             preview_cal_dir = config.get("imatrix_calibration_dir", "")
             if preview_cal_dir:
@@ -824,9 +814,13 @@ def main():
                         st.markdown(info_msg)
 
                         # Show entire file with word wrap
-                        st.markdown('<div class="calibration-preview">', unsafe_allow_html=True)
-                        st.code(full_content, language=None)
-                        st.markdown('</div>', unsafe_allow_html=True)
+                        st.text_area(
+                            "Content",
+                            value=full_content,
+                            height=400,
+                            disabled=True,
+                            label_visibility="collapsed"
+                        )
 
                     else:  # "Processed data"
                         # Calculate what will be processed based on settings
@@ -895,9 +889,13 @@ def main():
                         st.markdown(info_msg)
 
                         # Show processed data with word wrap
-                        st.markdown('<div class="calibration-preview">', unsafe_allow_html=True)
-                        st.code(processed_content, language=None)
-                        st.markdown('</div>', unsafe_allow_html=True)
+                        st.text_area(
+                            "Content",
+                            value=processed_content,
+                            height=400,
+                            disabled=True,
+                            label_visibility="collapsed"
+                        )
 
                 except Exception as e:
                     st.warning(f"Could not preview calibration file: {e}")
