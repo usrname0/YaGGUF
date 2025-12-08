@@ -279,12 +279,19 @@ def get_binary_version():
         dict: Binary version info
     """
     try:
-        from .converter import GGUFConverter
+        # Import from main module to avoid relative import issues
+        import sys
+        if 'gguf_converter.converter' in sys.modules:
+            converter_module = sys.modules['gguf_converter.converter']
+            GGUFConverter = converter_module.GGUFConverter
+        else:
+            from gguf_converter.converter import GGUFConverter
+
         converter = GGUFConverter()
 
         # Try to get version from llama-cli
         try:
-            cli_path = converter.binary_manager.get_cli_path()
+            cli_path = converter.binary_manager.get_binary_path('llama-cli')
             result = subprocess.run(
                 [str(cli_path), "--version"],
                 capture_output=True,
@@ -293,13 +300,25 @@ def get_binary_version():
             )
 
             if result.returncode == 0:
-                # Parse version from output
-                version_line = result.stdout.strip().split('\n')[0] if result.stdout else "unknown"
-                return {
-                    "status": "ok",
-                    "version": version_line,
-                    "message": "Binaries are installed"
-                }
+                # Parse version from output (llama-cli outputs to stderr)
+                output = result.stderr if result.stderr else result.stdout
+                if output:
+                    # Extract just the version line
+                    for line in output.split('\n'):
+                        if line.startswith('version:'):
+                            version_line = line.strip()
+                            return {
+                                "status": "ok",
+                                "version": version_line,
+                                "message": "Binaries are installed"
+                            }
+                    # If no version line found, return full output
+                    version_line = output.strip().split('\n')[0]
+                    return {
+                        "status": "ok",
+                        "version": version_line,
+                        "message": "Binaries are installed"
+                    }
         except Exception:
             pass
 
@@ -1568,9 +1587,9 @@ def main():
 
             is_clean, status_msg = check_git_status()
             if is_clean:
-                st.success(f"✓ {status_msg}")
+                st.success(status_msg)
             else:
-                st.warning(f"⚠ {status_msg}")
+                st.warning(status_msg)
 
             # Check for updates button
             st.markdown("---")
@@ -1590,7 +1609,7 @@ def main():
             if 'update_check_result' in st.session_state:
                 result = st.session_state.update_check_result
                 if result["available"]:
-                    st.success(f"✓ {result['message']}")
+                    st.success(result['message'])
 
                     # Update button (only if repo is clean)
                     if is_clean:
@@ -1619,13 +1638,13 @@ def main():
             binary_info = get_binary_version()
 
             if binary_info["status"] == "ok":
-                st.success(f"✓ {binary_info['message']}")
+                st.success(binary_info['message'])
                 if binary_info["version"]:
                     st.code(binary_info["version"], language=None)
             elif binary_info["status"] == "missing":
-                st.warning(f"⚠ {binary_info['message']}")
+                st.warning(binary_info['message'])
             else:
-                st.error(f"✗ {binary_info['message']}")
+                st.error(binary_info['message'])
 
             st.markdown("---")
             st.subheader("About Updates")
