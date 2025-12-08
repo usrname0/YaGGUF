@@ -31,6 +31,11 @@ def get_default_config():
         "use_imatrix": False,
         "nthreads": None,  # None = auto-detect
 
+        # Imatrix mode (on Convert & Quantize tab)
+        "imatrix_mode": "generate",  # "generate" or "reuse"
+        "imatrix_generate_name": "",  # Custom filename for generated imatrix (empty = auto)
+        "imatrix_reuse_path": "",  # Filename of imatrix to reuse from output directory
+
         # Imatrix Settings tab
         "imatrix_ctx_size": 512,
         "imatrix_chunks": 150,  # 100-200 recommended, 0 = all chunks
@@ -323,10 +328,84 @@ def main():
 
             st.subheader("Importance Matrix (imatrix)")
             use_imatrix = st.checkbox(
-                "Use importance matrix (Generate if necessary)",
+                "Use importance matrix",
                 value=config.get("use_imatrix", False),
-                help="Use importance matrix for better low-bit quantization (IQ2, IQ3).  \nRequired for best IQ2/IQ3 quality. Will be generated and saved in output directory."
+                help="Use importance matrix for better low-bit quantization (IQ2, IQ3).  \nRequired for best IQ2/IQ3 quality."
             )
+
+            # Show imatrix options when enabled
+            imatrix_mode = None
+            imatrix_generate_name = None
+            imatrix_reuse_path = None
+
+            if use_imatrix:
+                # Scan output directory for .imatrix files
+                imatrix_files = []
+                if output_dir_clean and Path(output_dir_clean).exists():
+                    imatrix_files = sorted([f.name for f in Path(output_dir_clean).glob("*.imatrix")])
+
+                # Radio button for Generate vs Generate custom vs Reuse
+                saved_mode = config.get("imatrix_mode", "generate")
+                if saved_mode == "generate":
+                    mode_index = 0
+                elif saved_mode == "generate_custom":
+                    mode_index = 1
+                else:  # reuse
+                    mode_index = 2
+
+                imatrix_mode = st.radio(
+                    "Imatrix mode",
+                    ["Generate", "Generate custom", "Reuse existing"],
+                    index=mode_index,
+                    help="Generate with default name, custom name, or reuse an existing imatrix file",
+                    horizontal=True,
+                    label_visibility="collapsed"
+                )
+
+                # Show appropriate field based on mode
+                if imatrix_mode == "Generate custom":
+                    # Text field for custom imatrix filename with Set to default button
+                    col_imatrix_name, col_imatrix_default = st.columns([5, 1])
+                    with col_imatrix_name:
+                        imatrix_generate_name = st.text_input(
+                            "Imatrix filename",
+                            value=config.get("imatrix_generate_name", ""),
+                            placeholder="model.imatrix",
+                            help="Filename for the generated imatrix file (saved in output directory). Leave empty to use default naming (model_name.imatrix)."
+                        )
+                    with col_imatrix_default:
+                        st.markdown("<br>", unsafe_allow_html=True)  # Spacer to align with text input
+                        if st.button("Set to default", key="set_default_imatrix_name", use_container_width=True):
+                            # If we have model path info, populate with the calculated default
+                            if model_path_clean:
+                                default_name = f"{Path(model_path_clean).name}.imatrix"
+                                config["imatrix_generate_name"] = default_name
+                            else:
+                                # Otherwise just clear to empty
+                                config["imatrix_generate_name"] = ""
+                            save_config(config)
+                            st.rerun()
+                elif imatrix_mode == "Generate":
+                    # Use default name
+                    imatrix_generate_name = ""
+                else:  # Reuse existing
+                    # Dropdown with Update File List button for reuse
+                    col_imatrix_select, col_imatrix_update = st.columns([5, 1])
+                    with col_imatrix_select:
+                        if imatrix_files:
+                            imatrix_reuse_path = st.selectbox(
+                                "Select imatrix file",
+                                options=imatrix_files,
+                                index=0,
+                                help="Choose an existing imatrix file from the output directory"
+                            )
+                        else:
+                            st.warning("No .imatrix files found in output directory")
+                            imatrix_reuse_path = None
+                    with col_imatrix_update:
+                        st.markdown("<br>", unsafe_allow_html=True)  # Spacer to align with selectbox
+                        if st.button("Update File List", key="update_imatrix_reuse_list", use_container_width=True):
+                            st.rerun()
 
         with col2:
             st.subheader("Quantization Types")
@@ -493,18 +572,43 @@ def main():
                             actual_model_path = str(download_path)
                             st.info(f"Downloaded to: {actual_model_path}")
 
-                    # Build calibration file path if imatrix generation is enabled
+                    # Determine imatrix parameters based on mode
+                    generate_imatrix_flag = False
+                    imatrix_path_to_use = None
                     calibration_file_path = None
-                    if use_imatrix:
-                        cal_dir = config.get("imatrix_calibration_dir", "")
-                        cal_file = config.get("imatrix_calibration_file", "_default.txt")
+                    imatrix_output_filename = None
 
-                        if cal_dir:
-                            calibration_file_path = Path(cal_dir) / cal_file
+                    if use_imatrix:
+                        # Save imatrix settings to config
+                        if imatrix_mode == "Generate":
+                            config["imatrix_mode"] = "generate"
+                        elif imatrix_mode == "Generate custom":
+                            config["imatrix_mode"] = "generate_custom"
                         else:
-                            # Use default calibration_data directory (one level up from gguf_converter module)
-                            default_cal_dir = Path(__file__).parent.parent / "calibration_data"
-                            calibration_file_path = default_cal_dir / cal_file
+                            config["imatrix_mode"] = "reuse"
+
+                        if imatrix_mode in ["Generate", "Generate custom"]:
+                            generate_imatrix_flag = True
+                            config["imatrix_generate_name"] = imatrix_generate_name
+                            imatrix_output_filename = imatrix_generate_name if imatrix_generate_name else None
+
+                            # Build calibration file path for generation
+                            cal_dir = config.get("imatrix_calibration_dir", "")
+                            cal_file = config.get("imatrix_calibration_file", "_default.txt")
+
+                            if cal_dir:
+                                calibration_file_path = Path(cal_dir) / cal_file
+                            else:
+                                # Use default calibration_data directory (one level up from gguf_converter module)
+                                default_cal_dir = Path(__file__).parent.parent / "calibration_data"
+                                calibration_file_path = default_cal_dir / cal_file
+                        else:  # Reuse existing
+                            generate_imatrix_flag = False
+                            if imatrix_reuse_path:
+                                imatrix_path_to_use = Path(output_dir_clean) / imatrix_reuse_path
+                                config["imatrix_reuse_path"] = imatrix_reuse_path
+
+                        save_config(config)
 
                     with st.spinner("Converting and quantizing... This may take a while."):
                         output_files = converter.convert_and_quantize(
@@ -513,25 +617,37 @@ def main():
                             quantization_types=selected_quants,
                             intermediate_type=intermediate_type,
                             verbose=verbose,
-                            generate_imatrix=use_imatrix,
+                            generate_imatrix=generate_imatrix_flag,
+                            imatrix_path=imatrix_path_to_use,
                             nthreads=nthreads,
                             imatrix_ctx_size=int(config.get("imatrix_ctx_size", 512)),
                             imatrix_chunks=int(config.get("imatrix_chunks", 100)) if config.get("imatrix_chunks", 100) > 0 else None,
                             imatrix_collect_output=config.get("imatrix_collect_output_weight", False),
-                            imatrix_calibration_file=calibration_file_path
+                            imatrix_calibration_file=calibration_file_path,
+                            imatrix_output_name=imatrix_output_filename
                         )
 
                     st.success(f"Successfully created {len(output_files)} files!")
 
-                    # If imatrix was generated, save paths for statistics tab
+                    # If imatrix was used, save paths for statistics tab
                     if use_imatrix:
-                        # Construct the paths that would have been created
-                        model_name = Path(actual_model_path).name
-                        imatrix_path = Path(output_dir_clean) / f"{model_name}.imatrix"
-                        intermediate_path = Path(output_dir_clean) / f"{model_name}_{intermediate_type.upper()}.gguf"
+                        # Determine which imatrix file was used
+                        actual_imatrix_path = None
+                        if imatrix_mode in ["Generate", "Generate custom"]:
+                            # Use the generated imatrix file
+                            if imatrix_output_filename:
+                                actual_imatrix_path = Path(output_dir_clean) / imatrix_output_filename
+                            else:
+                                model_name = Path(actual_model_path).name
+                                actual_imatrix_path = Path(output_dir_clean) / f"{model_name}.imatrix"
+                        else:  # Reuse existing
+                            actual_imatrix_path = imatrix_path_to_use
 
-                        if imatrix_path.exists():
-                            config["imatrix_stats_path"] = str(imatrix_path)
+                        # Save paths for statistics tab
+                        intermediate_path = Path(output_dir_clean) / f"{Path(actual_model_path).name}_{intermediate_type.upper()}.gguf"
+
+                        if actual_imatrix_path and actual_imatrix_path.exists():
+                            config["imatrix_stats_path"] = str(actual_imatrix_path)
                         if intermediate_path.exists():
                             config["imatrix_stats_model"] = str(intermediate_path)
                         save_config(config)
@@ -595,7 +711,7 @@ def main():
                 ):
                     if cal_dir_exists_check:
                         try:
-                            open_folder(calibration_data_dir)
+                            open_folder(str(calibration_data_dir))
                             st.toast("Opened folder")
                         except Exception as e:
                             st.toast(f"Could not open folder: {e}")

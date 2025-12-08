@@ -498,7 +498,8 @@ class GGUFConverter:
         imatrix_ctx_size: int = 512,
         imatrix_chunks: Optional[int] = None,
         imatrix_collect_output: bool = False,
-        imatrix_calibration_file: Optional[Union[str, Path]] = None
+        imatrix_calibration_file: Optional[Union[str, Path]] = None,
+        imatrix_output_name: Optional[str] = None
     ) -> List[Path]:
         """
         Convert to GGUF and quantize in one go
@@ -563,7 +564,11 @@ class GGUFConverter:
 
         # Step 1.5: Generate importance matrix if requested
         if generate_imatrix:
-            imatrix_file = output_dir / f"{model_name}.imatrix"
+            # Use custom name if provided, otherwise default to model_name.imatrix
+            if imatrix_output_name:
+                imatrix_file = output_dir / imatrix_output_name
+            else:
+                imatrix_file = output_dir / f"{model_name}.imatrix"
 
             # Check if imatrix already exists
             if imatrix_file.exists():
