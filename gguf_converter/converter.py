@@ -570,42 +570,43 @@ class GGUFConverter:
             else:
                 imatrix_file = output_dir / f"{model_name}.imatrix"
 
-            # Check if imatrix already exists
+            # Always generate fresh imatrix (overwrite if exists)
+            # If user wants to reuse, they should use the "Reuse existing" option instead
             if imatrix_file.exists():
                 print(f"Importance matrix already exists: {imatrix_file.name}")
-                print("Skipping imatrix generation, using existing file...")
-            else:
-                print(f"Generating importance matrix for {model_name}...")
+                print("Overwriting with fresh generation...")
 
-                # Determine calibration file to use
-                calibration_file = None
-                if imatrix_calibration_file:
-                    calibration_file = Path(imatrix_calibration_file)
-                    if not calibration_file.exists():
-                        print(f"Warning: Specified calibration file not found: {calibration_file}")
-                        print("Falling back to default calibration file...")
-                        calibration_file = None
+            print(f"Generating importance matrix for {model_name}...")
 
-                # Use default if no file specified or if specified file doesn't exist
-                if not calibration_file:
-                    # Look in calibration_data folder at project root (one level up from gguf_converter module)
-                    project_root = Path(__file__).parent.parent
-                    calibration_file = project_root / "calibration_data" / "_default.txt"
+            # Determine calibration file to use
+            calibration_file = None
+            if imatrix_calibration_file:
+                calibration_file = Path(imatrix_calibration_file)
+                if not calibration_file.exists():
+                    print(f"Warning: Specified calibration file not found: {calibration_file}")
+                    print("Falling back to default calibration file...")
+                    calibration_file = None
 
-                    if not calibration_file.exists():
-                        print("Warning: _default.txt not found in calibration_data folder, using built-in calibration data")
-                        calibration_file = None
+            # Use default if no file specified or if specified file doesn't exist
+            if not calibration_file:
+                # Look in calibration_data folder at project root (one level up from gguf_converter module)
+                project_root = Path(__file__).parent.parent
+                calibration_file = project_root / "calibration_data" / "_default.txt"
 
-                self.generate_imatrix(
-                    model_path=intermediate_file,
-                    output_path=imatrix_file,
-                    calibration_file=calibration_file,
-                    ctx_size=imatrix_ctx_size,
-                    nthreads=nthreads,
-                    verbose=verbose,
-                    chunks=imatrix_chunks,
-                    collect_output_weight=imatrix_collect_output
-                )
+                if not calibration_file.exists():
+                    print("Warning: _default.txt not found in calibration_data folder, using built-in calibration data")
+                    calibration_file = None
+
+            self.generate_imatrix(
+                model_path=intermediate_file,
+                output_path=imatrix_file,
+                calibration_file=calibration_file,
+                ctx_size=imatrix_ctx_size,
+                nthreads=nthreads,
+                verbose=verbose,
+                chunks=imatrix_chunks,
+                collect_output_weight=imatrix_collect_output
+            )
 
             # Use the generated imatrix
             imatrix_path = imatrix_file

@@ -60,6 +60,9 @@ def get_default_config():
             "Q4_K_M": True,  # Default to Q4_K_M
         },
 
+        # Saved states for full precision checkboxes (before they get disabled as intermediate)
+        "full_precision_saved_states": {},
+
         # Download tab
         "repo_id": "",
         "download_dir": ""
@@ -140,6 +143,187 @@ def open_folder(folder_path):
         subprocess.run(["open", str(path.resolve())])
     else:  # Linux and others
         subprocess.run(["xdg-open", str(path.resolve())])
+
+
+def get_current_version():
+    """
+    Get current version from VERSION file
+
+    Returns:
+        str: Version string or "unknown" if file not found
+    """
+    try:
+        version_file = Path(__file__).parent.parent / "VERSION"
+        if version_file.exists():
+            return version_file.read_text().strip()
+        return "unknown"
+    except Exception:
+        return "unknown"
+
+
+def check_git_status():
+    """
+    Check if repository is clean (no uncommitted changes)
+
+    Returns:
+        tuple: (is_clean: bool, status_message: str)
+    """
+    try:
+        # Check if we're in a git repo
+        result = subprocess.run(
+            ["git", "rev-parse", "--git-dir"],
+            capture_output=True,
+            text=True,
+            cwd=Path(__file__).parent.parent
+        )
+        if result.returncode != 0:
+            return False, "Not a git repository"
+
+        # Check for uncommitted changes
+        result = subprocess.run(
+            ["git", "status", "--porcelain"],
+            capture_output=True,
+            text=True,
+            cwd=Path(__file__).parent.parent
+        )
+
+        if result.stdout.strip():
+            return False, "Local modifications detected"
+
+        return True, "Clean working tree"
+    except Exception as e:
+        return False, f"Error checking git status: {e}"
+
+
+def check_for_updates():
+    """
+    Check if updates are available from remote repository
+
+    Returns:
+        tuple: (update_available: bool, remote_version: str, message: str)
+    """
+    try:
+        repo_path = Path(__file__).parent.parent
+
+        # Fetch from remote
+        result = subprocess.run(
+            ["git", "fetch", "origin"],
+            capture_output=True,
+            text=True,
+            cwd=repo_path,
+            timeout=10
+        )
+
+        if result.returncode != 0:
+            return False, None, f"Failed to fetch updates: {result.stderr}"
+
+        # Get remote VERSION file content
+        result = subprocess.run(
+            ["git", "show", "origin/main:VERSION"],
+            capture_output=True,
+            text=True,
+            cwd=repo_path
+        )
+
+        if result.returncode != 0:
+            return False, None, "Could not read remote VERSION file"
+
+        remote_version = result.stdout.strip()
+        current_version = get_current_version()
+
+        if remote_version != current_version:
+            return True, remote_version, f"Update available: {current_version} → {remote_version}"
+        else:
+            return False, remote_version, "You're up to date!"
+
+    except subprocess.TimeoutExpired:
+        return False, None, "Update check timed out"
+    except Exception as e:
+        return False, None, f"Error checking for updates: {e}"
+
+
+def perform_update():
+    """
+    Perform git pull to update the repository
+
+    Returns:
+        tuple: (success: bool, message: str)
+    """
+    try:
+        repo_path = Path(__file__).parent.parent
+
+        result = subprocess.run(
+            ["git", "pull", "origin", "main"],
+            capture_output=True,
+            text=True,
+            cwd=repo_path,
+            timeout=30
+        )
+
+        if result.returncode != 0:
+            return False, f"Update failed: {result.stderr}"
+
+        return True, "Update successful! Please restart the application."
+
+    except subprocess.TimeoutExpired:
+        return False, "Update timed out"
+    except Exception as e:
+        return False, f"Error during update: {e}"
+
+
+def get_binary_version():
+    """
+    Get version of llama.cpp binaries
+
+    Returns:
+        dict: Binary version info
+    """
+    try:
+        from .converter import GGUFConverter
+        converter = GGUFConverter()
+
+        # Try to get version from llama-cli
+        try:
+            cli_path = converter.binary_manager.get_cli_path()
+            result = subprocess.run(
+                [str(cli_path), "--version"],
+                capture_output=True,
+                text=True,
+                timeout=5
+            )
+
+            if result.returncode == 0:
+                # Parse version from output
+                version_line = result.stdout.strip().split('\n')[0] if result.stdout else "unknown"
+                return {
+                    "status": "ok",
+                    "version": version_line,
+                    "message": "Binaries are installed"
+                }
+        except Exception:
+            pass
+
+        # Check if binaries exist
+        bin_dir = converter.binary_manager.bin_dir
+        if bin_dir.exists():
+            return {
+                "status": "ok",
+                "version": "unknown",
+                "message": "Binaries installed (version check unavailable)"
+            }
+        else:
+            return {
+                "status": "missing",
+                "version": None,
+                "message": "Binaries not installed - run a conversion to download"
+            }
+
+    except Exception as e:
+        return {
+            "status": "error",
+            "version": None,
+            "message": f"Error checking binaries: {e}"
+        }
 
 
 def main():
@@ -225,7 +409,7 @@ def main():
             st.rerun()
 
     # Main content
-    tab1, tab2, tab3, tab4, tab5 = st.tabs(["Convert & Quantize", "Imatrix Settings", "Imatrix Statistics", "HuggingFace Downloader", "Info"])
+    tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs(["Convert & Quantize", "Imatrix Settings", "Imatrix Statistics", "HuggingFace Downloader", "Update", "Info"])
 
     with tab1:
         st.header("Convert and Quantize Model")
@@ -323,6 +507,10 @@ def main():
             else:  # F16 or default
                 intermediate_index = 1
 
+            # Track previous intermediate format to restore checkbox state
+            if 'previous_intermediate' not in st.session_state:
+                st.session_state.previous_intermediate = saved_intermediate
+
             intermediate_type = st.radio(
                 "Intermediate format",
                 ["F32", "F16", "BF16"],
@@ -330,6 +518,61 @@ def main():
                 help="Format used before quantization (F32=highest quality, F16=balanced, BF16=brain float)",
                 horizontal=True
             )
+
+            # Ensure the current intermediate format's state is saved before disabling it
+            if "full_precision_saved_states" not in config:
+                config["full_precision_saved_states"] = {}
+            if "other_quants" not in config:
+                config["other_quants"] = {}
+
+            # On first load or if not yet saved, save the current intermediate's state
+            if intermediate_type not in config["full_precision_saved_states"]:
+                current_state = config["other_quants"].get(intermediate_type, False)
+                config["full_precision_saved_states"][intermediate_type] = current_state
+                # Also ensure it's checked in other_quants
+                config["other_quants"][intermediate_type] = True
+                save_config(config)
+
+            # If intermediate format changed, update checkbox states
+            if intermediate_type != st.session_state.previous_intermediate:
+                prev_format = st.session_state.previous_intermediate
+
+                # Ensure config dicts exist
+                if "other_quants" not in config:
+                    config["other_quants"] = {}
+                if "full_precision_saved_states" not in config:
+                    config["full_precision_saved_states"] = {}
+
+                # Save all non-intermediate checkbox states from current render
+                for qtype in ["F32", "F16", "BF16"]:
+                    checkbox_key = f"full_{qtype}_{prev_format}"
+                    if checkbox_key in st.session_state:
+                        # Save this checkbox's state, but skip the old intermediate since it was locked
+                        if qtype != prev_format:
+                            config["other_quants"][qtype] = st.session_state[checkbox_key]
+
+                # Restore the previous intermediate's saved state (if it was saved before being disabled)
+                if prev_format in config["full_precision_saved_states"]:
+                    config["other_quants"][prev_format] = config["full_precision_saved_states"][prev_format]
+                    # Remove from saved states since it's no longer disabled
+                    del config["full_precision_saved_states"][prev_format]
+                else:
+                    # If no saved state exists, default to unchecked
+                    if prev_format not in config["other_quants"]:
+                        config["other_quants"][prev_format] = False
+
+                # Save the new intermediate's current state before disabling it
+                current_new_state = config["other_quants"].get(intermediate_type, False)
+                config["full_precision_saved_states"][intermediate_type] = current_new_state
+
+                # Force the new intermediate to be checked
+                config["other_quants"][intermediate_type] = True
+
+                st.session_state.previous_intermediate = intermediate_type
+                config["intermediate_type"] = intermediate_type
+                save_config(config)
+                # Rerun to reflect the changes in the UI
+                st.rerun()
 
             st.subheader("Importance Matrix (imatrix)")
 
@@ -448,14 +691,25 @@ def main():
             full_checkboxes = {}
             for idx, (qtype, tooltip) in enumerate(full_quants.items()):
                 with full_cols[idx]:
-                    # Highlight the intermediate format
-                    is_intermediate = qtype == intermediate_type.upper()
+                    # Highlight the intermediate format (radio returns uppercase already)
+                    is_intermediate = qtype == intermediate_type
                     label = f"{qtype} (intermediate)" if is_intermediate else qtype
+
+                    # If this is the intermediate format, force checked and disabled
+                    # Otherwise, use saved value
+                    if is_intermediate:
+                        checkbox_value = True
+                        checkbox_disabled = True
+                    else:
+                        checkbox_value = config.get("other_quants", {}).get(qtype, False)
+                        checkbox_disabled = False
+
                     full_checkboxes[qtype] = st.checkbox(
                         label,
-                        value=config.get("other_quants", {}).get(qtype, False),
+                        value=checkbox_value,
                         help=tooltip,
-                        key=f"full_{qtype}"
+                        key=f"full_{qtype}_{intermediate_type}",
+                        disabled=checkbox_disabled
                     )
 
             # Legacy Quants
@@ -1297,6 +1551,104 @@ def main():
                     traceback.print_exc()
 
     with tab5:
+        st.header("Update")
+        st.markdown("Check for updates and manage your installation")
+
+        col1, col2 = st.columns(2)
+
+        with col1:
+            st.subheader("Current Version")
+
+            current_version = get_current_version()
+            st.info(f"**Version:** {current_version}")
+
+            # Git status
+            st.markdown("---")
+            st.subheader("Repository Status")
+
+            is_clean, status_msg = check_git_status()
+            if is_clean:
+                st.success(f"✓ {status_msg}")
+            else:
+                st.warning(f"⚠ {status_msg}")
+
+            # Check for updates button
+            st.markdown("---")
+            if st.button("Check for Updates", use_container_width=True, type="primary"):
+                with st.spinner("Checking for updates..."):
+                    update_available, remote_version, message = check_for_updates()
+
+                # Store results in session state
+                st.session_state.update_check_result = {
+                    "available": update_available,
+                    "remote_version": remote_version,
+                    "message": message
+                }
+                st.rerun()
+
+            # Show update check results
+            if 'update_check_result' in st.session_state:
+                result = st.session_state.update_check_result
+                if result["available"]:
+                    st.success(f"✓ {result['message']}")
+
+                    # Update button (only if repo is clean)
+                    if is_clean:
+                        if st.button("Update Now", use_container_width=True, type="primary"):
+                            with st.spinner("Updating..."):
+                                success, update_msg = perform_update()
+
+                            if success:
+                                st.success(update_msg)
+                                st.info("Please restart the application to use the new version.")
+                                # Clear the update check result
+                                del st.session_state.update_check_result
+                            else:
+                                st.error(update_msg)
+                    else:
+                        st.warning("Cannot update: Local modifications detected. Commit or stash your changes first.")
+                else:
+                    if result["remote_version"]:
+                        st.info(result["message"])
+                    else:
+                        st.error(result["message"])
+
+        with col2:
+            st.subheader("Binary Information")
+
+            binary_info = get_binary_version()
+
+            if binary_info["status"] == "ok":
+                st.success(f"✓ {binary_info['message']}")
+                if binary_info["version"]:
+                    st.code(binary_info["version"], language=None)
+            elif binary_info["status"] == "missing":
+                st.warning(f"⚠ {binary_info['message']}")
+            else:
+                st.error(f"✗ {binary_info['message']}")
+
+            st.markdown("---")
+            st.subheader("About Updates")
+            st.markdown("""
+            **Update Process:**
+            1. Click "Check for Updates" to see if a new version is available
+            2. If available and your repository is clean, click "Update Now"
+            3. Restart the application after updating
+
+            **Important Notes:**
+            - Updates require a clean git repository (no local modifications)
+            - If you have local changes, commit or stash them first
+            - Advanced users can update manually with `git pull`
+            - Version numbers only change on stable releases
+            - llama.cpp binaries are auto-downloaded when needed
+
+            **Troubleshooting:**
+            - If update fails, try running `git pull origin main` manually
+            - Check that you have git installed and in your PATH
+            - Make sure you have internet connection
+            """)
+
+    with tab6:
         st.header("About")
         st.markdown(f"""
         ### Yet Another GGUF Converter
@@ -1305,30 +1657,66 @@ def main():
         No manual compilation or terminal commands required!
 
         **Features:**
-        - Convert HuggingFace models to GGUF
-        - Quantize to multiple formats at once using llama.cpp
-        - Auto-downloads pre-compiled binaries (no compilation needed!)
-        - Cross-platform (Windows, Mac, Linux)
-        - Persistent settings - remembers your preferences
-        - All llama.cpp quantization types supported
+        - **Convert & Quantize** - HuggingFace models to GGUF with multiple quantization formats at once
+        - **Importance Matrix** - Generate or reuse imatrix files for better low-bit quantization (IQ2, IQ3)
+        - **Imatrix Statistics** - Analyze importance matrix files to view statistics
+        - **HuggingFace Downloader** - Download models without converting
+        - **Auto-downloads binaries** - Pre-compiled llama.cpp binaries (no compilation needed!)
+        - **Cross-platform** - Windows, Mac, Linux support
+        - **Persistent settings** - Automatically saves your preferences
+        - **All quantization types** - Full support for llama.cpp quantization types
+
+        **Tabs:**
+        1. **Convert & Quantize** - Main conversion interface with imatrix options
+        2. **Imatrix Settings** - Configure calibration data and processing settings
+        3. **Imatrix Statistics** - Analyze existing imatrix files
+        4. **HuggingFace Downloader** - Download models from HuggingFace
+        5. **Update** - Check for updates and manage installation
+        6. **Info** - This tab
 
         **Settings:**
-        - Your settings are automatically saved when you start a conversion or click "Save" in the sidebar
+        - Your settings are automatically saved as you change them
         - Settings are stored in: `{CONFIG_FILE}`
-        - Use the "Reset" button in the sidebar to restore default settings
+        - Use "Reset to defaults" in the sidebar to restore default settings
 
         **Quantization Types (via llama.cpp):**
 
-        | Type | Size | Quality | Use Case |
-        |------|------|---------|----------|
-        | Q4_K_M | Small | Good | Recommended for most users |
-        | Q5_K_M | Medium | Better | Higher quality needed |
-        | Q6_K | Large | Very Good | Very high quality |
-        | Q8_0 | Largest | Excellent | Near-original quality |
-        | IQ3_XXS | Tiny | Fair | 3-bit compression (use imatrix) |
-        | IQ3_S | Tiny+ | Fair+ | 3.4-bit compression |
-        | IQ4_NL | Small- | Good | 4-bit non-linear |
-        | Q4_0, Q5_0 | Various | Various | Legacy formats |
+        | Type | Size | Quality | Category | Notes |
+        |------|------|---------|----------|-------|
+        | **F32** | Largest | Original | Full Precision | Full 32-bit precision |
+        | **F16** | Large | Near-original | Full Precision | Half precision (default intermediate) |
+        | **BF16** | Large | Near-original | Full Precision | Brain float 16-bit |
+        | **Q8_0** | Very Large | Excellent | Legacy | Near-original quality |
+        | Q5_1, Q5_0 | Medium | Good | Legacy | Legacy 5-bit |
+        | Q4_1, Q4_0 | Small | Fair | Legacy | Legacy 4-bit |
+        | **Q6_K** | Large | Very High | K-Quant | Near-F16 quality |
+        | **Q5_K_M** | Medium | Better | K-Quant | Higher quality |
+        | Q5_K_S | Medium | Better | K-Quant | 5-bit K small |
+        | **Q4_K_M** | Small | Good | K-Quant | **Recommended** - best balance |
+        | Q4_K_S | Small | Good | K-Quant | 4-bit K small |
+        | Q3_K_L | Very Small | Fair | K-Quant | 3-bit K large |
+        | Q3_K_M | Very Small | Fair | K-Quant | 3-bit K medium |
+        | Q3_K_S | Very Small | Fair | K-Quant | 3-bit K small |
+        | Q2_K | Tiny | Minimal | K-Quant | 2-bit K |
+        | Q2_K_S | Tiny | Minimal | K-Quant | 2-bit K small |
+        | **IQ4_NL** | Small | Good | I-Quant | 4-bit non-linear (use imatrix) |
+        | IQ4_XS | Small | Good | I-Quant | 4-bit extra-small (use imatrix) |
+        | IQ3_M | Very Small | Fair | I-Quant | 3-bit medium (use imatrix) |
+        | IQ3_S | Very Small | Fair+ | I-Quant | 3.4-bit (use imatrix) |
+        | IQ3_XS | Very Small | Fair | I-Quant | 3-bit extra-small (use imatrix) |
+        | IQ3_XXS | Very Small | Fair | I-Quant | 3-bit extra-extra-small (use imatrix) |
+        | IQ2_M | Tiny | Minimal | I-Quant | 2-bit medium (use imatrix) |
+        | IQ2_S | Tiny | Minimal | I-Quant | 2-bit small (use imatrix) |
+        | IQ2_XS | Tiny | Minimal | I-Quant | 2-bit extra-small (use imatrix) |
+        | IQ2_XXS | Tiny | Minimal | I-Quant | 2-bit extra-extra-small (use imatrix) |
+        | IQ1_M | Extreme | Poor | I-Quant | 1-bit medium (use imatrix) |
+        | IQ1_S | Extreme | Poor | I-Quant | 1-bit small (use imatrix) |
+
+        **Quick Guide:**
+        - Just starting? Use **Q4_K_M**
+        - Want better quality? Use **Q5_K_M** or **Q6_K**
+        - Need original quality? Use **Q8_0** or **F16**
+        - Want smallest size? Use IQ3_M or IQ2_M with importance matrix
 
         Quantization is powered by llama.cpp - battle-tested and fully compatible!
 
