@@ -181,10 +181,18 @@ def main():
     with st.sidebar:
         st.header("Settings")
         st.markdown("---")
+
+        # Auto-save callback for verbose
+        def save_verbose():
+            config["verbose"] = st.session_state.verbose_checkbox
+            save_config(config)
+
         verbose = st.checkbox(
             "Verbose output",
             value=config.get("verbose", False),
-            help="Show detailed command output in the terminal for debugging and monitoring progress"
+            help="Show detailed command output in the terminal for debugging and monitoring progress",
+            key="verbose_checkbox",
+            on_change=save_verbose
         )
 
         st.markdown("---")
@@ -193,33 +201,28 @@ def main():
         max_workers = multiprocessing.cpu_count()
         default_threads = max(1, max_workers - 1)  # Leave one core free for system
 
+        # Auto-save callback for nthreads
+        def save_nthreads():
+            config["nthreads"] = int(st.session_state.nthreads_input)
+            save_config(config)
+
         nthreads = st.number_input(
             "Thread count",
             min_value=1,
             max_value=max_workers,
             value=int(config.get("nthreads") or default_threads),
             step=1,
-            help=f"Number of threads for llama.cpp (CPU cores: {max_workers}, default: {default_threads} to keep system responsive)"
+            help=f"Number of threads for llama.cpp (CPU cores: {max_workers}, default: {default_threads} to keep system responsive)",
+            key="nthreads_input",
+            on_change=save_nthreads
         )
 
-        # Save settings button
+        # Reset settings button (removed Save button)
         st.markdown("---")
-        col_save, col_reset = st.columns(2)
-        with col_save:
-            if st.button("Save", use_container_width=True, help="Save current settings"):
-                # Update config with current values
-                config["verbose"] = verbose
-                config["nthreads"] = int(nthreads)
-                # Note: use_imatrix and imatrix_mode are saved in the Convert & Quantize tab
-                # when the user makes changes there
-                save_config(config)
-                st.success("Settings saved!")
-
-        with col_reset:
-            if st.button("Reset", use_container_width=True, help="Reset to default settings"):
-                st.session_state.config = reset_config()
-                st.session_state.reset_count += 1  # Increment to force widget refresh
-                st.rerun()
+        if st.button("Reset to defaults", use_container_width=True, help="Reset all settings to default values"):
+            st.session_state.config = reset_config()
+            st.session_state.reset_count += 1  # Increment to force widget refresh
+            st.rerun()
 
     # Main content
     tab1, tab2, tab3, tab4, tab5 = st.tabs(["Convert & Quantize", "Imatrix Settings", "Imatrix Statistics", "HuggingFace Downloader", "Info"])
@@ -764,12 +767,18 @@ def main():
             # Calibration file selection with Update Files button
             col_cal, col_cal_btn = st.columns([5, 1])
             with col_cal:
+                # Auto-save callback for calibration file
+                def save_calibration_file():
+                    config["imatrix_calibration_file"] = st.session_state[f"imatrix_cal_selection_{st.session_state.reset_count}"]
+                    save_config(config)
+
                 calibration_selection = st.selectbox(
                     "Calibration file",
                     options=calibration_files,
                     index=default_index,
                     help="Select a calibration file from the directory above",
-                    key=f"imatrix_cal_selection_{st.session_state.reset_count}"
+                    key=f"imatrix_cal_selection_{st.session_state.reset_count}",
+                    on_change=save_calibration_file
                 )
             with col_cal_btn:
                 st.markdown("<br>", unsafe_allow_html=True)  # Spacer to align with selectbox + help icon
@@ -785,6 +794,11 @@ def main():
 
             st.subheader("Processing Settings")
 
+            # Auto-save callback for chunks
+            def save_chunks():
+                config["imatrix_chunks"] = int(st.session_state[f"imatrix_chunks_input_{st.session_state.reset_count}"])
+                save_config(config)
+
             imatrix_chunks_input = st.number_input(
                 "Chunks to process",
                 min_value=0,
@@ -792,8 +806,14 @@ def main():
                 value=int(config.get("imatrix_chunks", 100)),
                 step=10,
                 help="Number of chunks to process (0 = all). 100-200 recommended for good coverage.",
-                key=f"imatrix_chunks_input_{st.session_state.reset_count}"
+                key=f"imatrix_chunks_input_{st.session_state.reset_count}",
+                on_change=save_chunks
             )
+
+            # Auto-save callback for ctx size
+            def save_ctx():
+                config["imatrix_ctx_size"] = int(st.session_state[f"imatrix_ctx_input_{st.session_state.reset_count}"])
+                save_config(config)
 
             imatrix_ctx_input = st.number_input(
                 "Context size",
@@ -802,8 +822,14 @@ def main():
                 value=int(config.get("imatrix_ctx_size", 512)),
                 step=128,
                 help="Context window size. Larger = more context but more memory.",
-                key=f"imatrix_ctx_input_{st.session_state.reset_count}"
+                key=f"imatrix_ctx_input_{st.session_state.reset_count}",
+                on_change=save_ctx
             )
+
+            # Auto-save callback for from chunk
+            def save_from_chunk():
+                config["imatrix_from_chunk"] = int(st.session_state[f"imatrix_from_chunk_input_{st.session_state.reset_count}"])
+                save_config(config)
 
             imatrix_from_chunk_input = st.number_input(
                 "Skip first N chunks",
@@ -812,8 +838,14 @@ def main():
                 value=int(config.get("imatrix_from_chunk", 0)),
                 step=1,
                 help="Skip the first N chunks (useful for resuming interrupted runs)",
-                key=f"imatrix_from_chunk_input_{st.session_state.reset_count}"
+                key=f"imatrix_from_chunk_input_{st.session_state.reset_count}",
+                on_change=save_from_chunk
             )
+
+            # Auto-save callback for output frequency
+            def save_output_freq():
+                config["imatrix_output_frequency"] = int(st.session_state[f"imatrix_output_freq_input_{st.session_state.reset_count}"])
+                save_config(config)
 
             imatrix_output_freq_input = st.number_input(
                 "Output frequency (chunks)",
@@ -822,92 +854,72 @@ def main():
                 value=int(config.get("imatrix_output_frequency", 10)),
                 step=1,
                 help="Save interval in chunks (default: 10)",
-                key=f"imatrix_output_freq_input_{st.session_state.reset_count}"
+                key=f"imatrix_output_freq_input_{st.session_state.reset_count}",
+                on_change=save_output_freq
             )
+
+            # Auto-save callback for no ppl
+            def save_no_ppl():
+                config["imatrix_no_ppl"] = st.session_state[f"imatrix_no_ppl_input_{st.session_state.reset_count}"]
+                save_config(config)
 
             imatrix_no_ppl_input = st.checkbox(
                 "Disable perplexity calculation",
                 value=config.get("imatrix_no_ppl", False),
                 help="Skip PPL calculation to speed up processing",
-                key=f"imatrix_no_ppl_input_{st.session_state.reset_count}"
+                key=f"imatrix_no_ppl_input_{st.session_state.reset_count}",
+                on_change=save_no_ppl
             )
+
+            # Auto-save callback for parse special
+            def save_parse_special():
+                config["imatrix_parse_special"] = st.session_state[f"imatrix_parse_special_input_{st.session_state.reset_count}"]
+                save_config(config)
 
             imatrix_parse_special_input = st.checkbox(
                 "Parse special tokens",
                 value=config.get("imatrix_parse_special", False),
                 help="Enable parsing of special tokens (e.g., <|im_start|>)",
-                key=f"imatrix_parse_special_input_{st.session_state.reset_count}"
+                key=f"imatrix_parse_special_input_{st.session_state.reset_count}",
+                on_change=save_parse_special
             )
+
+            # Auto-save callback for collect output
+            def save_collect_output():
+                config["imatrix_collect_output_weight"] = st.session_state[f"imatrix_collect_output_input_{st.session_state.reset_count}"]
+                save_config(config)
 
             imatrix_collect_output_input = st.checkbox(
                 "Collect output.weight tensor",
                 value=config.get("imatrix_collect_output_weight", False),
                 help="Collect importance matrix for output.weight tensor",
-                key=f"imatrix_collect_output_input_{st.session_state.reset_count}"
+                key=f"imatrix_collect_output_input_{st.session_state.reset_count}",
+                on_change=save_collect_output
             )
 
-            # Check for unsaved changes (but not if we just reset, since reset auto-saves)
-            has_unsaved_changes = (
-                not st.session_state.get('imatrix_just_reset', False) and (
-                    calibration_selection != config.get("imatrix_calibration_file", "_default.txt") or
-                    calibration_dir_input != config.get("imatrix_calibration_dir", "") or
-                    int(imatrix_chunks_input) != config.get("imatrix_chunks", 100) or
-                    int(imatrix_ctx_input) != config.get("imatrix_ctx_size", 512) or
-                    int(imatrix_from_chunk_input) != config.get("imatrix_from_chunk", 0) or
-                    imatrix_no_ppl_input != config.get("imatrix_no_ppl", False) or
-                    imatrix_parse_special_input != config.get("imatrix_parse_special", False) or
-                    imatrix_collect_output_input != config.get("imatrix_collect_output_weight", False) or
-                    int(imatrix_output_freq_input) != config.get("imatrix_output_frequency", 10)
-                )
-            )
-
-            # Save settings button
+            # Reset button
             st.markdown("---")
+            if st.button("Reset to Defaults", use_container_width=True, key="reset_imatrix_settings_btn"):
+                # Reset imatrix settings to defaults
+                defaults = get_default_config()
+                config["imatrix_calibration_file"] = defaults["imatrix_calibration_file"]
+                config["imatrix_calibration_dir"] = defaults["imatrix_calibration_dir"]
+                config["imatrix_chunks"] = defaults["imatrix_chunks"]
+                config["imatrix_ctx_size"] = defaults["imatrix_ctx_size"]
+                config["imatrix_from_chunk"] = defaults["imatrix_from_chunk"]
+                config["imatrix_no_ppl"] = defaults["imatrix_no_ppl"]
+                config["imatrix_parse_special"] = defaults["imatrix_parse_special"]
+                config["imatrix_collect_output_weight"] = defaults["imatrix_collect_output_weight"]
+                config["imatrix_output_frequency"] = defaults["imatrix_output_frequency"]
+                save_config(config)
+                st.session_state.reset_count += 1
+                st.session_state.imatrix_just_reset = True
+                st.rerun()
 
-            col_save_imatrix, col_reset_imatrix = st.columns(2)
-            with col_save_imatrix:
-                if st.button("Save Imatrix Settings", use_container_width=True, key="save_imatrix_settings_btn", type="primary" if has_unsaved_changes else "secondary"):
-                    # Save the selected calibration file (strip quotes from directory path)
-                    config["imatrix_calibration_file"] = calibration_selection
-                    config["imatrix_calibration_dir"] = strip_quotes(calibration_dir_input)
-                    config["imatrix_chunks"] = int(imatrix_chunks_input)
-                    config["imatrix_ctx_size"] = int(imatrix_ctx_input)
-                    config["imatrix_from_chunk"] = int(imatrix_from_chunk_input)
-                    config["imatrix_no_ppl"] = imatrix_no_ppl_input
-                    config["imatrix_parse_special"] = imatrix_parse_special_input
-                    config["imatrix_collect_output_weight"] = imatrix_collect_output_input
-                    config["imatrix_output_frequency"] = int(imatrix_output_freq_input)
-                    save_config(config)
-                    st.session_state.imatrix_just_saved = True
-                    st.rerun()
-
-                # Show success message if we just saved
-                if st.session_state.get('imatrix_just_saved', False):
-                    st.success("Settings saved!")
-                    st.session_state.imatrix_just_saved = False
-
-            with col_reset_imatrix:
-                if st.button("Reset to Defaults", use_container_width=True, key="reset_imatrix_settings_btn"):
-                    # Reset imatrix settings to defaults
-                    defaults = get_default_config()
-                    config["imatrix_calibration_file"] = defaults["imatrix_calibration_file"]
-                    config["imatrix_calibration_dir"] = defaults["imatrix_calibration_dir"]
-                    config["imatrix_chunks"] = defaults["imatrix_chunks"]
-                    config["imatrix_ctx_size"] = defaults["imatrix_ctx_size"]
-                    config["imatrix_from_chunk"] = defaults["imatrix_from_chunk"]
-                    config["imatrix_no_ppl"] = defaults["imatrix_no_ppl"]
-                    config["imatrix_parse_special"] = defaults["imatrix_parse_special"]
-                    config["imatrix_collect_output_weight"] = defaults["imatrix_collect_output_weight"]
-                    config["imatrix_output_frequency"] = defaults["imatrix_output_frequency"]
-                    save_config(config)
-                    st.session_state.reset_count += 1
-                    st.session_state.imatrix_just_reset = True
-                    st.rerun()
-
-                # Show success message if we just reset
-                if st.session_state.get('imatrix_just_reset', False):
-                    st.success("Reset to defaults! And Saved!")
-                    st.session_state.imatrix_just_reset = False
+            # Show success message if we just reset
+            if st.session_state.get('imatrix_just_reset', False):
+                st.success("Reset to defaults! And Saved!")
+                st.session_state.imatrix_just_reset = False
 
         with col2:
             st.subheader("Calibration Preview")
@@ -1202,6 +1214,7 @@ def main():
     with tab4:
         st.header("HuggingFace Downloader")
         st.markdown("Download a model without converting")
+        st.markdown("[Browse models on HuggingFace](https://huggingface.co/models)")
 
         # Repository ID with Check Repo button
         col_repo, col_repo_btn = st.columns([5, 1])
