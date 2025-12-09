@@ -25,7 +25,7 @@ fi
 # Check if virtual environment already exists and is valid
 if [ -d "venv" ] && [ -f "venv/bin/activate" ]; then
     echo "Virtual environment already exists, checking if valid..."
-    source venv/bin/activate
+    . venv/bin/activate
 
     # Quick check if streamlit is installed (main dependency)
     if python -c "import streamlit" 2>/dev/null; then
@@ -58,7 +58,7 @@ else
 
     echo ""
     echo "Activating virtual environment..."
-    source venv/bin/activate
+    . venv/bin/activate
     SKIP_VENV_SETUP=0
 fi
 

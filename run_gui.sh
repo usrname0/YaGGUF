@@ -25,7 +25,7 @@ if [ ! -d "venv" ]; then
 fi
 
 # Activate virtual environment
-source venv/bin/activate
+. venv/bin/activate
 
 echo "Starting GGUF Converter GUI..."
 echo ""
