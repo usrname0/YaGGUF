@@ -33,7 +33,13 @@ if exist venv (
 
 python -m venv venv
 if errorlevel 1 (
+    echo.
     echo ERROR: Failed to create virtual environment
+    echo.
+    REM Clean up partial venv directory so next run will retry
+    if exist venv (
+        rmdir /s /q venv
+    )
     pause
     exit /b 1
 )
