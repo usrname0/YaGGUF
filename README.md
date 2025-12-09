@@ -82,46 +82,19 @@ streamlit run gguf_converter/gui.py
 ```
 Then open your browser to `http://localhost:8501`
 
-### CLI (Recommended for nerds)
+### CLI
+
+A command-line interface is available for automation and scripting:
 
 ```bash
-# Convert a local model and quantize to Q4_K_M
-python -m gguf_converter /path/to/model output/ -q Q4_K_M
+# Convert and quantize
+python -m gguf_converter /path/to/model output/ -q Q4_K_M Q5_K_M
 
-# Download from HuggingFace and create multiple quants
-python -m gguf_converter username/model-name output/ -q Q4_K_M Q5_K_M Q8_0
-
-# Just convert without quantization
-python -m gguf_converter /path/to/model output/ --no-quantize
-
-# List all available quantization types
+# List available quantization types
 python -m gguf_converter --list-types
-
-# Verbose output for debugging
-python -m gguf_converter /path/to/model output/ -q Q4_K_M --verbose
 ```
 
-### More CLI Examples
-
-```bash
-# Basic usage - convert and quantize
-python -m gguf_converter ~/models/llama-2-7b output/ -q Q4_K_M
-
-# Multiple quantization types at once
-python -m gguf_converter ~/models/mistral-7b output/ -q Q4_K_M Q5_K_M Q8_0
-
-# Download from HuggingFace
-python -m gguf_converter meta-llama/Llama-2-7b-hf output/ -q Q4_K_M
-
-# Keep intermediate f16 file (useful for making multiple quants later)
-python -m gguf_converter ~/models/model output/ -q Q4_K_M --keep-intermediate
-
-# Use f32 intermediate (higher quality, larger size)
-python -m gguf_converter ~/models/model output/ -q Q4_K_M --intermediate f32
-
-# Convert only, no quantization
-python -m gguf_converter ~/models/model output/ --no-quantize --output-type f16
-```
+For advanced CLI usage, most users should use [llama.cpp](https://github.com/ggerganov/llama.cpp) directly.
 
 ## Requirements
 
