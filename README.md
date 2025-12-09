@@ -52,7 +52,7 @@ All quantization types from llama.cpp are supported. Choose based on your size/q
 **Quick Guide:**
 - Just starting? Use **Q4_K_M**
 - Want better quality? Use **Q5_K_M** or **Q6_K**
-- Need original quality? Use **Q8_0** or **F16**
+- Need omega deluxe quality? Use **Q8_0** or **F16**
 - Want smallest size? Use IQ3_M or IQ2_M with importance matrix
 
 ## Installation
@@ -61,10 +61,9 @@ All quantization types from llama.cpp are supported. Choose based on your size/q
 # Clone the repository
 git clone https://github.com/usrname0/Yet_Another_GGUF_Converter.git
 cd Yet_Another_GGUF_Converter
-# Windows (run_gui.bat automatically runs a setup script if no venv detected)
-run_gui.bat
-# Linux / Mac (run_gui.sh automatically runs a setup script if no venv detected)
-run_gui.sh
+# Run the launcher script for your platform (runs a setup script if no venv detected):
+- Windows: `run_gui.bat`
+- Linux/Mac: `./run_gui.sh`
 ```
 
 ## Usage
