@@ -68,19 +68,17 @@ cd Yet_Another_GGUF_Converter
 
 ## Usage
 
-### GUI (Recommended for normals)
+### GUI (Recommended)
 
-**Windows**
-double-click run_gui.bat
+**Windows:**
+- Double-click `run_gui.bat`
 
-**Linux / Mac**
-double-click run_gui.sh
-
-**or type this:**
+**Linux/Mac:**
 ```bash
-streamlit run gguf_converter/gui.py
+./run_gui.sh
 ```
-Then open your browser to `http://localhost:8501`
+
+The GUI will automatically open in your browser at `http://localhost:8501`
 
 ### CLI
 
