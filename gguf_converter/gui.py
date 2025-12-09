@@ -1666,6 +1666,7 @@ def main():
             st.subheader("Application Version")
             current_version = get_current_version()
             st.info(f"**Version:** {current_version}")
+            st.markdown("[View on GitHub](https://github.com/usrname0/Yet_Another_GGUF_Converter)")
 
             st.markdown("---")
             st.subheader("How to Update")
@@ -1696,6 +1697,8 @@ def main():
                 st.warning(binary_info['message'])
             else:
                 st.error(binary_info['message'])
+
+            st.markdown("[llama.cpp on GitHub](https://github.com/ggerganov/llama.cpp)")
 
             st.markdown("---")
             st.subheader("About Binaries")
