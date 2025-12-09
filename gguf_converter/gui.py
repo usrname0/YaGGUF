@@ -62,8 +62,8 @@ def get_default_config():
             "Q4_K_M": True,  # Default to Q4_K_M
         },
 
-        # Saved states for full precision checkboxes (before they get disabled as intermediate)
-        "full_precision_saved_states": {},
+        # Saved states for unquantized format checkboxes (before they get disabled as intermediate)
+        "unquantized_saved_states": {},
 
         # Download tab
         "repo_id": "",
@@ -495,15 +495,15 @@ def main():
             )
 
             # Ensure the current intermediate format's state is saved before disabling it
-            if "full_precision_saved_states" not in config:
-                config["full_precision_saved_states"] = {}
+            if "unquantized_saved_states" not in config:
+                config["unquantized_saved_states"] = {}
             if "other_quants" not in config:
                 config["other_quants"] = {}
 
             # On first load or if not yet saved, save the current intermediate's state
-            if intermediate_type not in config["full_precision_saved_states"]:
+            if intermediate_type not in config["unquantized_saved_states"]:
                 current_state = config["other_quants"].get(intermediate_type, False)
-                config["full_precision_saved_states"][intermediate_type] = current_state
+                config["unquantized_saved_states"][intermediate_type] = current_state
                 # Also ensure it's checked in other_quants
                 config["other_quants"][intermediate_type] = True
                 save_config(config)
@@ -515,8 +515,8 @@ def main():
                 # Ensure config dicts exist
                 if "other_quants" not in config:
                     config["other_quants"] = {}
-                if "full_precision_saved_states" not in config:
-                    config["full_precision_saved_states"] = {}
+                if "unquantized_saved_states" not in config:
+                    config["unquantized_saved_states"] = {}
 
                 # Save all non-intermediate checkbox states from current render
                 for qtype in ["F32", "F16", "BF16"]:
@@ -527,10 +527,10 @@ def main():
                             config["other_quants"][qtype] = st.session_state[checkbox_key]
 
                 # Restore the previous intermediate's saved state (if it was saved before being disabled)
-                if prev_format in config["full_precision_saved_states"]:
-                    config["other_quants"][prev_format] = config["full_precision_saved_states"][prev_format]
+                if prev_format in config["unquantized_saved_states"]:
+                    config["other_quants"][prev_format] = config["unquantized_saved_states"][prev_format]
                     # Remove from saved states since it's no longer disabled
-                    del config["full_precision_saved_states"][prev_format]
+                    del config["unquantized_saved_states"][prev_format]
                 else:
                     # If no saved state exists, default to unchecked
                     if prev_format not in config["other_quants"]:
@@ -538,7 +538,7 @@ def main():
 
                 # Save the new intermediate's current state before disabling it
                 current_new_state = config["other_quants"].get(intermediate_type, False)
-                config["full_precision_saved_states"][intermediate_type] = current_new_state
+                config["unquantized_saved_states"][intermediate_type] = current_new_state
 
                 # Force the new intermediate to be checked
                 config["other_quants"][intermediate_type] = True
@@ -704,8 +704,8 @@ def main():
                 "IQ3_XXS", "IQ3_XS"
             ]
 
-            # Full Precision Outputs
-            st.markdown("**Full Precision Outputs:**")
+            # Unquantized Formats
+            st.markdown("**Unquantized Formats:**")
             full_cols = st.columns(3)
             full_quants = {
                 "F32": "32-bit float (full precision)",
@@ -1746,9 +1746,9 @@ def main():
 
         | Type | Size | Quality | Category | Notes |
         |------|------|---------|----------|-------|
-        | **F32** | Largest | Original | Full Precision | Full 32-bit precision |
-        | **F16** | Large | Near-original | Full Precision | Half precision (default intermediate) |
-        | **BF16** | Large | Near-original | Full Precision | Brain float 16-bit |
+        | **F32** | Largest | Original | Unquantized | Full 32-bit precision |
+        | **F16** | Large | Near-original | Unquantized | Half precision (default intermediate) |
+        | **BF16** | Large | Near-original | Unquantized | Brain float 16-bit |
         | **Q8_0** | Very Large | Excellent | Legacy | Near-original quality |
         | Q5_1, Q5_0 | Medium | Good | Legacy | Legacy 5-bit |
         | Q4_1, Q4_0 | Small | Fair | Legacy | Legacy 4-bit |

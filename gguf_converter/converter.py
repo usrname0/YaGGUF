@@ -616,7 +616,7 @@ class GGUFConverter:
         for quant_type in quantization_types:
             output_file = output_dir / f"{model_name}_{quant_type}.gguf"
 
-            # Handle F16/F32/BF16 specially - these are intermediate formats
+            # Handle F16/F32/BF16 specially - these are unquantized formats
             if quant_type.upper() in ["F16", "F32", "BF16"]:
                 # If the requested format matches the intermediate format, just use that file
                 if quant_type.upper() == intermediate_type.upper():
@@ -630,26 +630,46 @@ class GGUFConverter:
                         shutil.copy2(intermediate_file, output_file)
                         quantized_files.append(output_file)
                 else:
-                    # Different format requested - need to convert (e.g., F16 -> F32)
-                    # Try using quantize command which might support format conversion
-                    try:
-                        print(f"Converting from {intermediate_type} to {quant_type}...")
-                        self.quantize(
-                            input_path=intermediate_file,
-                            output_path=output_file,
-                            quantization_type=quant_type,
-                            verbose=verbose,
-                            imatrix_path=None,  # Don't use imatrix for format conversion
-                            nthreads=nthreads
-                        )
-                        quantized_files.append(output_file)
-                    except Exception as e:
-                        print(f"Warning: Could not convert {intermediate_type} to {quant_type}: {e}")
-                        print(f"Suggestion: Use '{quant_type.lower()}' as the intermediate format instead")
-                        raise RuntimeError(
-                            f"Cannot convert from {intermediate_type} to {quant_type}. "
-                            f"Please set the intermediate format to '{quant_type.lower()}' instead."
-                        )
+                    # Different unquantized format requested
+                    # If we have the source model (not already GGUF), convert directly from source
+                    # Otherwise, convert from intermediate
+                    if not is_already_gguf:
+                        # Convert directly from source model for best quality
+                        print(f"Converting {model_name} directly to {quant_type} from source...")
+
+                        # Check if output already exists
+                        if output_file.exists():
+                            print(f"{quant_type} file already exists: {output_file.name}")
+                            print("Skipping conversion, using existing file...")
+                            quantized_files.append(output_file)
+                        else:
+                            self.convert_to_gguf(
+                                model_path=model_path,
+                                output_path=output_file,
+                                output_type=quant_type.lower(),
+                                verbose=verbose
+                            )
+                            quantized_files.append(output_file)
+                    else:
+                        # Source is already GGUF, need to convert from intermediate
+                        try:
+                            print(f"Converting from {intermediate_type} to {quant_type}...")
+                            self.quantize(
+                                input_path=intermediate_file,
+                                output_path=output_file,
+                                quantization_type=quant_type,
+                                verbose=verbose,
+                                imatrix_path=None,  # Don't use imatrix for format conversion
+                                nthreads=nthreads
+                            )
+                            quantized_files.append(output_file)
+                        except Exception as e:
+                            print(f"Warning: Could not convert {intermediate_type} to {quant_type}: {e}")
+                            print(f"Suggestion: Use '{quant_type.lower()}' as the intermediate format instead")
+                            raise RuntimeError(
+                                f"Cannot convert from {intermediate_type} to {quant_type}. "
+                                f"Please set the intermediate format to '{quant_type.lower()}' instead."
+                            )
             else:
                 self.quantize(
                     input_path=intermediate_file,

@@ -17,9 +17,9 @@ All quantization types from llama.cpp are supported. Choose based on your size/q
 
 | Type | Size | Quality | Category | Notes |
 |------|------|---------|----------|-------|
-| **F32** | Largest | Original | Full Precision | Full 32-bit precision |
-| **F16** | Large | Near-original | Full Precision | Half precision, minimal quality loss |
-| BF16 | Large | Near-original | Full Precision | Brain float 16-bit |
+| **F32** | Largest | Original | Unquantized | Full 32-bit precision |
+| **F16** | Large | Near-original | Unquantized | Half precision, minimal quality loss |
+| BF16 | Large | Near-original | Unquantized | Brain float 16-bit |
 | Q8_0 | Very Large | Excellent | Legacy | Near-original quality, 8-bit |
 | Q5_1 | Medium | Good | Legacy | Legacy 5-bit improved |
 | Q5_0 | Medium | Good | Legacy | Legacy 5-bit |
