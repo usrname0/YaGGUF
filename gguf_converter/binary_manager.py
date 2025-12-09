@@ -170,6 +170,25 @@ class BinaryManager:
             with tarfile.open(archive_path, 'r:*') as tf:
                 tf.extractall(self.bin_dir)
 
+        # On Unix systems, set execute permissions on binaries
+        if platform.system().lower() != 'windows':
+            self._set_execute_permissions()
+
+    def _set_execute_permissions(self):
+        """
+        Set execute permissions on binary files (Unix only)
+        """
+        import stat
+
+        # Search for llama-* binaries and set execute permissions
+        for path in self.bin_dir.rglob('llama-*'):
+            if path.is_file() and not path.suffix:  # No extension (not .so files)
+                try:
+                    # Add execute permission for owner, group, and others
+                    path.chmod(path.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
+                except Exception as e:
+                    print(f"Warning: Could not set execute permission on {path}: {e}")
+
     def _check_binary_files_exist(self) -> bool:
         """
         Check if required binary files exist (without version check)
@@ -227,6 +246,7 @@ class BinaryManager:
         possible_locations = [
             self.bin_dir / name,
             self.bin_dir / 'bin' / name,
+            self.bin_dir / 'build' / 'bin' / name,  # Ubuntu/Linux releases
             self.bin_dir / f"llama-{self.LLAMA_CPP_VERSION}-bin" / name,
         ]
 

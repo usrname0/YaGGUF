@@ -22,62 +22,82 @@ if [ $? -ne 0 ]; then
     exit 1
 fi
 
-echo "Creating virtual environment..."
-if [ -d "venv" ]; then
-    echo "Virtual environment already exists. Removing old venv..."
-    rm -rf venv
-fi
+# Check if virtual environment already exists and is valid
+if [ -d "venv" ] && [ -f "venv/bin/activate" ]; then
+    echo "Virtual environment already exists, checking if valid..."
+    source venv/bin/activate
 
-python3 -m venv venv
-if [ $? -ne 0 ]; then
-    echo ""
-    echo "ERROR: Failed to create virtual environment"
-    echo ""
-    # Clean up partial venv directory so next run will retry
-    if [ -d "venv" ]; then
-        rm -rf venv
+    # Quick check if streamlit is installed (main dependency)
+    if python -c "import streamlit" 2>/dev/null; then
+        echo "Virtual environment is valid, skipping package installation"
+        SKIP_VENV_SETUP=1
+    else
+        echo "Virtual environment is incomplete, will reinstall packages"
+        SKIP_VENV_SETUP=0
     fi
-    echo "On Debian/Ubuntu systems, you may need to install python3-venv:"
-    echo "  sudo apt install python3-venv"
+else
+    echo "Creating virtual environment..."
+    python3 -m venv venv
+    if [ $? -ne 0 ]; then
+        echo ""
+        echo "ERROR: Failed to create virtual environment"
+        echo ""
+        # Clean up partial venv directory so next run will retry
+        if [ -d "venv" ]; then
+            rm -rf venv
+        fi
+        echo "On Debian/Ubuntu systems, you may need to install python3-venv:"
+        echo "  sudo apt install python3-venv"
+        echo ""
+        echo "On Fedora/RHEL systems:"
+        echo "  sudo dnf install python3-virtualenv"
+        echo ""
+        echo "After installing, run this setup script again."
+        exit 1
+    fi
+
     echo ""
-    echo "On Fedora/RHEL systems:"
-    echo "  sudo dnf install python3-virtualenv"
+    echo "Activating virtual environment..."
+    source venv/bin/activate
+    SKIP_VENV_SETUP=0
+fi
+
+if [ "$SKIP_VENV_SETUP" = "0" ]; then
     echo ""
-    echo "After installing, run this setup script again."
-    exit 1
+    echo "Upgrading pip..."
+    python -m pip install --upgrade pip
+
+    echo ""
+    echo "Installing PyTorch (CPU-only version to save space)..."
+    pip install "torch>=2.0.0" --index-url https://download.pytorch.org/whl/cpu
+    if [ $? -ne 0 ]; then
+        echo "ERROR: Failed to install PyTorch"
+        exit 1
+    fi
+
+    echo ""
+    echo "Installing remaining requirements..."
+    pip install -r requirements.txt
+    if [ $? -ne 0 ]; then
+        echo "ERROR: Failed to install requirements"
+        exit 1
+    fi
 fi
 
 echo ""
-echo "Activating virtual environment..."
-source venv/bin/activate
+echo "Checking llama.cpp binaries..."
 
-echo ""
-echo "Upgrading pip..."
-python -m pip install --upgrade pip
-
-echo ""
-echo "Installing PyTorch (CPU-only version to save space)..."
-pip install "torch>=2.0.0" --index-url https://download.pytorch.org/whl/cpu
-if [ $? -ne 0 ]; then
-    echo "ERROR: Failed to install PyTorch"
-    exit 1
-fi
-
-echo ""
-echo "Installing remaining requirements..."
-pip install -r requirements.txt
-if [ $? -ne 0 ]; then
-    echo "ERROR: Failed to install requirements"
-    exit 1
-fi
-
-echo ""
-echo "Downloading llama.cpp binaries..."
-python -m gguf_converter.download_binaries
-if [ $? -ne 0 ]; then
-    echo "ERROR: Failed to download binaries"
-    echo "You can try running the setup again or install llama.cpp manually"
-    exit 1
+# Check if binaries already exist
+if python -c "from gguf_converter.binary_manager import BinaryManager; import sys; sys.exit(0 if BinaryManager()._binaries_exist() else 1)" 2>/dev/null; then
+    echo "Binaries already installed, skipping download"
+else
+    echo "Downloading llama.cpp binaries..."
+    python -m gguf_converter.download_binaries
+    if [ $? -ne 0 ]; then
+        echo "ERROR: Failed to download binaries"
+        echo "You can try running the setup again or install llama.cpp manually"
+        exit 1
+    fi
 fi
 
 echo ""
