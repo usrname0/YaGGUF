@@ -30,7 +30,16 @@ fi
 
 python3 -m venv venv
 if [ $? -ne 0 ]; then
+    echo ""
     echo "ERROR: Failed to create virtual environment"
+    echo ""
+    echo "On Debian/Ubuntu systems, you may need to install python3-venv:"
+    echo "  sudo apt install python3-venv"
+    echo ""
+    echo "On Fedora/RHEL systems:"
+    echo "  sudo dnf install python3-virtualenv"
+    echo ""
+    echo "After installing, run this setup script again."
     exit 1
 fi
 
