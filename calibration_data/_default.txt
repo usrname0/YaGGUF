@@ -1,3 +1,23 @@
+# Default Calibration Dataset for Importance Matrix (imatrix) Generation
+#
+# This dataset is based on calibration data from the llama.cpp community,
+# inspired by kalomaze's "groups_merged.txt" - a diverse, general-purpose
+# imatrix calibration dataset.
+#
+# Source: https://github.com/ggml-org/llama.cpp/discussions/5263
+# Credit: kalomaze and the llama.cpp community (February 2024)
+#
+# Description:
+# This dataset contains approximately 30k tokens of diverse, high-entropy data
+# including scientific papers, programming Q&A, code examples, and technical
+# documentation. This variety helps create effective importance matrices for
+# quantization across different domains.
+#
+# For more information about imatrix calibration:
+# https://github.com/ggml-org/llama.cpp/discussions/5006
+#
+# -----------------------------------------------------------------------------
+
 addition to a significant decrease in hepatic lipid accumulation in the IOE group, which inhibited energy intake by propionate enrichment, hepatic lipids were also significantly reduced in the mice in the IOP group, which was largely enriched with butyrate. Compared with the IOE group, IOP had a stronger regulatory effect on hepatic metabolism and triglyceride metabolism and higher levels of TCA cycle in the host. In addition, butyrate has the ability to promote browning of white adipose tissue (WAT) to brown adipose tissue (BAT).^[@ref39],[@ref40]^ WAT stores energy, whereas BAT uses energy for heating and consequently host energy expenditure increases.^[@ref41],[@ref42]^ However, adipose tissue weight does not change after WAT browning.^[@ref43]^ Therefore, the weight of adipose tissue of mice in the IOP group dominated by butyrate was greater than that of the mice in the IOE group dominated by propionate.
 
 In conclusion ([Figure [7](#fig7){ref-type="fig"}](#fig7){ref-type="fig"}C), the improvement of obesity condition in mice by both *I. obliquus* extracts was attributed to their effects on gut microbiota and SCFA profiles. IOE increased the levels of propionate-producing bacteria *Bacteroides* and *Akkermansia* in the cecum of HFD-fed mice, resulting in the enrichment of propionate. Propionate reduced weight gain in mice by inhibiting energy intake. IOP increased the levels of butyrate-production-associated bacteria *Lactobacillus* and the *Bacteroidales* S24-7 group in the cecum of HFD-fed mice, resulting in the enrichment of butyrate. Butyrate increased energy consumption, TCA cycle levels, and degradation of carbohydrates and lipids in mice by promoting mitochondrial decoupling.

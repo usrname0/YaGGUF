@@ -9,6 +9,8 @@ import json
 import webbrowser
 import subprocess
 import platform
+import tkinter as tk
+from tkinter import filedialog
 
 # Handle both direct execution and module import
 try:
@@ -159,6 +161,36 @@ def get_current_version():
         return "unknown"
     except Exception:
         return "unknown"
+
+
+def browse_folder(initial_dir=None):
+    """
+    Open a native folder picker dialog
+
+    Args:
+        initial_dir: Initial directory to open (optional)
+
+    Returns:
+        str: Selected folder path or None if cancelled
+    """
+    try:
+        # Create a root window and hide it
+        root = tk.Tk()
+        root.withdraw()
+        root.wm_attributes('-topmost', 1)
+
+        # Open folder picker
+        folder_path = filedialog.askdirectory(
+            parent=root,
+            initialdir=initial_dir,
+            title="Select Folder"
+        )
+
+        root.destroy()
+        return folder_path if folder_path else None
+    except Exception as e:
+        print(f"Error opening folder picker: {e}")
+        return None
 
 
 def get_binary_version():
@@ -318,7 +350,7 @@ def main():
             st.rerun()
 
     # Main content
-    tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs(["Convert & Quantize", "Imatrix Settings", "Imatrix Statistics", "HuggingFace Downloader", "Version", "Info"])
+    tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs(["Convert & Quantize", "Imatrix Settings", "Imatrix Statistics", "HuggingFace Downloader", "Info", "Version"])
 
     with tab1:
         st.header("Convert and Quantize Model")
@@ -352,8 +384,8 @@ def main():
                         webbrowser.open(url)
                         st.toast(f"Opened {url}")
 
-            # Model path with Open folder button
-            col_model, col_model_btn = st.columns([5, 1])
+            # Model path with Browse and Check Folder buttons
+            col_model, col_model_browse, col_model_check = st.columns([4, 1, 1])
             with col_model:
                 model_path = st.text_input(
                     "Model path",
@@ -361,16 +393,31 @@ def main():
                     placeholder="E:/Models/my-model",
                     help="Local model directory. If HuggingFace repo provided above, model will be downloaded here first."
                 )
-            with col_model_btn:
+            with col_model_browse:
+                st.markdown("<br>", unsafe_allow_html=True)  # Spacer to align with input + help icon
+                if st.button(
+                    "Browse",
+                    key="browse_model_folder_btn",
+                    use_container_width=True,
+                    help="Browse for model directory"
+                ):
+                    model_path_clean = strip_quotes(model_path)
+                    initial_dir = model_path_clean if model_path_clean and Path(model_path_clean).exists() else None
+                    selected_folder = browse_folder(initial_dir)
+                    if selected_folder:
+                        config["model_path"] = selected_folder
+                        save_config(config)
+                        st.rerun()
+            with col_model_check:
                 st.markdown("<br>", unsafe_allow_html=True)  # Spacer to align with input + help icon
                 model_path_clean = strip_quotes(model_path)
                 model_path_exists = bool(model_path_clean and Path(model_path_clean).exists())
                 if st.button(
                     "Check Folder",
-                    key="open_model_folder_btn",
+                    key="check_model_folder_btn",
                     use_container_width=True,
                     disabled=not model_path_exists,
-                    help="Open model folder in file explorer" if model_path_exists else "Path doesn't exist yet"
+                    help="Open folder in file explorer" if model_path_exists else "Path doesn't exist yet"
                 ):
                     if model_path_exists:
                         try:
@@ -379,8 +426,8 @@ def main():
                         except Exception as e:
                             st.toast(f"Could not open folder: {e}")
 
-            # Output directory with Open folder button
-            col_output, col_output_btn = st.columns([5, 1])
+            # Output directory with Browse and Check Folder buttons
+            col_output, col_output_browse, col_output_check = st.columns([4, 1, 1])
             with col_output:
                 output_dir = st.text_input(
                     "Output directory",
@@ -388,16 +435,31 @@ def main():
                     placeholder="E:/Models/converted",
                     help="Where to save the converted files"
                 )
-            with col_output_btn:
+            with col_output_browse:
+                st.markdown("<br>", unsafe_allow_html=True)  # Spacer to align with input + help icon
+                if st.button(
+                    "Browse",
+                    key="browse_output_folder_btn",
+                    use_container_width=True,
+                    help="Browse for output directory"
+                ):
+                    output_dir_clean = strip_quotes(output_dir)
+                    initial_dir = output_dir_clean if output_dir_clean and Path(output_dir_clean).exists() else None
+                    selected_folder = browse_folder(initial_dir)
+                    if selected_folder:
+                        config["output_dir"] = selected_folder
+                        save_config(config)
+                        st.rerun()
+            with col_output_check:
                 st.markdown("<br>", unsafe_allow_html=True)  # Spacer to align with input + help icon
                 output_dir_clean = strip_quotes(output_dir)
                 output_dir_exists = bool(output_dir_clean and Path(output_dir_clean).exists())
                 if st.button(
                     "Check Folder",
-                    key="open_output_folder_btn",
+                    key="check_output_folder_btn",
                     use_container_width=True,
                     disabled=not output_dir_exists,
-                    help="Open output folder in file explorer" if output_dir_exists else "Path doesn't exist yet"
+                    help="Open folder in file explorer" if output_dir_exists else "Path doesn't exist yet"
                 ):
                     if output_dir_exists:
                         try:
@@ -405,6 +467,10 @@ def main():
                             st.toast("Opened folder")
                         except Exception as e:
                             st.toast(f"Could not open folder: {e}")
+
+            # Strip quotes from paths for later use
+            model_path_clean = strip_quotes(model_path)
+            output_dir_clean = strip_quotes(output_dir)
 
             st.subheader("Conversion Options")
             # Determine index for intermediate format radio button
@@ -485,8 +551,12 @@ def main():
 
             st.subheader("Importance Matrix (imatrix)")
 
-            # Callback to save imatrix checkbox state
+            # Callback to save imatrix checkbox state and custom name if present
             def save_use_imatrix():
+                # Save any custom name that was entered
+                if f"imatrix_custom_name_{st.session_state.reset_count}" in st.session_state:
+                    config["imatrix_generate_name"] = st.session_state[f"imatrix_custom_name_{st.session_state.reset_count}"]
+
                 config["use_imatrix"] = st.session_state[f"use_imatrix_checkbox_{st.session_state.reset_count}"]
                 save_config(config)
 
@@ -518,10 +588,15 @@ def main():
                 else:  # reuse
                     mode_index = 2
 
-                # Callback to save imatrix mode state
+                # Callback to save imatrix mode state and custom name if present
                 def save_imatrix_mode():
                     mode = st.session_state[f"imatrix_mode_radio_{st.session_state.reset_count}"]
-                    if mode == "Generate":
+
+                    # Save any custom name that was entered before switching modes
+                    if f"imatrix_custom_name_{st.session_state.reset_count}" in st.session_state:
+                        config["imatrix_generate_name"] = st.session_state[f"imatrix_custom_name_{st.session_state.reset_count}"]
+
+                    if mode == "Generate imatrix (default name)":
                         config["imatrix_mode"] = "generate"
                     elif mode == "Generate (custom name)":
                         config["imatrix_mode"] = "generate_custom"
@@ -531,7 +606,7 @@ def main():
 
                 imatrix_mode = st.radio(
                     "Imatrix mode",
-                    ["Generate", "Generate (custom name)", "Reuse existing"],
+                    ["Generate imatrix (default name)", "Generate (custom name)", "Reuse existing"],
                     index=mode_index,
                     help="Generate with default name, custom name, or reuse an existing imatrix file",
                     horizontal=True,
@@ -541,7 +616,28 @@ def main():
                 )
 
                 # Show appropriate field based on mode
-                if imatrix_mode == "Generate (custom name)":
+                if imatrix_mode == "Generate imatrix (default name)":
+                    # Show read-only text field with default name
+                    if model_path_clean:
+                        default_name = f"{Path(model_path_clean).name}.imatrix"
+                    else:
+                        default_name = "(provide model path to see default name)"
+
+                    st.text_input(
+                        "Default imatrix filename",
+                        value=default_name,
+                        disabled=True,
+                        help="Auto-generated imatrix filename based on model name (saved in output directory)"
+                    )
+
+                    # Check if file already exists and warn
+                    if output_dir_clean and model_path_clean:
+                        imatrix_file_path = Path(output_dir_clean) / default_name
+                        if imatrix_file_path.exists():
+                            st.warning(f"WARNING: File already exists and will be overwritten: `{default_name}`")
+
+                    imatrix_generate_name = ""
+                elif imatrix_mode == "Generate (custom name)":
                     # Text field for custom imatrix filename with Set to default button
                     col_imatrix_name, col_imatrix_default = st.columns([5, 1])
                     with col_imatrix_name:
@@ -549,7 +645,8 @@ def main():
                             "Imatrix filename",
                             value=config.get("imatrix_generate_name", ""),
                             placeholder="model.imatrix",
-                            help="Filename for the generated imatrix file (saved in output directory). Leave empty to use default naming (model_name.imatrix)."
+                            help="Filename for the generated imatrix file (saved in output directory). Leave empty to use default naming (model_name.imatrix).",
+                            key=f"imatrix_custom_name_{st.session_state.reset_count}"
                         )
                     with col_imatrix_default:
                         st.markdown("<br>", unsafe_allow_html=True)  # Spacer to align with text input
@@ -563,9 +660,20 @@ def main():
                                 config["imatrix_generate_name"] = ""
                             save_config(config)
                             st.rerun()
-                elif imatrix_mode == "Generate":
-                    # Use default name
-                    imatrix_generate_name = ""
+
+                    # Auto-append .imatrix extension if missing and show info
+                    if imatrix_generate_name:
+                        if not imatrix_generate_name.endswith('.imatrix'):
+                            final_name = f"{imatrix_generate_name}.imatrix"
+                            st.info(f"Will be saved as: `{final_name}`")
+                        else:
+                            final_name = imatrix_generate_name
+
+                        # Check if custom file already exists and warn
+                        if output_dir_clean:
+                            imatrix_file_path = Path(output_dir_clean) / final_name
+                            if imatrix_file_path.exists():
+                                st.warning(f"WARNING: File already exists and will be overwritten: `{final_name}`")
                 else:  # Reuse existing
                     # Dropdown with Update File List button for reuse
                     col_imatrix_select, col_imatrix_update = st.columns([5, 1])
@@ -588,6 +696,13 @@ def main():
         with col2:
             st.subheader("Quantization Types")
             st.markdown("Select one or more quantization types:")
+
+            # Define quantization types that require an importance matrix
+            IMATRIX_REQUIRED_TYPES = [
+                "IQ1_S", "IQ1_M",
+                "IQ2_XXS", "IQ2_XS", "IQ2_S", "IQ2_M",
+                "IQ3_XXS", "IQ3_XS"
+            ]
 
             # Full Precision Outputs
             st.markdown("**Full Precision Outputs:**")
@@ -683,15 +798,40 @@ def main():
                 "IQ1_M": "1-bit IQ medium",
                 "IQ1_S": "1-bit IQ small",
             }
+
+            # Initialize saved checkbox states if not in session state
+            if "iq_checkbox_states" not in st.session_state:
+                st.session_state.iq_checkbox_states = config.get("other_quants", {})
+
             i_checkboxes = {}
             i_cols = st.columns(3)
             for idx, (qtype, tooltip) in enumerate(i_quants.items()):
                 with i_cols[idx % 3]:
+                    # Disable checkbox if this type requires imatrix and imatrix is not enabled
+                    is_disabled = (qtype in IMATRIX_REQUIRED_TYPES) and not use_imatrix
+
+                    # Widget key includes imatrix state to force refresh on toggle
+                    widget_key = f"i_{qtype}_{use_imatrix}"
+                    prev_key = f"i_{qtype}_{not use_imatrix}"
+
+                    # When transitioning from enabled to disabled, save the previous state
+                    # Only save if the previous state was enabled (not disabled)
+                    prev_was_enabled = (qtype not in IMATRIX_REQUIRED_TYPES) or (not use_imatrix)
+                    if prev_key in st.session_state and prev_was_enabled:
+                        st.session_state.iq_checkbox_states[qtype] = st.session_state[prev_key]
+
+                    # Use saved state when re-enabling, or False when disabled
+                    if is_disabled:
+                        checkbox_value = False
+                    else:
+                        checkbox_value = st.session_state.iq_checkbox_states.get(qtype, False)
+
                     i_checkboxes[qtype] = st.checkbox(
                         qtype,
-                        value=config.get("other_quants", {}).get(qtype, False),
-                        help=tooltip,
-                        key=f"i_{qtype}"
+                        value=checkbox_value,
+                        help=tooltip if not is_disabled else tooltip + " (Requires importance matrix)",
+                        key=widget_key,
+                        disabled=is_disabled
                     )
 
         # Collect selected quantization types
@@ -744,7 +884,11 @@ def main():
                 all_quant_selections.update(full_checkboxes)
                 all_quant_selections.update(trad_checkboxes)
                 all_quant_selections.update(k_checkboxes)
-                all_quant_selections.update(i_checkboxes)
+                # For I quants, save the actual session state values (not the disabled ones)
+                if "iq_checkbox_states" in st.session_state:
+                    all_quant_selections.update(st.session_state.iq_checkbox_states)
+                else:
+                    all_quant_selections.update(i_checkboxes)
                 config["other_quants"] = all_quant_selections
 
                 save_config(config)
@@ -769,17 +913,24 @@ def main():
 
                     if use_imatrix:
                         # Save imatrix settings to config
-                        if imatrix_mode == "Generate":
+                        if imatrix_mode == "Generate imatrix (default name)":
                             config["imatrix_mode"] = "generate"
                         elif imatrix_mode == "Generate (custom name)":
                             config["imatrix_mode"] = "generate_custom"
                         else:
                             config["imatrix_mode"] = "reuse"
 
-                        if imatrix_mode in ["Generate", "Generate (custom name)"]:
+                        if imatrix_mode in ["Generate imatrix (default name)", "Generate (custom name)"]:
                             generate_imatrix_flag = True
-                            config["imatrix_generate_name"] = imatrix_generate_name
-                            imatrix_output_filename = imatrix_generate_name if imatrix_generate_name else None
+                            # Normalize filename to ensure .imatrix extension
+                            if imatrix_generate_name:
+                                if not imatrix_generate_name.endswith('.imatrix'):
+                                    imatrix_output_filename = f"{imatrix_generate_name}.imatrix"
+                                else:
+                                    imatrix_output_filename = imatrix_generate_name
+                                config["imatrix_generate_name"] = imatrix_generate_name
+                            else:
+                                imatrix_output_filename = None
 
                             # Build calibration file path for generation
                             cal_dir = config.get("imatrix_calibration_dir", "")
@@ -822,7 +973,7 @@ def main():
                     if use_imatrix:
                         # Determine which imatrix file was used
                         actual_imatrix_path = None
-                        if imatrix_mode in ["Generate", "Generate (custom name)"]:
+                        if imatrix_mode in ["Generate imatrix (default name)", "Generate (custom name)"]:
                             # Use the generated imatrix file
                             if imatrix_output_filename:
                                 actual_imatrix_path = Path(output_dir_clean) / imatrix_output_filename
@@ -877,8 +1028,8 @@ def main():
             else:
                 calibration_data_dir = default_calibration_dir
 
-            # Directory input field with Check Folder button
-            col_dir, col_dir_btn = st.columns([5, 1])
+            # Directory input field with Browse and Check Folder buttons
+            col_dir, col_dir_browse, col_dir_check = st.columns([4, 1, 1])
             with col_dir:
                 calibration_dir_input = st.text_input(
                     "Calibration files directory",
@@ -888,17 +1039,31 @@ def main():
                     key=f"imatrix_cal_dir_input_{st.session_state.reset_count}",
                     on_change=lambda: None  # Trigger to update when user changes the path
                 )
-            with col_dir_btn:
+            with col_dir_browse:
                 st.markdown("<br>", unsafe_allow_html=True)  # Spacer to align with input + help icon
-                cal_dir_exists_check = calibration_data_dir.exists() and calibration_data_dir.is_dir()
+                if st.button(
+                    "Browse",
+                    key="browse_cal_dir_btn",
+                    use_container_width=True,
+                    help="Browse for calibration directory"
+                ):
+                    initial_dir = str(calibration_data_dir) if calibration_data_dir.exists() else None
+                    selected_folder = browse_folder(initial_dir)
+                    if selected_folder:
+                        config["imatrix_calibration_dir"] = selected_folder
+                        save_config(config)
+                        st.rerun()
+            with col_dir_check:
+                st.markdown("<br>", unsafe_allow_html=True)  # Spacer to align with input + help icon
+                cal_dir_exists = calibration_data_dir.exists() and calibration_data_dir.is_dir()
                 if st.button(
                     "Check Folder",
                     key="check_cal_dir_btn",
                     use_container_width=True,
-                    disabled=not cal_dir_exists_check,
-                    help="Open calibration directory in file explorer" if cal_dir_exists_check else "Directory doesn't exist"
+                    disabled=not cal_dir_exists,
+                    help="Open folder in file explorer" if cal_dir_exists else "Directory doesn't exist"
                 ):
-                    if cal_dir_exists_check:
+                    if cal_dir_exists:
                         try:
                             open_folder(str(calibration_data_dir))
                             st.toast("Opened folder")
@@ -1225,8 +1390,8 @@ def main():
         with col1:
             st.subheader("Settings")
 
-            # Output directory to analyze with Check Output Directory button
-            col_stats_dir, col_stats_dir_btn = st.columns([5, 1])
+            # Output directory to analyze with Browse and Check Folder buttons
+            col_stats_dir, col_stats_dir_browse, col_stats_dir_check = st.columns([4, 1, 1])
             with col_stats_dir:
                 stats_output_dir = st.text_input(
                     "Output directory to analyze",
@@ -1234,16 +1399,31 @@ def main():
                     placeholder="E:/Models/output",
                     help="Directory containing imatrix and GGUF files to analyze (uses output directory from Convert & Quantize tab)"
                 )
-            with col_stats_dir_btn:
+            with col_stats_dir_browse:
+                st.markdown("<br>", unsafe_allow_html=True)  # Spacer to align with input + help icon
+                if st.button(
+                    "Browse",
+                    key="browse_imatrix_output_dir_btn",
+                    use_container_width=True,
+                    help="Browse for output directory"
+                ):
+                    stats_dir_clean = strip_quotes(stats_output_dir)
+                    initial_dir = stats_dir_clean if stats_dir_clean and Path(stats_dir_clean).exists() else None
+                    selected_folder = browse_folder(initial_dir)
+                    if selected_folder:
+                        config["output_dir"] = selected_folder
+                        save_config(config)
+                        st.rerun()
+            with col_stats_dir_check:
                 st.markdown("<br>", unsafe_allow_html=True)  # Spacer to align with input + help icon
                 stats_dir_clean = strip_quotes(stats_output_dir)
                 stats_dir_exists = bool(stats_dir_clean and Path(stats_dir_clean).exists())
                 if st.button(
-                    "Check Output Directory",
+                    "Check Folder",
                     key="check_imatrix_output_dir_btn",
                     use_container_width=True,
                     disabled=not stats_dir_exists,
-                    help="Open output folder in file explorer" if stats_dir_exists else "Path doesn't exist yet"
+                    help="Open folder in file explorer" if stats_dir_exists else "Path doesn't exist yet"
                 ):
                     if stats_dir_exists:
                         try:
@@ -1251,6 +1431,9 @@ def main():
                             st.toast("Opened folder")
                         except Exception as e:
                             st.toast(f"Could not open folder: {e}")
+
+            # Strip quotes from path for later use
+            stats_dir_clean = strip_quotes(stats_output_dir)
 
             # Scan directory for imatrix files
             imatrix_files = []
@@ -1402,15 +1585,30 @@ def main():
                     webbrowser.open(url)
                     st.toast(f"Opened {url}")
 
-        # Download directory with Check Folder button
-        col_download, col_download_btn = st.columns([5, 1])
+        # Download directory with Browse and Check Folder buttons
+        col_download, col_download_browse, col_download_check = st.columns([4, 1, 1])
         with col_download:
             download_dir = st.text_input(
                 "Download directory",
                 value=config.get("download_dir", ""),
                 placeholder="E:/Models/downloads"
             )
-        with col_download_btn:
+        with col_download_browse:
+            st.markdown("<br>", unsafe_allow_html=True)  # Spacer to align with input
+            if st.button(
+                "Browse",
+                key="browse_download_folder_btn",
+                use_container_width=True,
+                help="Browse for download directory"
+            ):
+                download_dir_check = strip_quotes(download_dir)
+                initial_dir = download_dir_check if download_dir_check and Path(download_dir_check).exists() else None
+                selected_folder = browse_folder(initial_dir)
+                if selected_folder:
+                    config["download_dir"] = selected_folder
+                    save_config(config)
+                    st.rerun()
+        with col_download_check:
             st.markdown("<br>", unsafe_allow_html=True)  # Spacer to align with input
             download_dir_check = strip_quotes(download_dir)
             download_dir_exists = bool(download_dir_check and Path(download_dir_check).exists())
@@ -1419,7 +1617,7 @@ def main():
                 key="check_download_folder_btn",
                 use_container_width=True,
                 disabled=not download_dir_exists,
-                help="Open download folder in file explorer" if download_dir_exists else "Path doesn't exist yet"
+                help="Open folder in file explorer" if download_dir_exists else "Path doesn't exist yet"
             ):
                 if download_dir_exists:
                     try:
@@ -1459,7 +1657,7 @@ def main():
                     import traceback
                     traceback.print_exc()
 
-    with tab5:
+    with tab6:
         st.header("Version Information")
 
         col1, col2 = st.columns(2)
@@ -1513,7 +1711,7 @@ def main():
             - Version tracked in `bin/BINARY_VERSION`
             """)
 
-    with tab6:
+    with tab5:
         st.header("About")
         st.markdown(f"""
         ### Yet Another GGUF Converter
