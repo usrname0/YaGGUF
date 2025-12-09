@@ -10,9 +10,10 @@ if [ ! -d "venv" ]; then
     echo "This is your first time running the GUI."
     echo "We need to set up the environment first."
     echo ""
-    read -p "Press Enter to run setup now, or Ctrl+C to cancel..."
+    printf "Press Enter to run setup now, or Ctrl+C to cancel..."
+    read _
     echo ""
-    ./setup/setup_linux.sh
+    bash setup/setup_linux.sh
     if [ $? -ne 0 ]; then
         echo ""
         echo "Setup failed. Please check the errors above."

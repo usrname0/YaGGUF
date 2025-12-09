@@ -161,116 +161,6 @@ def get_current_version():
         return "unknown"
 
 
-def check_git_status():
-    """
-    Check if repository is clean (no uncommitted changes)
-
-    Returns:
-        tuple: (is_clean: bool, status_message: str)
-    """
-    try:
-        # Check if we're in a git repo
-        result = subprocess.run(
-            ["git", "rev-parse", "--git-dir"],
-            capture_output=True,
-            text=True,
-            cwd=Path(__file__).parent.parent
-        )
-        if result.returncode != 0:
-            return False, "Not a git repository"
-
-        # Check for uncommitted changes
-        result = subprocess.run(
-            ["git", "status", "--porcelain"],
-            capture_output=True,
-            text=True,
-            cwd=Path(__file__).parent.parent
-        )
-
-        if result.stdout.strip():
-            return False, "Local modifications detected"
-
-        return True, "Clean working tree"
-    except Exception as e:
-        return False, f"Error checking git status: {e}"
-
-
-def check_for_updates():
-    """
-    Check if updates are available from remote repository
-
-    Returns:
-        tuple: (update_available: bool, remote_version: str, message: str)
-    """
-    try:
-        repo_path = Path(__file__).parent.parent
-
-        # Fetch from remote
-        result = subprocess.run(
-            ["git", "fetch", "origin"],
-            capture_output=True,
-            text=True,
-            cwd=repo_path,
-            timeout=10
-        )
-
-        if result.returncode != 0:
-            return False, None, f"Failed to fetch updates: {result.stderr}"
-
-        # Get remote VERSION file content
-        result = subprocess.run(
-            ["git", "show", "origin/main:VERSION"],
-            capture_output=True,
-            text=True,
-            cwd=repo_path
-        )
-
-        if result.returncode != 0:
-            return False, None, "Could not read remote VERSION file"
-
-        remote_version = result.stdout.strip()
-        current_version = get_current_version()
-
-        if remote_version != current_version:
-            return True, remote_version, f"Update available: {current_version} → {remote_version}"
-        else:
-            return False, remote_version, "You're up to date!"
-
-    except subprocess.TimeoutExpired:
-        return False, None, "Update check timed out"
-    except Exception as e:
-        return False, None, f"Error checking for updates: {e}"
-
-
-def perform_update():
-    """
-    Perform git pull to update the repository
-
-    Returns:
-        tuple: (success: bool, message: str)
-    """
-    try:
-        repo_path = Path(__file__).parent.parent
-
-        result = subprocess.run(
-            ["git", "pull", "origin", "main"],
-            capture_output=True,
-            text=True,
-            cwd=repo_path,
-            timeout=30
-        )
-
-        if result.returncode != 0:
-            return False, f"Update failed: {result.stderr}"
-
-        return True, "Update successful! Please restart the application."
-
-    except subprocess.TimeoutExpired:
-        return False, "Update timed out"
-    except Exception as e:
-        return False, f"Error during update: {e}"
-
-
 def get_binary_version():
     """
     Get version of llama.cpp binaries
@@ -428,7 +318,7 @@ def main():
             st.rerun()
 
     # Main content
-    tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs(["Convert & Quantize", "Imatrix Settings", "Imatrix Statistics", "HuggingFace Downloader", "Update", "Info"])
+    tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs(["Convert & Quantize", "Imatrix Settings", "Imatrix Statistics", "HuggingFace Downloader", "Version", "Info"])
 
     with tab1:
         st.header("Convert and Quantize Model")
@@ -1570,67 +1460,30 @@ def main():
                     traceback.print_exc()
 
     with tab5:
-        st.header("Update")
-        st.markdown("Check for updates and manage your installation")
+        st.header("Version Information")
 
         col1, col2 = st.columns(2)
 
         with col1:
-            st.subheader("Current Version")
-
+            st.subheader("Application Version")
             current_version = get_current_version()
             st.info(f"**Version:** {current_version}")
 
-            # Git status
             st.markdown("---")
-            st.subheader("Repository Status")
+            st.subheader("How to Update")
+            st.markdown("""
+            To update Yet Another GGUF Converter:
 
-            is_clean, status_msg = check_git_status()
-            if is_clean:
-                st.success(status_msg)
-            else:
-                st.warning(status_msg)
+            ```bash
+            # In your terminal, from the project directory
+            git pull
+            ```
 
-            # Check for updates button
-            st.markdown("---")
-            if st.button("Check for Updates", use_container_width=True, type="primary"):
-                with st.spinner("Checking for updates..."):
-                    update_available, remote_version, message = check_for_updates()
-
-                # Store results in session state
-                st.session_state.update_check_result = {
-                    "available": update_available,
-                    "remote_version": remote_version,
-                    "message": message
-                }
-                st.rerun()
-
-            # Show update check results
-            if 'update_check_result' in st.session_state:
-                result = st.session_state.update_check_result
-                if result["available"]:
-                    st.success(result['message'])
-
-                    # Update button (only if repo is clean)
-                    if is_clean:
-                        if st.button("Update Now", use_container_width=True, type="primary"):
-                            with st.spinner("Updating..."):
-                                success, update_msg = perform_update()
-
-                            if success:
-                                st.success(update_msg)
-                                st.info("Please restart the application to use the new version.")
-                                # Clear the update check result
-                                del st.session_state.update_check_result
-                            else:
-                                st.error(update_msg)
-                    else:
-                        st.warning("Cannot update: Local modifications detected. Commit or stash your changes first.")
-                else:
-                    if result["remote_version"]:
-                        st.info(result["message"])
-                    else:
-                        st.error(result["message"])
+            After updating:
+            - Restart the application
+            - If new binaries are needed, they'll download automatically on next use
+            - Version numbers only change on stable releases
+            """)
 
         with col2:
             st.subheader("Binary Information")
@@ -1647,24 +1500,17 @@ def main():
                 st.error(binary_info['message'])
 
             st.markdown("---")
-            st.subheader("About Updates")
+            st.subheader("About Binaries")
             st.markdown("""
-            **Update Process:**
-            1. Click "Check for Updates" to see if a new version is available
-            2. If available and your repository is clean, click "Update Now"
-            3. Restart the application after updating
+            **llama.cpp Binaries:**
+            - Auto-downloaded on first use
+            - Stored in `bin/` directory
+            - Auto-updated when version changes
+            - Platform-specific builds
 
-            **Important Notes:**
-            - Updates require a clean git repository (no local modifications)
-            - If you have local changes, commit or stash them first
-            - Advanced users can update manually with `git pull`
-            - Version numbers only change on stable releases
-            - llama.cpp binaries are auto-downloaded when needed
-
-            **Troubleshooting:**
-            - If update fails, try running `git pull origin main` manually
-            - Check that you have git installed and in your PATH
-            - Make sure you have internet connection
+            **Manual Binary Management:**
+            - Delete `bin/` folder to force re-download
+            - Version tracked in `bin/BINARY_VERSION`
             """)
 
     with tab6:
@@ -1690,7 +1536,7 @@ def main():
         2. **Imatrix Settings** - Configure calibration data and processing settings
         3. **Imatrix Statistics** - Analyze existing imatrix files
         4. **HuggingFace Downloader** - Download models from HuggingFace
-        5. **Update** - Check for updates and manage installation
+        5. **Version** - Version information and update instructions
         6. **Info** - This tab
 
         **Settings:**

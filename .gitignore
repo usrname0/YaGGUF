@@ -210,4 +210,5 @@ __marimo__/
 .claude/
 llama.cpp/
 bin/
+!bin/BINARY_VERSION
 nul

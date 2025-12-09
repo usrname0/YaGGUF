@@ -148,8 +148,13 @@ class BinaryManager:
         print(f"Extraction complete")
 
         # Verify binaries exist
-        if not self._binaries_exist():
+        if not self._check_binary_files_exist():
             raise RuntimeError("Binary extraction succeeded but executables not found")
+
+        # Write version file to track installed binary version
+        version_file = self.bin_dir / "BINARY_VERSION"
+        version_file.write_text(self.LLAMA_CPP_VERSION)
+        print(f"Installed binary version: {self.LLAMA_CPP_VERSION}")
 
         print(f"Binaries ready in {self.bin_dir}")
         return self.bin_dir
@@ -165,15 +170,41 @@ class BinaryManager:
             with tarfile.open(archive_path, 'r:*') as tf:
                 tf.extractall(self.bin_dir)
 
-    def _binaries_exist(self) -> bool:
+    def _check_binary_files_exist(self) -> bool:
         """
-        Check if required binaries exist
+        Check if required binary files exist (without version check)
         """
         required = ['llama-quantize', 'llama-imatrix']
 
         for binary in required:
             if not self.get_binary_path(binary).exists():
                 return False
+
+        return True
+
+    def _binaries_exist(self) -> bool:
+        """
+        Check if required binaries exist and are the correct version
+        """
+        # Check if all required binaries exist
+        if not self._check_binary_files_exist():
+            return False
+
+        # Check if binary version matches expected version
+        version_file = self.bin_dir / "BINARY_VERSION"
+        if version_file.exists():
+            try:
+                installed_version = version_file.read_text().strip()
+                if installed_version != self.LLAMA_CPP_VERSION:
+                    print(f"Binary version mismatch: installed={installed_version}, expected={self.LLAMA_CPP_VERSION}")
+                    print("Binaries need to be updated...")
+                    return False
+            except Exception:
+                # If we can't read the version file, assume binaries need update
+                return False
+        else:
+            # No version file means old installation, needs update
+            return False
 
         return True
 
