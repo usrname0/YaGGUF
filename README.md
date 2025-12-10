@@ -1,6 +1,6 @@
-# Yet Another GGUF Convertor
+# YaGUFF - Yet Another GGUF Convertor
 
-There are simultaneously too many and not enough GGUF Converters in the world. I can fix this.
+There are simultaneously too many and not enough GGUF converters in the world. I can fix this.
 
 ## Features
 

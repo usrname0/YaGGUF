@@ -41,7 +41,7 @@ def get_default_config():
         # Imatrix Settings tab
         "imatrix_ctx_size": 512,
         "imatrix_chunks": 150,  # 100-200 recommended, 0 = all chunks
-        "imatrix_collect_output_weight": False,
+        "imatrix_collect_output_weight": True,
         "imatrix_calibration_file": "_default.txt",  # Selected calibration file from the directory
         "imatrix_calibration_dir": "",  # Directory to scan for calibration files (empty = use default)
         "imatrix_from_chunk": 0,  # Skip first N chunks
@@ -1207,7 +1207,7 @@ def main():
             imatrix_parse_special_input = st.checkbox(
                 "Parse special tokens",
                 value=config.get("imatrix_parse_special", False),
-                help="Enable parsing of special tokens (e.g., <|im_start|>)",
+                help="Parse special tokens like <|im_start|>, <|im_end|>, etc. Recommended for chat models (Qwen, Llama 3, ChatML-based models). Warning: Can significantly slow down imatrix generation.",
                 key=f"imatrix_parse_special_input_{st.session_state.reset_count}",
                 on_change=save_parse_special
             )
@@ -1220,7 +1220,7 @@ def main():
             imatrix_collect_output_input = st.checkbox(
                 "Collect output.weight tensor",
                 value=config.get("imatrix_collect_output_weight", False),
-                help="Collect importance matrix for output.weight tensor",
+                help="Collect importance matrix for output.weight tensor. Required for IQ quantizations (IQ1_S, IQ1_M, IQ2_XXS, IQ2_XS, IQ2_S, Q2_K_S).",
                 key=f"imatrix_collect_output_input_{st.session_state.reset_count}",
                 on_change=save_collect_output
             )

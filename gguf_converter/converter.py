@@ -296,12 +296,12 @@ class GGUFConverter:
             nthreads: Number of threads to use
             verbose: Verbosity control (False=normal/1, True=debug/2)
             chunks: Number of chunks to process (None = process all)
-            collect_output_weight: Collect importance matrix for output.weight tensor
+            collect_output_weight: Collect importance matrix for output.weight tensor (required for IQ quantizations)
             ngl: Number of GPU layers to offload (None = CPU only)
             verbosity: Verbosity level (0=quiet, 1=normal, 2+=debug, overrides verbose if set)
             from_chunk: Skip first N chunks (useful for resuming)
             no_ppl: Disable perplexity calculation (speeds up processing)
-            parse_special: Parse special tokens
+            parse_special: Parse special tokens (recommended for chat models, can significantly slow down generation)
             output_frequency: Save interval in chunks (default: 10)
 
         Returns:
@@ -370,6 +370,10 @@ class GGUFConverter:
 
         if output_frequency:
             cmd.extend(["-ofreq", str(output_frequency)])
+
+        # Use GGUF format for compatibility with llama-quantize
+        # Newer llama-quantize versions expect GGUF format, not DAT
+        cmd.extend(["--output-format", "gguf"])
 
         print(f"Running: {' '.join(cmd)}")
         print()
@@ -518,7 +522,7 @@ class GGUFConverter:
             generate_imatrix: Auto-generate importance matrix in output directory
             imatrix_ctx_size: Context window size for imatrix generation (default: 512)
             imatrix_chunks: Number of chunks to process for imatrix (None = all)
-            imatrix_collect_output: Collect output.weight tensor in imatrix
+            imatrix_collect_output: Collect output.weight tensor in imatrix (required for IQ quantizations)
             imatrix_calibration_file: Path to calibration file for imatrix generation (None = use default)
 
         Returns:
