@@ -1003,7 +1003,7 @@ def main():
                             imatrix_output_name=imatrix_output_filename
                         )
 
-                    st.success(f"Successfully created {len(output_files)} files!")
+                    st.success(f"Successfully processed {len(output_files)} files!")
 
                     # If imatrix was used, save paths for statistics tab
                     if use_imatrix:
@@ -1028,7 +1028,7 @@ def main():
                             config["imatrix_stats_model"] = str(intermediate_path)
                         save_config(config)
 
-                    st.subheader("Created Files")
+                    st.subheader("Output Files")
                     for file_path in output_files:
                         file_size = file_path.stat().st_size / (1024**3)  # GB
                         st.write(f"`{file_path.name}` ({file_size:.2f} GB)")
