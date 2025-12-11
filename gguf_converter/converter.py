@@ -237,19 +237,40 @@ class GGUFConverter:
         print()
 
         # Run llama-quantize
+        # Always capture output so we can parse errors, but print it if verbose=True
         try:
             result = subprocess.run(
                 cmd,
-                capture_output=not verbose,
+                capture_output=True,
                 text=True,
                 check=True
             )
 
-            if verbose and result.stdout:
-                print(result.stdout)
+            if verbose:
+                if result.stdout:
+                    print(result.stdout)
+                if result.stderr:
+                    print(result.stderr)
 
         except subprocess.CalledProcessError as e:
             error_msg = e.stderr if e.stderr else str(e)
+
+            # Check if imatrix was provided but llama.cpp still complains about missing imatrix
+            # This indicates model incompatibility (e.g., tied embeddings), not user error
+            if "without an importance matrix" in error_msg and imatrix_path:
+                raise RuntimeError(
+                    f"Quantization failed: Model incompatibility detected.\n\n"
+                    f"An importance matrix was provided, but {quantization_type} quantization still failed. "
+                    f"This typically means the model architecture is incompatible with this quantization type.\n\n"
+                    f"Common cause: Models with 'tied embeddings' (e.g., Qwen series) lack the output.weight tensor "
+                    f"required for IQ quantizations due to a limitation in llama.cpp.\n\n"
+                    f"Recommended alternatives:\n"
+                    f"  - Q3_K_M or Q3_K_S (good quality, similar size)\n"
+                    f"  - Q2_K (not Q2_K_S) if you need smaller files\n\n"
+                    f"See KNOWN_ISSUES.md for detailed explanation.\n\n"
+                    f"Original error: {error_msg}"
+                )
+
             raise RuntimeError(f"Quantization failed: {error_msg}")
 
         elapsed = time.time() - start_time
@@ -626,7 +647,7 @@ class GGUFConverter:
                 if quant_type.upper() == intermediate_type.upper():
                     # Check if output file would be same as intermediate (case-insensitive check)
                     if output_file.resolve() == intermediate_file.resolve():
-                        print(f"{quant_type} output already exists as intermediate file...")
+                        print(f"{quant_type} is the intermediate format (already created above)")
                         quantized_files.append(intermediate_file)
                     else:
                         import shutil
@@ -635,29 +656,25 @@ class GGUFConverter:
                         quantized_files.append(output_file)
                 else:
                     # Different unquantized format requested
-                    # If we have the source model (not already GGUF), convert directly from source
-                    # Otherwise, convert from intermediate
-                    if not is_already_gguf:
-                        # Convert directly from source model for best quality
-                        print(f"Converting {model_name} directly to {quant_type} from source...")
-
-                        # Check if output already exists
-                        if output_file.exists():
-                            print(f"{quant_type} file already exists: {output_file.name}")
-                            print("Skipping conversion, using existing file...")
-                            quantized_files.append(output_file)
-                        else:
-                            self.convert_to_gguf(
-                                model_path=model_path,
-                                output_path=output_file,
-                                output_type=quant_type.lower(),
-                                verbose=verbose
-                            )
-                            quantized_files.append(output_file)
+                    # Check if output already exists first
+                    if output_file.exists():
+                        print(f"{quant_type} file already exists: {output_file.name}")
+                        print("Skipping conversion, using existing file...")
+                        quantized_files.append(output_file)
+                    # If we have the source model (not already GGUF), convert directly from source for best quality
+                    elif not is_already_gguf:
+                        print(f"Converting {model_name} to {quant_type} from source...")
+                        self.convert_to_gguf(
+                            model_path=model_path,
+                            output_path=output_file,
+                            output_type=quant_type.lower(),
+                            verbose=verbose
+                        )
+                        quantized_files.append(output_file)
                     else:
-                        # Source is already GGUF, need to convert from intermediate
+                        # Source is already GGUF, need to convert from intermediate (edge case)
                         try:
-                            print(f"Converting from {intermediate_type} to {quant_type}...")
+                            print(f"Converting from {intermediate_type} to {quant_type} (source was GGUF)...")
                             self.quantize(
                                 input_path=intermediate_file,
                                 output_path=output_file,
