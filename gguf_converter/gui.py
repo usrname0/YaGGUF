@@ -728,16 +728,33 @@ def main():
                         checkbox_value = config.get("other_quants", {}).get(qtype, False)
                         checkbox_disabled = False
 
+                    # Callback for full/unquantized checkboxes
+                    def save_full_selection(qt, inter_type):
+                        def callback():
+                            if not st.session_state[f"full_{qt}_{inter_type}"]:  # Only save if being unchecked
+                                config["other_quants"][qt] = False
+                                save_config(config)
+                        return callback
+
                     full_checkboxes[qtype] = st.checkbox(
                         label,
                         value=checkbox_value,
                         help=tooltip,
                         key=f"full_{qtype}_{intermediate_type}",
-                        disabled=checkbox_disabled
+                        disabled=checkbox_disabled,
+                        on_change=save_full_selection(qtype, intermediate_type) if not checkbox_disabled else None
                     )
 
             # Legacy Quants
             st.markdown("**Legacy Quants:**")
+
+            # Callback for traditional quants
+            def save_trad_selection(qtype):
+                def callback():
+                    config["other_quants"][qtype] = st.session_state[f"trad_{qtype}"]
+                    save_config(config)
+                return callback
+
             trad_cols = st.columns(3)
             trad_quants = {
                 "Q8_0": "8-bit (highest quality)",
@@ -753,10 +770,18 @@ def main():
                         qtype,
                         value=config.get("other_quants", {}).get(qtype, qtype == "Q8_0" if qtype == "Q8_0" else False),
                         help=tooltip,
-                        key=f"trad_{qtype}"
+                        key=f"trad_{qtype}",
+                        on_change=save_trad_selection(qtype)
                     )
 
             # K Quants
+            # Callback to save quantization selection immediately
+            def save_quant_selection(qtype):
+                def callback():
+                    config["other_quants"][qtype] = st.session_state[f"k_{qtype}"]
+                    save_config(config)
+                return callback
+
             st.markdown("**K Quants (Recommended):**")
             k_quants = {
                 "Q6_K": "6-bit K (very high quality)",
@@ -779,7 +804,8 @@ def main():
                         qtype,
                         value=default_val,
                         help=tooltip,
-                        key=f"k_{qtype}"
+                        key=f"k_{qtype}",
+                        on_change=save_quant_selection(qtype)
                     )
 
             # I Quants
@@ -826,12 +852,22 @@ def main():
                     else:
                         checkbox_value = st.session_state.iq_checkbox_states.get(qtype, False)
 
+                    # Callback for IQ checkboxes
+                    def save_iq_selection(qt, key):
+                        def callback():
+                            val = st.session_state[key]
+                            st.session_state.iq_checkbox_states[qt] = val
+                            config["other_quants"][qt] = val
+                            save_config(config)
+                        return callback
+
                     i_checkboxes[qtype] = st.checkbox(
                         qtype,
                         value=checkbox_value,
                         help=tooltip if not is_disabled else tooltip + " (Requires importance matrix)",
                         key=widget_key,
-                        disabled=is_disabled
+                        disabled=is_disabled,
+                        on_change=save_iq_selection(qtype, widget_key) if not is_disabled else None
                     )
 
         # Collect selected quantization types

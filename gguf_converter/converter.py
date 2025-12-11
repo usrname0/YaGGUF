@@ -479,6 +479,7 @@ class GGUFConverter:
 
                 # Collect output while streaming to terminal
                 output_lines = []
+                assert process.stdout is not None  # We set stdout=PIPE above
                 for line in process.stdout:
                     print(line, end='', flush=True)  # Real-time terminal output
                     output_lines.append(line)  # Capture for GUI
@@ -560,32 +561,34 @@ class GGUFConverter:
             print(f"Downloading from HuggingFace: {model_path_str}")
             model_path = self.download_model(model_path_str, output_dir / "downloads")
 
-        # Check if input is already a GGUF file
-        is_already_gguf = model_path.is_file() and model_path.suffix == '.gguf'
-
-        if is_already_gguf:
-            print(f"Input is already a GGUF file: {model_path.name}")
-            print("Skipping conversion, going straight to quantization...")
-            intermediate_file = model_path
-            model_name = model_path.stem  # Remove .gguf extension
-        else:
-            model_name = model_path.name
-
-            # Step 1: Convert to GGUF
-            intermediate_file = output_dir / f"{model_name}_{intermediate_type.upper()}.gguf"
-
-            # Check if intermediate file already exists
-            if intermediate_file.exists():
-                print(f"Intermediate file already exists: {intermediate_file.name}")
-                print("Skipping conversion, using existing file...")
-            else:
-                print(f"Converting {model_name} to GGUF...")
-                self.convert_to_gguf(
-                    model_path=model_path,
-                    output_path=intermediate_file,
-                    output_type=intermediate_type,
-                    verbose=verbose
+        # Validate model path is a source model directory with config.json
+        if model_path.is_dir():
+            if not (model_path / "config.json").exists():
+                raise ValueError(
+                    f"Model path must be a HuggingFace model directory with config.json.\n"
+                    f"The directory '{model_path}' does not contain config.json."
                 )
+        elif not model_path.is_file():
+            raise ValueError(f"Model path does not exist: {model_path}")
+
+        is_already_gguf = False
+        model_name = model_path.name
+
+        # Step 1: Convert to GGUF
+        intermediate_file = output_dir / f"{model_name}_{intermediate_type.upper()}.gguf"
+
+        # Check if intermediate file already exists
+        if intermediate_file.exists():
+            print(f"Intermediate file already exists: {intermediate_file.name}")
+            print("Skipping conversion, using existing file...")
+        else:
+            print(f"Converting {model_name} to GGUF...")
+            self.convert_to_gguf(
+                model_path=model_path,
+                output_path=intermediate_file,
+                output_type=intermediate_type,
+                verbose=verbose
+            )
 
         # Step 1.5: Generate importance matrix if requested
         if generate_imatrix:
@@ -643,54 +646,25 @@ class GGUFConverter:
 
             # Handle F16/F32/BF16 specially - these are unquantized formats
             if quant_type.upper() in ["F16", "F32", "BF16"]:
-                # If the requested format matches the intermediate format, just use that file
+                # Check if this is the intermediate format
                 if quant_type.upper() == intermediate_type.upper():
-                    # Check if output file would be same as intermediate (case-insensitive check)
-                    if output_file.resolve() == intermediate_file.resolve():
-                        print(f"{quant_type} is the intermediate format (already created above)")
-                        quantized_files.append(intermediate_file)
-                    else:
-                        import shutil
-                        print(f"Creating {quant_type} output (copying intermediate file)...")
-                        shutil.copy2(intermediate_file, output_file)
-                        quantized_files.append(output_file)
+                    print(f"{quant_type} is the intermediate format (already created above)")
+                    quantized_files.append(intermediate_file)
+                # Check if output already exists
+                elif output_file.exists():
+                    print(f"{quant_type} file already exists: {output_file.name}")
+                    print("Skipping conversion, using existing file...")
+                    quantized_files.append(output_file)
+                # Generate from source
                 else:
-                    # Different unquantized format requested
-                    # Check if output already exists first
-                    if output_file.exists():
-                        print(f"{quant_type} file already exists: {output_file.name}")
-                        print("Skipping conversion, using existing file...")
-                        quantized_files.append(output_file)
-                    # If we have the source model (not already GGUF), convert directly from source for best quality
-                    elif not is_already_gguf:
-                        print(f"Converting {model_name} to {quant_type} from source...")
-                        self.convert_to_gguf(
-                            model_path=model_path,
-                            output_path=output_file,
-                            output_type=quant_type.lower(),
-                            verbose=verbose
-                        )
-                        quantized_files.append(output_file)
-                    else:
-                        # Source is already GGUF, need to convert from intermediate (edge case)
-                        try:
-                            print(f"Converting from {intermediate_type} to {quant_type} (source was GGUF)...")
-                            self.quantize(
-                                input_path=intermediate_file,
-                                output_path=output_file,
-                                quantization_type=quant_type,
-                                verbose=verbose,
-                                imatrix_path=None,  # Don't use imatrix for format conversion
-                                nthreads=nthreads
-                            )
-                            quantized_files.append(output_file)
-                        except Exception as e:
-                            print(f"Warning: Could not convert {intermediate_type} to {quant_type}: {e}")
-                            print(f"Suggestion: Use '{quant_type.lower()}' as the intermediate format instead")
-                            raise RuntimeError(
-                                f"Cannot convert from {intermediate_type} to {quant_type}. "
-                                f"Please set the intermediate format to '{quant_type.lower()}' instead."
-                            )
+                    print(f"Converting {model_name} to {quant_type} from source...")
+                    self.convert_to_gguf(
+                        model_path=model_path,
+                        output_path=output_file,
+                        output_type=quant_type.lower(),
+                        verbose=verbose
+                    )
+                    quantized_files.append(output_file)
             else:
                 self.quantize(
                     input_path=intermediate_file,
