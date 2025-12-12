@@ -27,6 +27,11 @@ fi
 # Activate virtual environment
 . venv/bin/activate
 
+# Check and update binaries if needed
+echo ""
+python check_binaries.py
+echo ""
+
 echo "Starting GGUF Converter GUI..."
 echo ""
 echo "Opening browser to http://localhost:8501"

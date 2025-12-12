@@ -38,8 +38,8 @@ This project is primarily a Python application. It does not require traditional 
 
 1.  **Clone the repository:**
     ```bash
-    git clone https://github.com/usrname0/Yet_Another_GGUF_Converter.git
-    cd Yet_Another_GGUF_Converter
+    git clone https://github.com/usrname0/YaGUFF.git
+    cd YaGUFF
     ```
 2.  **Run setup script (Windows/Linux/Mac):**
     *   **Windows:** Double-click `run_gui.bat` or execute it from the command line. This script will automatically set up a Python virtual environment and install dependencies.

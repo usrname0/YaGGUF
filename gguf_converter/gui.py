@@ -284,7 +284,7 @@ def main():
         </style>
     """, unsafe_allow_html=True)
 
-    st.title("Yet Another GGUF Converter")
+    st.title("YaGUFF - Yet Another GGUF Converter")
     st.markdown("*Because there are simultaneously too many and not enough GGUF converters*")
 
     # Initialize converter
@@ -387,8 +387,22 @@ def main():
             # Model path with Browse and Check Folder buttons
             col_model, col_model_browse, col_model_check = st.columns([4, 1, 1])
             with col_model:
+                # Create dynamic label based on HuggingFace repo ID
+                model_path_label = "Model path"
+                if hf_repo and hf_repo.strip():
+                    # Extract model name from repo ID (e.g., "username/model-name" -> "model-name")
+                    hf_model_name = hf_repo.strip().split('/')[-1]
+                    # Only show the note if the model path doesn't already end with the model name
+                    current_path = config.get("model_path", "")
+                    if current_path:
+                        current_path_name = Path(current_path.strip().strip('"').strip("'")).name
+                        if current_path_name != hf_model_name:
+                            model_path_label = f"Model path (/{hf_model_name}/ folder will be created)"
+                    else:
+                        model_path_label = f"Model path (/{hf_model_name}/ folder will be created)"
+
                 model_path = st.text_input(
-                    "Model path",
+                    model_path_label,
                     value=config.get("model_path", ""),
                     placeholder="E:/Models/my-model",
                     help="Local model directory. If HuggingFace repo provided above, model will be downloaded here first."
@@ -472,27 +486,12 @@ def main():
             model_path_clean = strip_quotes(model_path)
             output_dir_clean = strip_quotes(output_dir)
 
-            st.subheader("Conversion Options")
-            # Determine index for intermediate format radio button
-            saved_intermediate = config.get("intermediate_type", "F16").upper()
-            if saved_intermediate == "F32":
-                intermediate_index = 0
-            elif saved_intermediate == "BF16":
-                intermediate_index = 2
-            else:  # F16 or default
-                intermediate_index = 1
+            # Get intermediate format from config
+            intermediate_type = config.get("intermediate_type", "F16").upper()
 
             # Track previous intermediate format to restore checkbox state
             if 'previous_intermediate' not in st.session_state:
-                st.session_state.previous_intermediate = saved_intermediate
-
-            intermediate_type = st.radio(
-                "Intermediate format",
-                ["F32", "F16", "BF16"],
-                index=intermediate_index,
-                help="Format used before quantization (F32=highest quality, F16=balanced, BF16=brain float)",
-                horizontal=True
-            )
+                st.session_state.previous_intermediate = intermediate_type
 
             # Ensure the current intermediate format's state is saved before disabling it
             if "unquantized_saved_states" not in config:
@@ -618,7 +617,11 @@ def main():
                 # Show appropriate field based on mode
                 if imatrix_mode == "Generate imatrix (default name)":
                     # Show read-only text field with default name
-                    if model_path_clean:
+                    # Prefer HuggingFace repo name if present, fallback to model path folder name
+                    if hf_repo and hf_repo.strip():
+                        model_name = hf_repo.strip().split('/')[-1]
+                        default_name = f"{model_name}.imatrix"
+                    elif model_path_clean:
                         default_name = f"{Path(model_path_clean).name}.imatrix"
                     else:
                         default_name = "(provide model path to see default name)"
@@ -651,8 +654,12 @@ def main():
                     with col_imatrix_default:
                         st.markdown("<br>", unsafe_allow_html=True)  # Spacer to align with text input
                         if st.button("Set to default", key="set_default_imatrix_name", use_container_width=True):
-                            # If we have model path info, populate with the calculated default
-                            if model_path_clean:
+                            # Prefer HuggingFace repo name if present, fallback to model path folder name
+                            if hf_repo and hf_repo.strip():
+                                model_name = hf_repo.strip().split('/')[-1]
+                                default_name = f"{model_name}.imatrix"
+                                config["imatrix_generate_name"] = default_name
+                            elif model_path_clean:
                                 default_name = f"{Path(model_path_clean).name}.imatrix"
                                 config["imatrix_generate_name"] = default_name
                             else:
@@ -694,9 +701,8 @@ def main():
                             st.rerun()
 
         with col2:
-            st.subheader("Quantization Types")
-            st.markdown("Select one or more quantization types:")
-
+            st.subheader("Output Types")
+            st.markdown("Select output formats (one intermediate format is required):")
             # Define quantization types that require an importance matrix
             IMATRIX_REQUIRED_TYPES = [
                 "IQ1_S", "IQ1_M",
@@ -704,23 +710,26 @@ def main():
                 "IQ3_XXS", "IQ3_XS"
             ]
 
-            # Unquantized Formats
-            st.markdown("**Unquantized Formats:**")
-            full_cols = st.columns(3)
+            # Unquantized Formats - with integrated intermediate format selection
+            st.markdown("**Intermediate Formats:**")
+
+            # Checkboxes for additional output formats with inline intermediate buttons
+            # Using 6 columns with weighted widths: [checkbox:1, button:2, checkbox:1, button:2, checkbox:1, button:2]
+            all_cols = st.columns([1, 2, 1, 2, 1, 2])
             full_quants = {
                 "F32": "32-bit float (full precision)",
                 "F16": "16-bit float (half precision)",
                 "BF16": "16-bit bfloat (brain float)",
             }
             full_checkboxes = {}
+            selected_format = None
+
             for idx, (qtype, tooltip) in enumerate(full_quants.items()):
-                with full_cols[idx]:
-                    # Highlight the intermediate format (radio returns uppercase already)
+                # Checkbox in even columns (0, 2, 4)
+                with all_cols[idx * 2]:
                     is_intermediate = qtype == intermediate_type
-                    label = f"{qtype} (intermediate)" if is_intermediate else qtype
 
                     # If this is the intermediate format, force checked and disabled
-                    # Otherwise, use saved value
                     if is_intermediate:
                         checkbox_value = True
                         checkbox_disabled = True
@@ -731,19 +740,68 @@ def main():
                     # Callback for full/unquantized checkboxes
                     def save_full_selection(qt, inter_type):
                         def callback():
-                            if not st.session_state[f"full_{qt}_{inter_type}"]:  # Only save if being unchecked
+                            if not st.session_state[f"full_{qt}_{inter_type}"]:
                                 config["other_quants"][qt] = False
                                 save_config(config)
                         return callback
 
                     full_checkboxes[qtype] = st.checkbox(
-                        label,
+                        qtype,
                         value=checkbox_value,
                         help=tooltip,
                         key=f"full_{qtype}_{intermediate_type}",
                         disabled=checkbox_disabled,
                         on_change=save_full_selection(qtype, intermediate_type) if not checkbox_disabled else None
                     )
+
+                # Button in odd columns (1, 3, 5)
+                with all_cols[idx * 2 + 1]:
+                    # Intermediate format button (radio button behavior)
+                    is_selected = qtype == intermediate_type
+                    button_type = "primary" if is_selected else "secondary"
+                    button_label = f"{qtype} Intermediate" if is_selected else ""
+                    if st.button(
+                        button_label,
+                        key=f"intermediate_btn_{qtype}",
+                        type=button_type,
+                        use_container_width=True
+                    ):
+                        selected_format = qtype
+
+            # Handle intermediate format change
+            if selected_format and selected_format != intermediate_type:
+                # Ensure dicts exist
+                if "unquantized_saved_states" not in config:
+                    config["unquantized_saved_states"] = {}
+                if "other_quants" not in config:
+                    config["other_quants"] = {}
+
+                # Save current checkbox states before switching
+                for qtype in ["F32", "F16", "BF16"]:
+                    checkbox_key = f"full_{qtype}_{intermediate_type}"
+                    if checkbox_key in st.session_state:
+                        if qtype != intermediate_type:  # Don't save the disabled intermediate checkbox
+                            config["other_quants"][qtype] = st.session_state[checkbox_key]
+
+                # Restore the old intermediate's saved state (if any)
+                # This is the state it had BEFORE it became intermediate
+                if intermediate_type in config["unquantized_saved_states"]:
+                    config["other_quants"][intermediate_type] = config["unquantized_saved_states"][intermediate_type]
+                    del config["unquantized_saved_states"][intermediate_type]
+
+                # Save the new intermediate's state BEFORE making it intermediate
+                # (so we can restore it when switching away)
+                config["unquantized_saved_states"][selected_format] = config.get("other_quants", {}).get(selected_format, False)
+
+                # Force new intermediate to be checked
+                config["other_quants"][selected_format] = True
+
+                # Change intermediate type
+                config["intermediate_type"] = selected_format
+                intermediate_type = selected_format
+                st.session_state.previous_intermediate = selected_format
+                save_config(config)
+                st.rerun()
 
             # Legacy Quants
             st.markdown("**Legacy Quants:**")
@@ -930,16 +988,37 @@ def main():
                 save_config(config)
 
                 try:
-                    # Download from HuggingFace if repo is provided
+                    # Determine actual model path (may be adjusted for HuggingFace downloads)
                     actual_model_path = model_path_clean
+
                     if hf_repo_clean and hf_repo_clean.strip():
+                        # Extract model name from HuggingFace repo ID
+                        hf_model_name = hf_repo_clean.strip().split('/')[-1]
+                        model_path_obj = Path(model_path_clean)
+
+                        # Check if the last folder in model path matches the HuggingFace model name
+                        # If it does, use the parent directory to avoid redundant nesting
+                        if model_path_obj.name == hf_model_name:
+                            download_dir = model_path_obj.parent
+                            # The actual model will be at parent/model-name/
+                            actual_model_path = str(model_path_obj)
+                        else:
+                            download_dir = model_path_obj
+                            # The actual model will be at download_dir/model-name/
+                            actual_model_path = str(download_dir / hf_model_name)
+
                         with st.spinner(f"Downloading {hf_repo_clean} from HuggingFace..."):
                             download_path = converter.download_model(
                                 repo_id=hf_repo_clean.strip(),
-                                output_dir=Path(model_path_clean)
+                                output_dir=download_dir
                             )
+                            # Update with actual download path (should match our calculation)
                             actual_model_path = str(download_path)
                             st.info(f"Downloaded to: {actual_model_path}")
+
+                            # Update the saved model path to reflect where it actually is
+                            config["model_path"] = actual_model_path
+                            save_config(config)
 
                     # Determine imatrix parameters based on mode
                     generate_imatrix_flag = False
@@ -1702,7 +1781,7 @@ def main():
             st.subheader("Application Version")
             current_version = get_current_version()
             st.info(f"**Version:** {current_version}")
-            st.markdown("[View on GitHub](https://github.com/usrname0/Yet_Another_GGUF_Converter)")
+            st.markdown("[View on GitHub](https://github.com/usrname0/YaGUFF)")
 
             st.markdown("---")
             st.subheader("How to Update")
@@ -1753,7 +1832,7 @@ def main():
     with tab5:
         st.header("About")
         st.markdown(f"""
-        ### Yet Another GGUF Converter
+        ### YaGUFF - Yet Another GGUF Converter
 
         A user-friendly GGUF converter that shields you from llama.cpp complexity.
         No manual compilation or terminal commands required!

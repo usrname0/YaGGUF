@@ -19,7 +19,7 @@ class BinaryManager:
     """
 
     # Pin to specific llama.cpp release for stability
-    LLAMA_CPP_VERSION = "b7222"  # Update this when upgrading
+    LLAMA_CPP_VERSION = "b7360"  # Update this when upgrading
 
     # GitHub release URL template (using ggml-org, not ggerganov)
     RELEASE_URL_TEMPLATE = "https://github.com/ggml-org/llama.cpp/releases/download/{tag}/{filename}"

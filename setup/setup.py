@@ -16,7 +16,7 @@ setup(
     description="Pure Python GGUF converter - easy installation, easy use",
     long_description=long_description,
     long_description_content_type="text/markdown",
-    url="https://github.com/usrname0/Yet_Another_GGUF_Converter",
+    url="https://github.com/usrname0/YaGUFF",
     packages=find_packages(),
     classifiers=[
         "Development Status :: 3 - Alpha",

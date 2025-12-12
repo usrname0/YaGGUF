@@ -28,6 +28,11 @@ if not exist venv (
 REM Activate virtual environment
 call venv\Scripts\activate.bat
 
+REM Check and update binaries if needed
+echo.
+python check_binaries.py
+echo.
+
 echo Starting GGUF Converter GUI...
 echo.
 echo Opening browser to http://localhost:8501
