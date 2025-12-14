@@ -32,6 +32,7 @@ def get_default_config():
         "verbose": False,
         "use_imatrix": True,
         "nthreads": None,  # None = auto-detect
+        "ignore_incompatibilities": False,  # Allow incompatible quantizations (advanced users only)
 
         # Imatrix mode (on Convert & Quantize tab)
         "imatrix_mode": "generate",  # "generate", "generate_custom", or "reuse"
@@ -320,6 +321,23 @@ def main():
             on_change=save_verbose
         )
 
+        # Auto-save callback for incompatibility warnings (inverted logic)
+        def save_incompatibility_warnings():
+            # Checkbox checked = warnings ON, so ignore_incompatibilities = False
+            config["ignore_incompatibilities"] = not st.session_state.incompatibility_warnings_checkbox
+            save_config(config)
+
+        incompatibility_warnings_enabled = st.checkbox(
+            "Incompatibility warnings",
+            value=not config.get("ignore_incompatibilities", False),  # Inverted: default to checked (warnings ON)
+            help="Detect and prevent incompatible quantizations (e.g., IQ quants on Qwen models). Uncheck to override warnings (advanced users only).",
+            key="incompatibility_warnings_checkbox",
+            on_change=save_incompatibility_warnings
+        )
+
+        # For internal use, invert back to ignore_incompatibilities
+        ignore_incompatibilities = not incompatibility_warnings_enabled
+
         st.markdown("---")
         st.markdown("**Performance:**")
         import multiprocessing
@@ -485,6 +503,36 @@ def main():
             # Strip quotes from paths for later use
             model_path_clean = strip_quotes(model_path)
             output_dir_clean = strip_quotes(output_dir)
+
+            # Check for model incompatibilities
+            incompatible_quants = []
+            if model_path_clean and Path(model_path_clean).exists() and Path(model_path_clean).is_dir():
+                config_json = Path(model_path_clean) / "config.json"
+                if config_json.exists() and not ignore_incompatibilities:
+                    try:
+                        incompat_info = converter.get_incompatibility_info(model_path_clean)
+                        if incompat_info["has_incompatibilities"]:
+                            incompatible_quants = incompat_info["incompatible_quants"]
+
+                            # Display warning banner
+                            st.info(f"""
+**Model Incompatibility Detected**
+
+Detected issues: {', '.join(incompat_info['types'])}
+
+**Incompatible quantizations:** {', '.join(incompatible_quants)}
+
+**Recommended alternatives:**
+{chr(10).join('- ' + alt for alt in incompat_info['alternatives'])}
+
+**Reason:**
+{chr(10).join('- ' + reason for reason in incompat_info['reasons'])}
+
+Incompatible quantization options are disabled below.
+                            """)
+                    except Exception as e:
+                        # Silently ignore errors in compatibility check
+                        pass
 
             # Get intermediate format from config
             intermediate_type = config.get("intermediate_type", "F16").upper()
@@ -858,12 +906,21 @@ def main():
             for idx, (qtype, tooltip) in enumerate(k_quants.items()):
                 with k_cols[idx % 3]:
                     default_val = config.get("other_quants", {}).get(qtype, qtype == "Q4_K_M")
+
+                    # Check if incompatible with model
+                    is_incompatible = qtype in incompatible_quants
+                    help_text = tooltip
+                    if is_incompatible:
+                        help_text += " (Incompatible with this model - see info banner above)"
+                        default_val = False
+
                     k_checkboxes[qtype] = st.checkbox(
                         qtype,
                         value=default_val,
-                        help=tooltip,
+                        help=help_text,
                         key=f"k_{qtype}",
-                        on_change=save_quant_selection(qtype)
+                        disabled=is_incompatible,
+                        on_change=save_quant_selection(qtype) if not is_incompatible else None
                     )
 
             # I Quants
@@ -891,8 +948,10 @@ def main():
             i_cols = st.columns(3)
             for idx, (qtype, tooltip) in enumerate(i_quants.items()):
                 with i_cols[idx % 3]:
-                    # Disable checkbox if this type requires imatrix and imatrix is not enabled
-                    is_disabled = (qtype in IMATRIX_REQUIRED_TYPES) and not use_imatrix
+                    # Check if disabled due to imatrix or model incompatibility
+                    imatrix_disabled = (qtype in IMATRIX_REQUIRED_TYPES) and not use_imatrix
+                    incompatible_disabled = qtype in incompatible_quants
+                    is_disabled = imatrix_disabled or incompatible_disabled
 
                     # Widget key includes imatrix state to force refresh on toggle
                     widget_key = f"i_{qtype}_{use_imatrix}"
@@ -919,10 +978,17 @@ def main():
                             save_config(config)
                         return callback
 
+                    # Build help text based on why it's disabled
+                    help_text = tooltip
+                    if incompatible_disabled:
+                        help_text += " (Incompatible with this model - see info banner above)"
+                    elif imatrix_disabled:
+                        help_text += " (Requires importance matrix)"
+
                     i_checkboxes[qtype] = st.checkbox(
                         qtype,
                         value=checkbox_value,
-                        help=tooltip if not is_disabled else tooltip + " (Requires importance matrix)",
+                        help=help_text,
                         key=widget_key,
                         disabled=is_disabled,
                         on_change=save_iq_selection(qtype, widget_key) if not is_disabled else None
@@ -1079,7 +1145,8 @@ def main():
                             imatrix_chunks=int(config.get("imatrix_chunks", 100)) if config.get("imatrix_chunks", 100) > 0 else None,
                             imatrix_collect_output=config.get("imatrix_collect_output_weight", False),
                             imatrix_calibration_file=calibration_file_path,
-                            imatrix_output_name=imatrix_output_filename
+                            imatrix_output_name=imatrix_output_filename,
+                            ignore_incompatibilities=ignore_incompatibilities
                         )
 
                     st.success(f"Successfully processed {len(output_files)} files!")

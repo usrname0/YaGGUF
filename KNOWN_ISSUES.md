@@ -73,33 +73,41 @@ Models with tied embeddings have:
 ### Potential Solutions
 
 **Short term (for this tool):**
-1. ✅ **IMPLEMENTED:** Detect models with tied embeddings before quantization
-2. Automatically disable/hide IQ quantization options for affected models
-3. Show warning message explaining the limitation
-4. Suggest alternative quantization types
+1. [x] **IMPLEMENTED:** Centralized incompatibility registry system
+2. [x] **IMPLEMENTED:** Automatically detect and disable incompatible quantization options
+3. [x] **IMPLEMENTED:** Show warning messages with clear explanations
+4. [x] **IMPLEMENTED:** Suggest alternative quantization types
+5. [x] **IMPLEMENTED:** GUI integration with disabled checkboxes and tooltips
 
-**Detection method (IMPLEMENTED):**
-The converter now includes a `has_tied_embeddings()` method that:
-- Runs llama-quantize in COPY mode to list all tensors
-- Searches for the exact tensor name "output.weight" (not output_norm or attn_output)
-- Returns True if model has tied embeddings (IQ quants will fail)
-- Uses regex pattern `\s+output\.weight\s+[-\[]` to match only the specific tensor
+**Detection system (FULLY IMPLEMENTED):**
+The converter now includes a centralized incompatibility registry in `MODEL_INCOMPATIBILITIES`:
 
 ```python
 # Usage example:
 from gguf_converter.converter import GGUFConverter
 converter = GGUFConverter()
-if converter.has_tied_embeddings(model_path):
-    print("This model has tied embeddings - IQ quantizations will fail")
-    # Disable/hide IQ quant options in GUI
-    # Show warning to user
-    # Suggest Q3_K_M or higher instead
+
+# Simple detection
+incompatible = converter.get_incompatible_quantizations(model_path)
+# Returns: ["IQ1_S", "IQ1_M", "IQ2_XXS", ...]
+
+# Detailed information
+info = converter.get_incompatibility_info(model_path)
+# Returns: {
+#     "has_incompatibilities": True,
+#     "types": ["tied_embeddings"],
+#     "incompatible_quants": ["IQ1_S", "IQ1_M", ...],
+#     "alternatives": ["Q3_K_M or Q3_K_S", "Q2_K", ...],
+#     "reasons": ["Models with tied embeddings: ..."]
+# }
 ```
 
-**Next steps:**
-- Integrate detection into GUI to disable IQ quants automatically
-- Add warning banner when tied embeddings detected
-- Update quantization type selector to hide incompatible options
+**How it works:**
+1. **Detection**: Checks `config.json` for `tie_word_embeddings` flag and model family patterns (Qwen, etc.)
+2. **Registry**: All incompatibility rules stored in centralized `MODEL_INCOMPATIBILITIES` dictionary
+3. **Auto-filtering**: Converter automatically removes incompatible quants with clear warnings
+4. **GUI Integration**: Incompatible checkboxes are disabled with explanatory tooltips
+5. **Consistent messaging**: Same error messages and alternatives across CLI and GUI
 
 **Long term (requires llama.cpp fix):**
 1. Update `--process-output` to detect tied embeddings and collect `token_embd.weight` data instead
@@ -205,28 +213,84 @@ GUI actions:
 
 ### Adding New Compatibility Checks
 
-When new model-specific issues are discovered:
+When new model-specific issues are discovered, adding them is now simple and consistent:
 
-1. **Document in KNOWN_ISSUES.md:**
-   - Issue description
-   - Affected models/architectures
-   - Root cause analysis
-   - Workarounds
+#### 1. Add to Registry (converter.py)
 
-2. **Add detection method:**
-   - Add function to GGUFConverter class
-   - Make it fast and reliable
-   - Handle edge cases gracefully
+Edit `GGUFConverter.MODEL_INCOMPATIBILITIES` and add a new entry:
 
-3. **Update GUI:**
-   - Integrate new check into compatibility scan
-   - Update UI to reflect limitations
-   - Add helpful error messages
+```python
+MODEL_INCOMPATIBILITIES = {
+    # ... existing entries ...
 
-4. **Test across models:**
-   - Verify detection works on affected models
-   - Verify no false positives on unaffected models
-   - Document test results
+    "your_issue_name": {
+        "description": "One-line description of the issue",
+        "detection": {
+            # Option 1: Check a config.json flag
+            "config_flag": "some_flag_name",
+
+            # Option 2: Match model family names (substring)
+            "model_families": ["ModelName", "Alternative"],
+
+            # Can use both together
+        },
+        "incompatible_quants": [
+            "Q4_0",  # List all incompatible types
+            "IQ1_S",
+        ],
+        "alternatives": [
+            "Q4_K_M (best quality/size balance)",
+            "Q3_K_S for smaller files",
+        ],
+        "reason": "Technical explanation of why these fail.",
+    },
+}
+```
+
+**That's it!** The system automatically:
+- Detects the issue when models are loaded
+- Disables incompatible checkboxes in GUI
+- Filters them during conversion
+- Shows clear error messages with your alternatives
+
+#### 2. Document in KNOWN_ISSUES.md
+
+Add a new section documenting:
+- Issue name and description
+- Affected models
+- List of incompatible quantizations
+- Recommended alternatives
+- Technical explanation
+- Example error messages
+
+#### 3. Test
+
+Verify with an affected model:
+- [x] Detection works correctly
+- [x] GUI shows info banner
+- [x] Incompatible quants disabled
+- [x] Conversion filters them out
+- [x] Error messages are clear
+
+**Example - Adding a hypothetical "large_context" issue:**
+
+```python
+"large_context": {
+    "description": "Models with context > 128K",
+    "detection": {
+        "config_flag": "max_position_embeddings",  # Check if > 128000
+        "model_families": ["LongLlama"],
+    },
+    "incompatible_quants": ["Q2_K", "Q3_K_S"],
+    "alternatives": [
+        "Q4_K_M or higher for large context models",
+        "F16 to preserve context accuracy",
+    ],
+    "reason": "Low-bit quantizations lose precision needed for long context.",
+},
+```
+
+No code changes needed - the registry handles everything!
 
 ### Known Model Architectures
 

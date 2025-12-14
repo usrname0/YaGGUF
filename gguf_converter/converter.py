@@ -3,8 +3,10 @@ Core GGUF conversion and quantization functionality
 """
 
 import os
+import shutil
 import subprocess
 import sys
+import json
 from pathlib import Path
 from typing import Optional, Union, List
 from huggingface_hub import snapshot_download
@@ -31,6 +33,41 @@ class GGUFConverter:
         "F16", "BF16", "F32",
     ]
 
+    # Model incompatibility registry
+    # Add new model types and their incompatibilities here
+    MODEL_INCOMPATIBILITIES = {
+        "tied_embeddings": {
+            "description": "Models with tied embeddings (shared input/output embeddings)",
+            "detection": {
+                "config_flag": "tie_word_embeddings",
+                "model_families": ["Qwen", "QWen", "qwen"],
+            },
+            "incompatible_quants": [
+                # IQ quantizations require separate output.weight tensor
+                "IQ1_S", "IQ1_M",
+                "IQ2_XXS", "IQ2_XS", "IQ2_S", "IQ2_M",
+                "IQ3_XXS", "IQ3_XS", "IQ3_S", "IQ3_M",
+                "IQ4_XS", "IQ4_NL",
+                "Q2_K_S",  # Also requires output.weight
+            ],
+            "alternatives": [
+                "Q3_K_M or Q3_K_S (similar quality to IQ3)",
+                "Q2_K (not Q2_K_S) for smaller files",
+                "Q4_K_M (best quality/size balance)",
+            ],
+            "reason": "These quantizations require a separate output.weight tensor. Models with tied embeddings share the same tensor for input and output, making these quantizations incompatible.",
+        },
+        # Add more incompatibility types here as they're discovered
+        # Example for future:
+        # "multimodal_vision": {
+        #     "description": "Multimodal models with vision encoders",
+        #     "detection": {...},
+        #     "incompatible_quants": [...],
+        #     "alternatives": [...],
+        #     "reason": "...",
+        # },
+    }
+
     def __init__(self):
         """Initialize the converter and binary manager"""
         self.binary_manager = BinaryManager()
@@ -40,6 +77,8 @@ class GGUFConverter:
                 "Failed to get llama.cpp binaries. "
                 "Please check your internet connection or install llama.cpp manually."
             )
+        # Ensure llama.cpp repo is cloned and up to date
+        self._ensure_llama_cpp_repo()
 
     def download_model(
         self,
@@ -124,13 +163,21 @@ class GGUFConverter:
         if verbose:
             cmd.append("--verbose")
 
+        # Check if model requires special handling
+        if self._is_ministral3_model(model_path):
+            print(f"Detected Ministral-3 model, using --mistral-format flag")
+            cmd.append("--mistral-format")
+
         print(f"Converting {model_path.name} to GGUF format...")
         print(f"Command: {' '.join(cmd)}")
 
         result = subprocess.run(cmd, capture_output=not verbose, text=True)
 
         if result.returncode != 0:
-            raise RuntimeError(f"Conversion failed: {result.stderr if result.stderr else 'Unknown error'}")
+            # Combine stdout and stderr since errors can be in either
+            error_output = (result.stderr or '') + (result.stdout or '')
+            error_msg = error_output.strip() if error_output.strip() else 'Unknown error'
+            raise RuntimeError(f"Conversion failed:\n{error_msg}")
 
         if verbose and result.stdout:
             print(result.stdout)
@@ -138,35 +185,216 @@ class GGUFConverter:
         print(f"Conversion complete: {output_path}")
         return output_path
 
+    def _is_ministral3_model(self, model_path: Path) -> bool:
+        """
+        Check if the model is a Ministral-3 model that requires --mistral-format flag
+
+        Args:
+            model_path: Path to the model directory
+
+        Returns:
+            True if this is a Ministral-3 model
+        """
+        config_file = model_path / "config.json"
+        if not config_file.exists():
+            return False
+
+        try:
+            with open(config_file, 'r', encoding='utf-8') as f:
+                config = json.load(f)
+
+            # Check for Ministral-3 indicators
+            architectures = config.get("architectures", [])
+            model_type = config.get("model_type", "")
+            text_config = config.get("text_config", {})
+            text_model_type = text_config.get("model_type", "")
+
+            # Ministral-3 has Mistral3ForConditionalGeneration architecture
+            # and ministral3 as the text model type
+            return (
+                "Mistral3ForConditionalGeneration" in architectures or
+                model_type == "mistral3" or
+                text_model_type == "ministral3"
+            )
+        except (json.JSONDecodeError, IOError):
+            return False
+
+    def _check_incompatibility_type(self, model_path: Path, incompat_type: str) -> bool:
+        """
+        Check if a model matches a specific incompatibility type
+
+        Args:
+            model_path: Path to the model directory
+            incompat_type: Incompatibility type key from MODEL_INCOMPATIBILITIES
+
+        Returns:
+            True if model matches this incompatibility type
+        """
+        if incompat_type not in self.MODEL_INCOMPATIBILITIES:
+            return False
+
+        config_file = model_path / "config.json"
+        if not config_file.exists():
+            return False
+
+        try:
+            with open(config_file, 'r', encoding='utf-8') as f:
+                config = json.load(f)
+
+            incompat_info = self.MODEL_INCOMPATIBILITIES[incompat_type]
+            detection = incompat_info["detection"]
+
+            # Check config flag if specified
+            if "config_flag" in detection:
+                if config.get(detection["config_flag"], False):
+                    return True
+
+            # Check model families if specified
+            if "model_families" in detection:
+                architectures = config.get("architectures", [])
+                model_type = config.get("model_type", "")
+
+                for pattern in detection["model_families"]:
+                    # Check architectures
+                    if any(pattern in arch for arch in architectures):
+                        return True
+                    # Check model_type
+                    if pattern in model_type:
+                        return True
+
+            return False
+
+        except (json.JSONDecodeError, IOError):
+            return False
+
+    def get_incompatible_quantizations(self, model_path: Union[str, Path]) -> List[str]:
+        """
+        Get list of quantization types incompatible with this model
+
+        Args:
+            model_path: Path to the model directory
+
+        Returns:
+            List of incompatible quantization type names
+        """
+        model_path = Path(model_path)
+        incompatible = []
+
+        # Check all registered incompatibility types
+        for incompat_type in self.MODEL_INCOMPATIBILITIES:
+            if self._check_incompatibility_type(model_path, incompat_type):
+                incompatible.extend(
+                    self.MODEL_INCOMPATIBILITIES[incompat_type]["incompatible_quants"]
+                )
+
+        # Remove duplicates while preserving order
+        seen = set()
+        return [x for x in incompatible if not (x in seen or seen.add(x))]
+
+    def get_incompatibility_info(self, model_path: Union[str, Path]) -> dict:
+        """
+        Get detailed incompatibility information for a model
+
+        Args:
+            model_path: Path to the model directory
+
+        Returns:
+            Dictionary with incompatibility details:
+            {
+                "has_incompatibilities": bool,
+                "types": List[str],  # Matched incompatibility type keys
+                "incompatible_quants": List[str],
+                "alternatives": List[str],
+                "reasons": List[str],
+            }
+        """
+        model_path = Path(model_path)
+        matched_types = []
+        all_incompatible = []
+        all_alternatives = []
+        all_reasons = []
+
+        # Check all registered incompatibility types
+        for incompat_type, info in self.MODEL_INCOMPATIBILITIES.items():
+            if self._check_incompatibility_type(model_path, incompat_type):
+                matched_types.append(incompat_type)
+                all_incompatible.extend(info["incompatible_quants"])
+                all_alternatives.extend(info["alternatives"])
+                all_reasons.append(f"{info['description']}: {info['reason']}")
+
+        # Remove duplicate quants while preserving order
+        seen = set()
+        unique_incompatible = [x for x in all_incompatible if not (x in seen or seen.add(x))]
+
+        return {
+            "has_incompatibilities": len(matched_types) > 0,
+            "types": matched_types,
+            "incompatible_quants": unique_incompatible,
+            "alternatives": all_alternatives,
+            "reasons": all_reasons,
+        }
+
+    def _ensure_llama_cpp_repo(self):
+        """
+        Ensure llama.cpp repository exists (download if missing)
+        Does NOT auto-update - use Upgrade tab in GUI for updates
+        """
+        llama_cpp_dir = Path(__file__).parent.parent / "llama.cpp"
+        convert_script = llama_cpp_dir / "convert_hf_to_gguf.py"
+
+        # Only clone if missing - don't auto-update
+        if not llama_cpp_dir.exists() or not convert_script.exists():
+            # Remove old repo if it exists but is incomplete
+            if llama_cpp_dir.exists():
+                print(f"Removing incomplete llama.cpp repository...")
+                shutil.rmtree(llama_cpp_dir)
+
+            # Clone fresh copy
+            expected_version = self.binary_manager.LLAMA_CPP_VERSION
+            print(f"Cloning llama.cpp repository (version {expected_version})...")
+            try:
+                subprocess.run([
+                    "git", "clone",
+                    "https://github.com/ggml-org/llama.cpp.git",
+                    "--depth=1",
+                    str(llama_cpp_dir)
+                ], check=True, capture_output=True, text=True)
+
+                # Write version file for tracking
+                version_file = llama_cpp_dir / "REPO_VERSION"
+                version_file.write_text(expected_version)
+                print(f"llama.cpp repository ready (version {expected_version})")
+            except subprocess.CalledProcessError as e:
+                raise RuntimeError(
+                    f"Failed to clone llama.cpp repository: {e.stderr if e.stderr else str(e)}\n"
+                    f"Please check your git installation and internet connection."
+                )
+
     def _find_convert_script(self) -> Optional[Path]:
-        """Find the convert_hf_to_gguf.py script"""
-        # Try to find it in common locations
-        possible_locations = [
-            # In llama-cpp-python package
-            Path(__file__).parent.parent / "llama.cpp" / "convert_hf_to_gguf.py",
-            # System-wide llama.cpp installation
+        """
+        Find the convert_hf_to_gguf.py script
+
+        Note: _ensure_llama_cpp_repo() is called during init, so the repo
+        should already be cloned and up to date
+        """
+        # Primary location (managed by this tool)
+        llama_cpp_dir = Path(__file__).parent.parent / "llama.cpp"
+        convert_script = llama_cpp_dir / "convert_hf_to_gguf.py"
+
+        if convert_script.exists():
+            return convert_script
+
+        # Fallback: check for system-wide installations
+        fallback_locations = [
             Path.home() / "llama.cpp" / "convert_hf_to_gguf.py",
-            # Current directory
             Path.cwd() / "llama.cpp" / "convert_hf_to_gguf.py",
         ]
 
-        for location in possible_locations:
+        for location in fallback_locations:
             if location.exists():
                 return location
 
-        # Try to clone llama.cpp if not found
-        llama_cpp_dir = Path(__file__).parent.parent / "llama.cpp"
-        if not llama_cpp_dir.exists():
-            print("Cloning llama.cpp repository...")
-            subprocess.run([
-                "git", "clone",
-                "https://github.com/ggerganov/llama.cpp.git",
-                "--depth=1",
-                str(llama_cpp_dir)
-            ], check=True)
-
-        convert_script = llama_cpp_dir / "convert_hf_to_gguf.py"
-        return convert_script if convert_script.exists() else None
+        return None
 
 
     def quantize(
@@ -525,7 +753,8 @@ class GGUFConverter:
         imatrix_chunks: Optional[int] = None,
         imatrix_collect_output: bool = False,
         imatrix_calibration_file: Optional[Union[str, Path]] = None,
-        imatrix_output_name: Optional[str] = None
+        imatrix_output_name: Optional[str] = None,
+        ignore_incompatibilities: bool = False
     ) -> List[Path]:
         """
         Convert to GGUF and quantize in one go
@@ -546,6 +775,7 @@ class GGUFConverter:
             imatrix_chunks: Number of chunks to process for imatrix (None = all)
             imatrix_collect_output: Collect output.weight tensor in imatrix (required for IQ quantizations)
             imatrix_calibration_file: Path to calibration file for imatrix generation (None = use default)
+            ignore_incompatibilities: Skip incompatibility checks (advanced users, may cause failures)
 
         Returns:
             List of paths to created quantized files
@@ -570,6 +800,52 @@ class GGUFConverter:
                 )
         elif not model_path.is_file():
             raise ValueError(f"Model path does not exist: {model_path}")
+
+        # Check for incompatible quantizations using centralized registry
+        incompat_info = self.get_incompatibility_info(model_path)
+        if incompat_info["has_incompatibilities"] and not ignore_incompatibilities:
+            incompatible = incompat_info["incompatible_quants"]
+            requested_incompatible = [q for q in quantization_types if q in incompatible]
+
+            if requested_incompatible:
+                # Filter out incompatible types
+                original_types = quantization_types.copy()
+                quantization_types = [q for q in quantization_types if q not in incompatible]
+
+                print(f"\nWARNING: Model incompatibility detected!")
+                print(f"Detected issues: {', '.join(incompat_info['types'])}")
+                print(f"\nIncompatible quantizations requested:")
+                print(f"  {', '.join(requested_incompatible)}")
+
+                print(f"\nReason:")
+                for reason in incompat_info["reasons"]:
+                    print(f"  - {reason}")
+
+                print(f"\nRecommended alternatives:")
+                for alt in incompat_info["alternatives"]:
+                    print(f"  - {alt}")
+
+                if quantization_types:
+                    print(f"\nContinuing with compatible quantizations: {', '.join(quantization_types)}")
+                else:
+                    raise ValueError(
+                        f"All requested quantizations are incompatible with this model.\n"
+                        f"Incompatible: {', '.join(requested_incompatible)}\n"
+                        f"Alternatives: {', '.join(incompat_info['alternatives'])}\n"
+                        f"See KNOWN_ISSUES.md for details."
+                    )
+        elif incompat_info["has_incompatibilities"] and ignore_incompatibilities:
+            # Show warning but proceed
+            incompatible = incompat_info["incompatible_quants"]
+            requested_incompatible = [q for q in quantization_types if q in incompatible]
+
+            if requested_incompatible:
+                print(f"\nWARNING: Incompatibility override enabled!")
+                print(f"Detected issues: {', '.join(incompat_info['types'])}")
+                print(f"\nThese quantizations are likely to FAIL:")
+                print(f"  {', '.join(requested_incompatible)}")
+                print(f"\nProceeding anyway as requested (ignore_incompatibilities=True)")
+                print(f"If conversion fails, use: {', '.join(incompat_info['alternatives'])}")
 
         is_already_gguf = False
         model_name = model_path.name

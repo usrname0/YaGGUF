@@ -19,7 +19,7 @@ class BinaryManager:
     """
 
     # Pin to specific llama.cpp release for stability
-    LLAMA_CPP_VERSION = "b7360"  # Update this when upgrading
+    LLAMA_CPP_VERSION = "b7364"  # Update this when upgrading
 
     # GitHub release URL template (using ggml-org, not ggerganov)
     RELEASE_URL_TEMPLATE = "https://github.com/ggml-org/llama.cpp/releases/download/{tag}/{filename}"
@@ -203,29 +203,11 @@ class BinaryManager:
 
     def _binaries_exist(self) -> bool:
         """
-        Check if required binaries exist and are the correct version
+        Check if required binaries exist
+        Does NOT check version - use Upgrade tab in GUI for updates
         """
-        # Check if all required binaries exist
-        if not self._check_binary_files_exist():
-            return False
-
-        # Check if binary version matches expected version
-        version_file = self.bin_dir / "BINARY_VERSION"
-        if version_file.exists():
-            try:
-                installed_version = version_file.read_text().strip()
-                if installed_version != self.LLAMA_CPP_VERSION:
-                    print(f"Binary version mismatch: installed={installed_version}, expected={self.LLAMA_CPP_VERSION}")
-                    print("Binaries need to be updated...")
-                    return False
-            except Exception:
-                # If we can't read the version file, assume binaries need update
-                return False
-        else:
-            # No version file means old installation, needs update
-            return False
-
-        return True
+        # Only check if required binary files exist
+        return self._check_binary_files_exist()
 
     def get_binary_path(self, name: str) -> Path:
         """
