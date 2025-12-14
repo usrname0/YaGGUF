@@ -516,19 +516,10 @@ def main():
 
                             # Display warning banner
                             st.info(f"""
-**Model Incompatibility Detected**
+**Model Incompatibility Detected:** {', '.join(incompat_info['types'])}
 
-Detected issues: {', '.join(incompat_info['types'])}
-
-**Incompatible quantizations:** {', '.join(incompatible_quants)}
-
-**Recommended alternatives:**
-{chr(10).join('- ' + alt for alt in incompat_info['alternatives'])}
-
-**Reason:**
 {chr(10).join('- ' + reason for reason in incompat_info['reasons'])}
 
-Incompatible quantization options are disabled below.
                             """)
                     except Exception as e:
                         # Silently ignore errors in compatibility check
