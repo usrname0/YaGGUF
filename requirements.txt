@@ -1,18 +1,12 @@
-# Version Philosophy: Use >= to stay current with fast-moving AI ecosystem
-# Minimums are tested versions - newer releases get automatic updates for new models and security fixes
-# Update these minimums when upgrading llama.cpp or testing new model architectures
+# Note: PyTorch is installed separately by setup scripts (CPU-only version)
 
-# Core dependencies
+streamlit>=1.30.0 # GUI
 huggingface-hub>=0.36.0
 
 # For model conversion (llama.cpp convert_hf_to_gguf.py script)
-# Note: PyTorch is installed separately by setup scripts (CPU-only version to save space)
 transformers>=4.57.0
 sentencepiece>=0.1.99
 numpy>=2.0.0
 gguf>=0.10.0
 mistral-common>=1.8.0  # Required for Ministral-3 and newer Mistral models
 tokenizers>=0.20.0
-
-# GUI
-streamlit>=1.30.0

@@ -11,6 +11,8 @@ import subprocess
 import platform
 import tkinter as tk
 from tkinter import filedialog
+import io
+from contextlib import redirect_stdout
 
 # Handle both direct execution and module import
 try:
@@ -194,24 +196,17 @@ def browse_folder(initial_dir=None):
         return None
 
 
-def get_binary_version():
+def get_binary_version(converter):
     """
     Get version of llama.cpp binaries
+
+    Args:
+        converter: GGUFConverter instance
 
     Returns:
         dict: Binary version info
     """
     try:
-        # Import from main module to avoid relative import issues
-        import sys
-        if 'gguf_converter.converter' in sys.modules:
-            converter_module = sys.modules['gguf_converter.converter']
-            GGUFConverter = converter_module.GGUFConverter
-        else:
-            from gguf_converter.converter import GGUFConverter
-
-        converter = GGUFConverter()
-
         # Try to get version from llama-cli
         try:
             cli_path = converter.binary_manager.get_binary_path('llama-cli')
@@ -247,7 +242,7 @@ def get_binary_version():
 
         # Check if binaries exist
         bin_dir = converter.binary_manager.bin_dir
-        if bin_dir.exists():
+        if bin_dir.exists() and any(bin_dir.iterdir()):
             return {
                 "status": "ok",
                 "version": "unknown",
@@ -257,7 +252,7 @@ def get_binary_version():
             return {
                 "status": "missing",
                 "version": None,
-                "message": "Binaries not installed - run a conversion to download"
+                "message": "Binaries not installed. Run a conversion or use the update button to download them."
             }
 
     except Exception as e:
@@ -266,6 +261,52 @@ def get_binary_version():
             "version": None,
             "message": f"Error checking binaries: {e}"
         }
+
+
+def run_and_stream_command(command):
+    """
+    Runs a command and streams its output to a Streamlit container.
+
+    Args:
+        command (list): The command and its arguments.
+    """
+    st.info(f"Running command: `{' '.join(command)}`")
+    output_container = st.empty()
+    output_container.code("Starting process...", language='bash')
+    
+    full_output = ""
+    try:
+        process = subprocess.Popen(
+            command,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+            encoding='utf-8',
+            errors='replace'
+        )
+
+        for line in iter(process.stdout.readline, ''):
+            full_output += line
+            output_container.code(full_output, language='bash')
+        
+        process.stdout.close()
+        return_code = process.wait()
+
+        if return_code == 0:
+            st.toast("Command completed successfully!")
+        else:
+            full_output += f"\n--- Command failed with exit code {return_code} ---"
+            output_container.code(full_output, language='bash')
+            st.toast(f"Command failed with exit code {return_code}", icon="🔥")
+
+    except FileNotFoundError:
+        full_output = f"Error: Command not found: `{command[0]}`. Make sure it is in your PATH."
+        output_container.code(full_output, language='bash')
+        st.toast("Command not found.", icon="🔥")
+    except Exception as e:
+        full_output += f"\n--- An error occurred ---\n{str(e)}"
+        output_container.code(full_output, language='bash')
+        st.toast(f"An error occurred: {e}", icon="🔥")
 
 
 def main():
@@ -368,7 +409,7 @@ def main():
             st.rerun()
 
     # Main content
-    tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs(["Convert & Quantize", "Imatrix Settings", "Imatrix Statistics", "HuggingFace Downloader", "Info", "Version"])
+    tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs(["Convert & Quantize", "Imatrix Settings", "Imatrix Statistics", "HuggingFace Downloader", "Info", "Update"])
 
     with tab1:
         st.header("Convert and Quantize Model")
@@ -1830,63 +1871,6 @@ def main():
                     import traceback
                     traceback.print_exc()
 
-    with tab6:
-        st.header("Version Information")
-
-        col1, col2 = st.columns(2)
-
-        with col1:
-            st.subheader("Application Version")
-            current_version = get_current_version()
-            st.info(f"**Version:** {current_version}")
-            st.markdown("[View on GitHub](https://github.com/usrname0/YaGUFF)")
-
-            st.markdown("---")
-            st.subheader("How to Update")
-            st.markdown("""
-            To update Yet Another GGUF Converter:
-
-            ```bash
-            # In your terminal, from the project directory
-            git pull
-            ```
-
-            After updating:
-            - Restart the application
-            - If new binaries are needed, they'll download automatically on next use
-            - Version numbers only change on stable releases
-            """)
-
-        with col2:
-            st.subheader("Binary Information")
-
-            binary_info = get_binary_version()
-
-            if binary_info["status"] == "ok":
-                st.success(binary_info['message'])
-                if binary_info["version"]:
-                    st.code(binary_info["version"], language=None)
-            elif binary_info["status"] == "missing":
-                st.warning(binary_info['message'])
-            else:
-                st.error(binary_info['message'])
-
-            st.markdown("[llama.cpp on GitHub](https://github.com/ggerganov/llama.cpp)")
-
-            st.markdown("---")
-            st.subheader("About Binaries")
-            st.markdown("""
-            **llama.cpp Binaries:**
-            - Auto-downloaded on first use
-            - Stored in `bin/` directory
-            - Auto-updated when version changes
-            - Platform-specific builds
-
-            **Manual Binary Management:**
-            - Delete `bin/` folder to force re-download
-            - Version tracked in `bin/BINARY_VERSION`
-            """)
-
     with tab5:
         st.header("About")
         st.markdown(f"""
@@ -1910,8 +1894,8 @@ def main():
         2. **Imatrix Settings** - Configure calibration data and processing settings
         3. **Imatrix Statistics** - Analyze existing imatrix files
         4. **HuggingFace Downloader** - Download models from HuggingFace
-        5. **Version** - Version information and update instructions
-        6. **Info** - This tab
+        5. **Info** - This tab
+        6. **Update** - Update application, dependencies, and binaries
 
         **Settings:**
         - Your settings are automatically saved as you change them
@@ -1977,6 +1961,77 @@ def main():
         python -m gguf_converter --list-types
         ```
         """)
+
+    with tab6:
+        st.header("Update")
+
+        col1, col2 = st.columns(2)
+        with col1:
+            st.subheader("Update GUI")
+            st.markdown("Check for the latest version of the application from GitHub.")
+            if st.button("Check for Updates (`git pull`)"):
+                run_and_stream_command(["git", "pull"])
+        with col2:
+            st.subheader("Application Version")
+            current_version = get_current_version()
+            st.info(f"**Version:** {current_version}")
+            st.markdown("[View on GitHub](https://github.com/usrname0/YaGUFF)")
+
+        st.markdown("---")
+
+        col3, col4 = st.columns(2)
+        with col3:
+            st.subheader("Update Binaries")
+            st.markdown("Force a re-download of the `llama.cpp` binaries. This is useful if the binaries are corrupted or to ensure you have the version matching the application.")
+            
+            if st.button("Force Binary Update"):
+                output_container = st.empty()
+                output_container.code("Starting binary update...\nThis may take a moment.", language='bash')
+                
+                f = io.StringIO()
+                with redirect_stdout(f):
+                    try:
+                        st.session_state.converter.binary_manager.download_binaries(force=True)
+                        st.toast("Binaries updated successfully!")
+                    except Exception as e:
+                        print(f"\n--- An error occurred ---\n{str(e)}")
+                        st.toast(f"An error occurred during binary update: {e}", icon="🔥")
+                
+                output = f.getvalue()
+                output_container.code(output, language='bash')
+        with col4:
+            st.subheader("Binary Information")
+            binary_info = get_binary_version(st.session_state.converter)
+            if binary_info["status"] == "ok":
+                st.success(binary_info['message'])
+                if binary_info["version"]:
+                    st.code(binary_info["version"], language=None)
+            elif binary_info["status"] == "missing":
+                st.warning(binary_info['message'])
+            else:
+                st.error(binary_info['message'])
+            st.markdown("[llama.cpp on GitHub](https://github.com/ggerganov/llama.cpp)")
+
+        st.markdown("---")
+
+        st.subheader("Dependencies")
+        col5, col6 = st.columns(2)
+        with col5:
+            st.markdown("Update Python dependencies from `requirements.txt`.")
+            if st.button("Update Dependencies"):
+                venv_py = sys.executable
+                run_and_stream_command([venv_py, "-m", "pip", "install", "--upgrade", "-r", "requirements.txt"])
+
+        with col6:
+            try:
+                req_path = Path(__file__).parent.parent / "requirements.txt"
+                if req_path.exists():
+                    st.markdown("`requirements.txt`")
+                    st.code(req_path.read_text(), language='text')
+                else:
+                    st.warning("`requirements.txt` not found.")
+            except Exception as e:
+                st.error(f"Could not read requirements.txt: {e}")
 
 
 if __name__ == "__main__":
