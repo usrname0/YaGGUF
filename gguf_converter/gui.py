@@ -343,10 +343,13 @@ def main():
     if 'reset_count' not in st.session_state:
         st.session_state.reset_count = 0
 
+    # Handle setting model path from downloader (must happen before widget creation)
+    if 'pending_model_path' in st.session_state:
+        st.session_state.model_path_input = st.session_state.pending_model_path
+        del st.session_state.pending_model_path
+
     converter = st.session_state.converter
     config = st.session_state.config
-
-    print(f"DEBUG: Loaded model_path from config: {config.get('model_path', '(empty)')}", flush=True)
 
     # Sidebar for settings
     with st.sidebar:
@@ -426,13 +429,16 @@ def main():
             # Model path with Browse and Check Folder buttons
             col_model, col_model_browse, col_model_check = st.columns([4, 1, 1])
             with col_model:
-                model_path = st.text_input(
-                    "Model path",
-                    value=config.get("model_path", ""),
-                    placeholder="E:/Models/my-model",
-                    help="Local model directory containing config.json and model files.",
-                    key="model_path_input"
-                )
+                # Prepare widget arguments - only set value if key not in session state (prevents warning)
+                model_path_kwargs = {
+                    "label": "Model path",
+                    "placeholder": "E:/Models/my-model",
+                    "help": "Local model directory containing config.json and model files.",
+                    "key": "model_path_input"
+                }
+                if "model_path_input" not in st.session_state:
+                    model_path_kwargs["value"] = config.get("model_path", "")
+                model_path = st.text_input(**model_path_kwargs)
             with col_model_browse:
                 st.markdown("<br>", unsafe_allow_html=True)  # Spacer to align with input + help icon
                 if st.button(
@@ -1782,11 +1788,6 @@ def main():
         st.markdown("Download models from HuggingFace")
         st.markdown("[Browse models on HuggingFace](https://huggingface.co/models)")
 
-        # Toast test button
-        if st.button("Test Toast Notification"):
-            st.toast("This is a toast notification!")
-            st.success("If you see this success message but NOT a small popup in the bottom-right corner, toasts aren't working.")
-
         # Initialize session state for downloaded model path
         if "downloaded_model_path" not in st.session_state:
             st.session_state.downloaded_model_path = None
@@ -1888,8 +1889,9 @@ def main():
                     with st.spinner(f"Downloading {repo_id_clean}..."):
                         model_path = converter.download_model(repo_id_clean, download_dir_clean)
 
-                    # Store in session state so it persists across reruns
+                    # Store in session state and mark as just completed
                     st.session_state.downloaded_model_path = str(model_path)
+                    st.session_state.download_just_completed = True
 
                 except Exception as e:
                     # Show in Streamlit UI
@@ -1900,16 +1902,11 @@ def main():
                     import traceback
                     traceback.print_exc()
 
-        # Show success message if we just downloaded
-        if st.session_state.downloaded_model_path:
+        # Show success message and path only if download just completed
+        if st.session_state.get("download_just_completed", False):
             st.success(f"Downloaded to: {st.session_state.downloaded_model_path}")
 
-        # Always show last downloaded path section (if one exists)
-        st.markdown("---")
-        st.subheader("Last Downloaded Model")
-
-        if st.session_state.downloaded_model_path:
-            col_path, col_set_path = st.columns([4, 1])
+            col_path, col_set_path = st.columns([5, 1])
             with col_path:
                 st.code(st.session_state.downloaded_model_path, language=None)
             with col_set_path:
@@ -1917,14 +1914,14 @@ def main():
                     path_to_set = st.session_state.downloaded_model_path
                     config["model_path"] = path_to_set
                     save_config(config)
-                    # Force reload config from disk on next run
-                    if "config" in st.session_state:
-                        del st.session_state.config
-                    print(f"DEBUG: Set model_path to: {path_to_set}", flush=True)
-                    print(f"DEBUG: Config now contains: {config.get('model_path')}", flush=True)
+                    # Set pending flag - will be applied before widget creation on next run
+                    st.session_state.pending_model_path = path_to_set
+                    # Clear the download_just_completed flag since we're done with this download
+                    st.session_state.download_just_completed = False
                     st.rerun()
-        else:
-            st.info("No model downloaded yet in this session.")
+
+            # Clear the flag after showing the message (on next rerun)
+            st.session_state.download_just_completed = False
 
     with tab5:
         st.header("About")
