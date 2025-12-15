@@ -44,7 +44,7 @@ def get_default_config():
         # Imatrix Settings tab
         "imatrix_ctx_size": 512,
         "imatrix_chunks": 150,  # 100-200 recommended, 0 = all chunks
-        "imatrix_collect_output_weight": True,
+        "imatrix_collect_output_weight": False,
         "imatrix_calibration_file": "_default.txt",  # Selected calibration file from the directory
         "imatrix_calibration_dir": "",  # Directory to scan for calibration files (empty = use default)
         "imatrix_from_chunk": 0,  # Skip first N chunks
@@ -348,6 +348,13 @@ def main():
         st.session_state.model_path_input = st.session_state.pending_model_path
         del st.session_state.pending_model_path
 
+    # Handle reset to defaults (must happen before widget creation)
+    if 'pending_reset_defaults' in st.session_state:
+        defaults = get_default_config()
+        st.session_state.verbose_checkbox = defaults["verbose"]
+        st.session_state.incompatibility_warnings_checkbox = not defaults["ignore_incompatibilities"]
+        del st.session_state.pending_reset_defaults
+
     converter = st.session_state.converter
     config = st.session_state.config
 
@@ -361,13 +368,16 @@ def main():
             config["verbose"] = st.session_state.verbose_checkbox
             save_config(config)
 
-        verbose = st.checkbox(
-            "Verbose output",
-            value=config.get("verbose", False),
-            help="Show detailed command output in the terminal for debugging and monitoring progress",
-            key="verbose_checkbox",
-            on_change=save_verbose
-        )
+        # Only set value if not already in session state (prevents warning)
+        verbose_kwargs = {
+            "label": "Verbose output",
+            "help": "Show detailed command output in the terminal for debugging and monitoring progress",
+            "key": "verbose_checkbox",
+            "on_change": save_verbose
+        }
+        if "verbose_checkbox" not in st.session_state:
+            verbose_kwargs["value"] = config.get("verbose", False)
+        verbose = st.checkbox(**verbose_kwargs)
 
         # Auto-save callback for incompatibility warnings (inverted logic)
         def save_incompatibility_warnings():
@@ -375,13 +385,16 @@ def main():
             config["ignore_incompatibilities"] = not st.session_state.incompatibility_warnings_checkbox
             save_config(config)
 
-        incompatibility_warnings_enabled = st.checkbox(
-            "Incompatibility warnings",
-            value=not config.get("ignore_incompatibilities", False),  # Inverted: default to checked (warnings ON)
-            help="Detect and prevent incompatible quantizations (e.g., IQ quants on Qwen models). Uncheck to override warnings (advanced users only).",
-            key="incompatibility_warnings_checkbox",
-            on_change=save_incompatibility_warnings
-        )
+        # Only set value if not already in session state (prevents warning)
+        incomp_kwargs = {
+            "label": "Incompatibility warnings",
+            "help": "Detect and prevent incompatible quantizations (e.g., IQ quants on Qwen models). Uncheck to override warnings (advanced users only).",
+            "key": "incompatibility_warnings_checkbox",
+            "on_change": save_incompatibility_warnings
+        }
+        if "incompatibility_warnings_checkbox" not in st.session_state:
+            incomp_kwargs["value"] = not config.get("ignore_incompatibilities", False)  # Inverted: default to checked (warnings ON)
+        incompatibility_warnings_enabled = st.checkbox(**incomp_kwargs)
 
         # For internal use, invert back to ignore_incompatibilities
         ignore_incompatibilities = not incompatibility_warnings_enabled
@@ -421,6 +434,15 @@ def main():
             # Also clear pending model path flag if it exists
             if "pending_model_path" in st.session_state:
                 del st.session_state.pending_model_path
+            # Clear all quantization checkbox states
+            keys_to_delete = [k for k in st.session_state.keys() if k.startswith(('trad_', 'k_', 'i_'))]
+            for key in keys_to_delete:
+                del st.session_state[key]
+            # Clear IQ checkbox state tracking
+            if "iq_checkbox_states" in st.session_state:
+                st.session_state.iq_checkbox_states = {}
+            # Set pending flag to update verbose and incompatibility warnings on next run
+            st.session_state.pending_reset_defaults = True
             st.rerun()
 
     # Main content
@@ -685,6 +707,15 @@ def main():
                 key=f"use_imatrix_checkbox_{st.session_state.reset_count}",
                 on_change=save_use_imatrix
             )
+
+            # Show info banner if IQ quants are disabled due to imatrix being off
+            if not use_imatrix:
+                st.info("""
+                **Importance Matrix Disabled**
+
+                Some I Quants (IQ3_XXS, IQ2_XXS, IQ2_XS, IQ2_S, IQ1_M, IQ1_S) require an importance matrix to be generated.
+                Enable "Use importance matrix" above to unlock these quantization types.
+                """)
 
             # Show imatrix options when enabled
             imatrix_mode = None
@@ -1456,7 +1487,7 @@ def main():
             imatrix_collect_output_input = st.checkbox(
                 "Collect output.weight tensor",
                 value=config.get("imatrix_collect_output_weight", False),
-                help="Collect importance matrix for output.weight tensor. Required for IQ quantizations (IQ1_S, IQ1_M, IQ2_XXS, IQ2_XS, IQ2_S, Q2_K_S).",
+                help="Collect importance matrix data for output.weight tensor. Typically better to leave disabled (default), as the importance matrix is generally not beneficial for this tensor.",
                 key=f"imatrix_collect_output_input_{st.session_state.reset_count}",
                 on_change=save_collect_output
             )
