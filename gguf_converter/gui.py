@@ -31,7 +31,7 @@ def get_default_config():
     """Get default configuration"""
     return {
         # Sidebar settings
-        "verbose": False,
+        "verbose": True,
         "use_imatrix": True,
         "nthreads": None,  # None = auto-detect
         "ignore_incompatibilities": False,  # Allow incompatible quantizations (advanced users only)
@@ -413,6 +413,14 @@ def main():
         if st.button("Reset to defaults", use_container_width=True, help="Reset all settings to default values"):
             st.session_state.config = reset_config()
             st.session_state.reset_count += 1  # Increment to force widget refresh
+            # Clear download success message
+            if "download_just_completed" in st.session_state:
+                st.session_state.download_just_completed = False
+            # Clear model path widget state - set to empty instead of deleting
+            st.session_state.model_path_input = ""
+            # Also clear pending model path flag if it exists
+            if "pending_model_path" in st.session_state:
+                del st.session_state.pending_model_path
             st.rerun()
 
     # Main content
@@ -453,6 +461,8 @@ def main():
                     if selected_folder:
                         config["model_path"] = selected_folder
                         save_config(config)
+                        # Update widget state to show new path
+                        st.session_state.pending_model_path = selected_folder
                         st.rerun()
             with col_model_check:
                 st.markdown("<br>", unsafe_allow_html=True)  # Spacer to align with input + help icon
@@ -1916,12 +1926,7 @@ def main():
                     save_config(config)
                     # Set pending flag - will be applied before widget creation on next run
                     st.session_state.pending_model_path = path_to_set
-                    # Clear the download_just_completed flag since we're done with this download
-                    st.session_state.download_just_completed = False
                     st.rerun()
-
-            # Clear the flag after showing the message (on next rerun)
-            st.session_state.download_just_completed = False
 
     with tab5:
         st.header("About")
