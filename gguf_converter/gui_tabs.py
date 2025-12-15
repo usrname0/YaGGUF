@@ -354,6 +354,10 @@ def render_convert_tab(converter, config, verbose, nthreads, ignore_incompatibil
 
             # Determine what to do based on selection
             if imatrix_selection == generate_custom_option:
+                # Save mode to config
+                config["imatrix_mode"] = "generate_custom"
+                save_config(config)
+
                 # Show custom name input field
                 col_imatrix_name, col_imatrix_default = st.columns([5, 1])
                 with col_imatrix_name:
@@ -374,8 +378,6 @@ def render_convert_tab(converter, config, verbose, nthreads, ignore_incompatibil
                         else:
                             # Otherwise just clear to empty
                             config["imatrix_generate_name"] = ""
-                        # Keep the mode as generate_custom so dropdown stays on this option
-                        config["imatrix_mode"] = "generate_custom"
                         save_config(config)
                         # Increment reset_count to force widget refresh with new value
                         st.session_state.reset_count += 1
@@ -404,6 +406,10 @@ def render_convert_tab(converter, config, verbose, nthreads, ignore_incompatibil
                 imatrix_reuse_path = None
                 imatrix_mode = "Generate (default name)"
 
+                # Save mode to config
+                config["imatrix_mode"] = "generate"
+                save_config(config)
+
                 # Check if file already exists and warn
                 if output_dir_clean and model_path_clean:
                     imatrix_file_path = Path(output_dir_clean) / default_name
@@ -415,6 +421,7 @@ def render_convert_tab(converter, config, verbose, nthreads, ignore_incompatibil
                 imatrix_generate_name = None
                 imatrix_reuse_path = imatrix_selection
                 imatrix_mode = "Reuse existing"
+                config["imatrix_mode"] = "reuse"
                 config["imatrix_reuse_path"] = imatrix_selection
                 save_config(config)
 
@@ -477,12 +484,11 @@ def render_convert_tab(converter, config, verbose, nthreads, ignore_incompatibil
                 # Intermediate format button (radio button behavior)
                 is_selected = qtype == intermediate_type
                 button_type = "primary" if is_selected else "secondary"
-                button_label = f"{qtype} Intermediate" if is_selected else ""
+                button_label = f"{qtype} Intermediate"
                 if st.button(
                     button_label,
                     key=f"intermediate_btn_{qtype}",
-                    type=button_type,
-                    use_container_width=True
+                    type=button_type
                 ):
                     selected_format = qtype
 
