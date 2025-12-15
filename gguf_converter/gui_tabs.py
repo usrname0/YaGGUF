@@ -299,75 +299,66 @@ def render_convert_tab(converter, config, verbose, nthreads, ignore_incompatibil
         imatrix_reuse_path = None
 
         if use_imatrix:
-            # Scan output directory for .imatrix files
+            # Scan output directory for .imatrix files and sort by modification time (newest first)
             imatrix_files = []
             if output_dir_clean and Path(output_dir_clean).exists():
-                imatrix_files = sorted([f.name for f in Path(output_dir_clean).glob("*.imatrix")])
+                output_path = Path(output_dir_clean)
+                # Get files with their modification times
+                files_with_mtime = [(f.name, f.stat().st_mtime) for f in output_path.glob("*.imatrix")]
+                # Sort by modification time, newest first
+                files_with_mtime.sort(key=lambda x: x[1], reverse=True)
+                imatrix_files = [f[0] for f in files_with_mtime]
 
-            # Radio button for Generate vs Generate (custom name) vs Reuse
-            saved_mode = config.get("imatrix_mode", "generate")
-            if saved_mode == "generate":
-                mode_index = 0
-            elif saved_mode == "generate_custom":
-                mode_index = 1
-            else:  # reuse
-                mode_index = 2
+            # Build dropdown options: existing files + generate options
+            if model_path_clean:
+                default_name = f"{Path(model_path_clean).name}.imatrix"
+                generate_default_option = f"Generate ({default_name})"
+            else:
+                generate_default_option = "Generate (provide model path)"
 
-            # Callback to save imatrix mode state and custom name if present
-            def save_imatrix_mode():
-                mode = st.session_state[f"imatrix_mode_radio_{st.session_state.reset_count}"]
+            generate_custom_option = "Generate (custom name)"
+            dropdown_options = imatrix_files + [generate_default_option, generate_custom_option]
 
-                # Save any custom name that was entered before switching modes
-                if f"imatrix_custom_name_{st.session_state.reset_count}" in st.session_state:
-                    config["imatrix_generate_name"] = st.session_state[f"imatrix_custom_name_{st.session_state.reset_count}"]
+            # Dropdown with all options, plus Update button
+            col_imatrix_select, col_imatrix_update = st.columns([5, 1])
+            with col_imatrix_select:
+                # Determine default selection
+                saved_mode = config.get("imatrix_mode", "generate")
+                saved_reuse_path = config.get("imatrix_reuse_path", "")
+                default_index = 0
 
-                if mode == "Generate imatrix (default name)":
-                    config["imatrix_mode"] = "generate"
-                elif mode == "Generate (custom name)":
-                    config["imatrix_mode"] = "generate_custom"
-                else:  # Reuse existing
-                    config["imatrix_mode"] = "reuse"
-                save_config(config)
-
-            imatrix_mode = st.radio(
-                "Imatrix mode",
-                ["Generate imatrix (default name)", "Generate (custom name)", "Reuse existing"],
-                index=mode_index,
-                help="Generate with default name, custom name, or reuse an existing imatrix file",
-                horizontal=True,
-                label_visibility="collapsed",
-                key=f"imatrix_mode_radio_{st.session_state.reset_count}",
-                on_change=save_imatrix_mode
-            )
-
-            # Show appropriate field based on mode
-            if imatrix_mode == "Generate imatrix (default name)":
-                # Show read-only text field with default name based on model path
-                if model_path_clean:
-                    default_name = f"{Path(model_path_clean).name}.imatrix"
+                if saved_mode == "generate_custom":
+                    # Previously selected custom name - select that option
+                    default_index = len(dropdown_options) - 1
+                elif saved_mode == "reuse" and saved_reuse_path and saved_reuse_path in imatrix_files:
+                    # Previously selected a specific file - select it
+                    default_index = imatrix_files.index(saved_reuse_path)
+                elif imatrix_files:
+                    # If there are existing files, select the first (newest) one
+                    default_index = 0
                 else:
-                    default_name = "(provide model path to see default name)"
+                    # Otherwise select the generate default option
+                    default_index = len(imatrix_files)  # Index of generate_default_option
 
-                st.text_input(
-                    "Default imatrix filename",
-                    value=default_name,
-                    disabled=True,
-                    help="Auto-generated imatrix filename based on model name (saved in output directory)"
+                imatrix_selection = st.selectbox(
+                    "Imatrix file",
+                    options=dropdown_options,
+                    index=default_index,
+                    help="Choose an existing imatrix file, generate with default name, or generate with custom name",
+                    key=f"imatrix_dropdown_{st.session_state.reset_count}"
                 )
+            with col_imatrix_update:
+                st.markdown("<br>", unsafe_allow_html=True)  # Spacer to align with selectbox
+                if st.button("Refresh File List", key="update_imatrix_file_list", use_container_width=True):
+                    st.rerun()
 
-                # Check if file already exists and warn
-                if output_dir_clean and model_path_clean:
-                    imatrix_file_path = Path(output_dir_clean) / default_name
-                    if imatrix_file_path.exists():
-                        st.warning(f"WARNING: File already exists and will be overwritten: `{default_name}`")
-
-                imatrix_generate_name = ""
-            elif imatrix_mode == "Generate (custom name)":
-                # Text field for custom imatrix filename with Set to default button
+            # Determine what to do based on selection
+            if imatrix_selection == generate_custom_option:
+                # Show custom name input field
                 col_imatrix_name, col_imatrix_default = st.columns([5, 1])
                 with col_imatrix_name:
                     imatrix_generate_name = st.text_input(
-                        "Imatrix filename",
+                        "Custom imatrix filename",
                         value=config.get("imatrix_generate_name", ""),
                         placeholder="model.imatrix",
                         help="Filename for the generated imatrix file (saved in output directory). Leave empty to use default naming (model_name.imatrix).",
@@ -383,7 +374,11 @@ def render_convert_tab(converter, config, verbose, nthreads, ignore_incompatibil
                         else:
                             # Otherwise just clear to empty
                             config["imatrix_generate_name"] = ""
+                        # Keep the mode as generate_custom so dropdown stays on this option
+                        config["imatrix_mode"] = "generate_custom"
                         save_config(config)
+                        # Increment reset_count to force widget refresh with new value
+                        st.session_state.reset_count += 1
                         st.rerun()
 
                 # Auto-append .imatrix extension if missing and show info
@@ -399,24 +394,29 @@ def render_convert_tab(converter, config, verbose, nthreads, ignore_incompatibil
                         imatrix_file_path = Path(output_dir_clean) / final_name
                         if imatrix_file_path.exists():
                             st.warning(f"WARNING: File already exists and will be overwritten: `{final_name}`")
-            else:  # Reuse existing
-                # Dropdown with Update File List button for reuse
-                col_imatrix_select, col_imatrix_update = st.columns([5, 1])
-                with col_imatrix_select:
-                    if imatrix_files:
-                        imatrix_reuse_path = st.selectbox(
-                            "Select imatrix file",
-                            options=imatrix_files,
-                            index=0,
-                            help="Choose an existing imatrix file from the output directory"
-                        )
-                    else:
-                        st.warning("No .imatrix files found in output directory")
-                        imatrix_reuse_path = None
-                with col_imatrix_update:
-                    st.markdown("<br>", unsafe_allow_html=True)  # Spacer to align with selectbox
-                    if st.button("Update File List", key="update_imatrix_reuse_list", use_container_width=True):
-                        st.rerun()
+
+                imatrix_reuse_path = None
+                imatrix_mode = "Generate (custom name)"
+
+            elif imatrix_selection == generate_default_option:
+                # Generate with default name
+                imatrix_generate_name = ""
+                imatrix_reuse_path = None
+                imatrix_mode = "Generate (default name)"
+
+                # Check if file already exists and warn
+                if output_dir_clean and model_path_clean:
+                    imatrix_file_path = Path(output_dir_clean) / default_name
+                    if imatrix_file_path.exists():
+                        st.warning(f"WARNING: File already exists and will be overwritten: `{default_name}`")
+
+            else:
+                # Reuse existing file
+                imatrix_generate_name = None
+                imatrix_reuse_path = imatrix_selection
+                imatrix_mode = "Reuse existing"
+                config["imatrix_reuse_path"] = imatrix_selection
+                save_config(config)
 
     with col2:
         st.subheader("Output Types")
@@ -754,16 +754,34 @@ def render_convert_tab(converter, config, verbose, nthreads, ignore_incompatibil
                 imatrix_output_filename = None
 
                 if use_imatrix:
-                    # Save imatrix settings to config
-                    if imatrix_mode == "Generate imatrix (default name)":
-                        config["imatrix_mode"] = "generate"
-                    elif imatrix_mode == "Generate (custom name)":
-                        config["imatrix_mode"] = "generate_custom"
-                    else:
+                    # Determine if we're generating or reusing based on mode
+                    if imatrix_mode == "Reuse existing":
+                        # Reuse existing file
+                        generate_imatrix_flag = False
+                        imatrix_path_to_use = Path(output_dir_clean) / imatrix_reuse_path
                         config["imatrix_mode"] = "reuse"
-
-                    if imatrix_mode in ["Generate imatrix (default name)", "Generate (custom name)"]:
+                        config["imatrix_reuse_path"] = imatrix_reuse_path
+                    elif imatrix_mode == "Generate (default name)":
+                        # Generate with default name
                         generate_imatrix_flag = True
+                        imatrix_output_filename = None  # Use default naming
+                        config["imatrix_mode"] = "generate"
+
+                        # Build calibration file path for generation
+                        cal_dir = config.get("imatrix_calibration_dir", "")
+                        cal_file = config.get("imatrix_calibration_file", "_default.txt")
+
+                        if cal_dir:
+                            calibration_file_path = Path(cal_dir) / cal_file
+                        else:
+                            # Use default calibration_data directory (one level up from gguf_converter module)
+                            default_cal_dir = Path(__file__).parent.parent / "calibration_data"
+                            calibration_file_path = default_cal_dir / cal_file
+                    elif imatrix_mode == "Generate (custom name)":
+                        # Generate with custom name
+                        generate_imatrix_flag = True
+                        config["imatrix_mode"] = "generate_custom"
+
                         # Normalize filename to ensure .imatrix extension
                         if imatrix_generate_name:
                             if not imatrix_generate_name.endswith('.imatrix'):
@@ -784,11 +802,6 @@ def render_convert_tab(converter, config, verbose, nthreads, ignore_incompatibil
                             # Use default calibration_data directory (one level up from gguf_converter module)
                             default_cal_dir = Path(__file__).parent.parent / "calibration_data"
                             calibration_file_path = default_cal_dir / cal_file
-                    else:  # Reuse existing
-                        generate_imatrix_flag = False
-                        if imatrix_reuse_path:
-                            imatrix_path_to_use = Path(output_dir_clean) / imatrix_reuse_path
-                            config["imatrix_reuse_path"] = imatrix_reuse_path
 
                     save_config(config)
 
@@ -816,15 +829,20 @@ def render_convert_tab(converter, config, verbose, nthreads, ignore_incompatibil
                 if use_imatrix:
                     # Determine which imatrix file was used
                     actual_imatrix_path = None
-                    if imatrix_mode in ["Generate imatrix (default name)", "Generate (custom name)"]:
-                        # Use the generated imatrix file
+                    if imatrix_mode == "Reuse existing":
+                        # Reused existing file
+                        actual_imatrix_path = imatrix_path_to_use
+                    elif imatrix_mode == "Generate (default name)":
+                        # Generated with default name
+                        model_name = Path(model_path_clean).name
+                        actual_imatrix_path = Path(output_dir_clean) / f"{model_name}.imatrix"
+                    elif imatrix_mode == "Generate (custom name)":
+                        # Generated with custom name
                         if imatrix_output_filename:
                             actual_imatrix_path = Path(output_dir_clean) / imatrix_output_filename
                         else:
                             model_name = Path(model_path_clean).name
                             actual_imatrix_path = Path(output_dir_clean) / f"{model_name}.imatrix"
-                    else:  # Reuse existing
-                        actual_imatrix_path = imatrix_path_to_use
 
                     # Save paths for statistics tab
                     intermediate_path = Path(output_dir_clean) / f"{Path(model_path_clean).name}_{intermediate_type.upper()}.gguf"
@@ -958,7 +976,7 @@ def render_imatrix_settings_tab(converter, config):
         with col_cal_btn:
             st.markdown("<br>", unsafe_allow_html=True)  # Spacer to align with selectbox + help icon
             if st.button(
-                "Update File List",
+                "Refresh File List",
                 key="update_cal_files_btn",
                 use_container_width=True,
                 help="Rescan directory for calibration files"
@@ -1313,7 +1331,7 @@ def render_imatrix_stats_tab(converter, config):
         with col_imatrix_btn:
             st.markdown("<br>", unsafe_allow_html=True)  # Spacer to align with selectbox + help icon
             if st.button(
-                "Update File List",
+                "Refresh File List",
                 key="update_imatrix_files_btn",
                 use_container_width=True,
                 help="Rescan directory for imatrix files"
@@ -1348,7 +1366,7 @@ def render_imatrix_stats_tab(converter, config):
         with col_model_btn:
             st.markdown("<br>", unsafe_allow_html=True)  # Spacer to align with selectbox + help icon
             if st.button(
-                "Update File List",
+                "Refresh File List",
                 key="update_model_files_btn",
                 use_container_width=True,
                 help="Rescan directory for GGUF files"
