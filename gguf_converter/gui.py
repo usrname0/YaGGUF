@@ -55,7 +55,6 @@ def get_default_config():
         "imatrix_stats_path": "",  # Imatrix file for statistics
 
         # Convert & Quantize tab
-        "hf_repo": "",
         "model_path": "",
         "output_dir": "",
         "intermediate_type": "F16",
@@ -67,6 +66,9 @@ def get_default_config():
 
         # Saved states for unquantized format checkboxes (before they get disabled as intermediate)
         "unquantized_saved_states": {},
+
+        # Saved states for quantizations disabled due to incompatibility
+        "incompatible_saved_states": {},
 
         # Download tab
         "repo_id": "",
@@ -297,16 +299,16 @@ def run_and_stream_command(command):
         else:
             full_output += f"\n--- Command failed with exit code {return_code} ---"
             output_container.code(full_output, language='bash')
-            st.toast(f"Command failed with exit code {return_code}", icon="🔥")
+            st.toast(f"Command failed with exit code {return_code}")
 
     except FileNotFoundError:
         full_output = f"Error: Command not found: `{command[0]}`. Make sure it is in your PATH."
         output_container.code(full_output, language='bash')
-        st.toast("Command not found.", icon="🔥")
+        st.toast("Command not found.")
     except Exception as e:
         full_output += f"\n--- An error occurred ---\n{str(e)}"
         output_container.code(full_output, language='bash')
-        st.toast(f"An error occurred: {e}", icon="🔥")
+        st.toast(f"An error occurred: {e}")
 
 
 def main():
@@ -343,6 +345,8 @@ def main():
 
     converter = st.session_state.converter
     config = st.session_state.config
+
+    print(f"DEBUG: Loaded model_path from config: {config.get('model_path', '(empty)')}", flush=True)
 
     # Sidebar for settings
     with st.sidebar:
@@ -419,52 +423,15 @@ def main():
         with col1:
             st.subheader("Input")
 
-            # HuggingFace Repo ID with Check Repo button
-            col_hf, col_hf_btn = st.columns([5, 1])
-            with col_hf:
-                hf_repo = st.text_input(
-                    "HuggingFace Repo ID (optional)",
-                    value=config.get("hf_repo", ""),
-                    placeholder="username/model-name",
-                    help="Optional: Download model from HuggingFace. If provided, model will be downloaded to Model Path below."
-                )
-            with col_hf_btn:
-                st.markdown("<br>", unsafe_allow_html=True)  # Spacer to align with input + help icon
-                hf_repo_populated = bool(hf_repo and hf_repo.strip())
-                if st.button(
-                    "Check Repo",
-                    key="check_repo_btn",
-                    use_container_width=True,
-                    disabled=not hf_repo_populated,
-                    help="Open HuggingFace repo in browser" if hf_repo_populated else "Enter a repo ID first"
-                ):
-                    if hf_repo_populated:
-                        url = f"https://huggingface.co/{hf_repo.strip()}"
-                        webbrowser.open(url)
-                        st.toast(f"Opened {url}")
-
             # Model path with Browse and Check Folder buttons
             col_model, col_model_browse, col_model_check = st.columns([4, 1, 1])
             with col_model:
-                # Create dynamic label based on HuggingFace repo ID
-                model_path_label = "Model path"
-                if hf_repo and hf_repo.strip():
-                    # Extract model name from repo ID (e.g., "username/model-name" -> "model-name")
-                    hf_model_name = hf_repo.strip().split('/')[-1]
-                    # Only show the note if the model path doesn't already end with the model name
-                    current_path = config.get("model_path", "")
-                    if current_path:
-                        current_path_name = Path(current_path.strip().strip('"').strip("'")).name
-                        if current_path_name != hf_model_name:
-                            model_path_label = f"Model path (/{hf_model_name}/ folder will be created)"
-                    else:
-                        model_path_label = f"Model path (/{hf_model_name}/ folder will be created)"
-
                 model_path = st.text_input(
-                    model_path_label,
+                    "Model path",
                     value=config.get("model_path", ""),
                     placeholder="E:/Models/my-model",
-                    help="Local model directory. If HuggingFace repo provided above, model will be downloaded here first."
+                    help="Local model directory containing config.json and model files.",
+                    key="model_path_input"
                 )
             with col_model_browse:
                 st.markdown("<br>", unsafe_allow_html=True)  # Spacer to align with input + help icon
@@ -565,6 +532,62 @@ def main():
                     except Exception as e:
                         # Silently ignore errors in compatibility check
                         pass
+
+            # Handle save/restore of incompatible quantization selections
+            # Track previous incompatibility state to detect changes
+            if 'previous_incompatible_quants' not in st.session_state:
+                st.session_state.previous_incompatible_quants = []
+
+            # Ensure config dict exists
+            if "incompatible_saved_states" not in config:
+                config["incompatible_saved_states"] = {}
+            if "other_quants" not in config:
+                config["other_quants"] = {}
+
+            # Initialize IQ checkbox states if needed (used by IQ quant section)
+            if "iq_checkbox_states" not in st.session_state:
+                st.session_state.iq_checkbox_states = config.get("other_quants", {}).copy()
+
+            # Convert to sets for easier comparison
+            current_incompatible = set(incompatible_quants)
+            previous_incompatible = set(st.session_state.previous_incompatible_quants)
+
+            # If incompatibility list changed, handle save/restore
+            if current_incompatible != previous_incompatible:
+                # Find newly incompatible quants (need to save their state)
+                newly_incompatible = current_incompatible - previous_incompatible
+
+                # Find newly compatible quants (need to restore their state)
+                newly_compatible = previous_incompatible - current_incompatible
+
+                # Save states of newly incompatible quants before disabling
+                for qtype in newly_incompatible:
+                    current_state = config["other_quants"].get(qtype, False)
+                    config["incompatible_saved_states"][qtype] = current_state
+                    # Deselect incompatible quants in the config
+                    config["other_quants"][qtype] = False
+                    # Also update session state for IQ quants
+                    if qtype in st.session_state.iq_checkbox_states:
+                        st.session_state.iq_checkbox_states[qtype] = False
+                    # Note: Widget keys include incompatibility status, so they'll naturally refresh
+
+                # Restore states of newly compatible quants
+                for qtype in newly_compatible:
+                    if qtype in config["incompatible_saved_states"]:
+                        # Restore the saved state
+                        restored_value = config["incompatible_saved_states"][qtype]
+                        config["other_quants"][qtype] = restored_value
+                        # Also update session state for IQ quants
+                        st.session_state.iq_checkbox_states[qtype] = restored_value
+                        # Remove from saved states since it's no longer incompatible
+                        del config["incompatible_saved_states"][qtype]
+
+                # Update the previous state
+                st.session_state.previous_incompatible_quants = incompatible_quants.copy()
+
+                # Save config if any changes were made
+                if newly_incompatible or newly_compatible:
+                    save_config(config)
 
             # Get intermediate format from config
             intermediate_type = config.get("intermediate_type", "F16").upper()
@@ -696,12 +719,8 @@ def main():
 
                 # Show appropriate field based on mode
                 if imatrix_mode == "Generate imatrix (default name)":
-                    # Show read-only text field with default name
-                    # Prefer HuggingFace repo name if present, fallback to model path folder name
-                    if hf_repo and hf_repo.strip():
-                        model_name = hf_repo.strip().split('/')[-1]
-                        default_name = f"{model_name}.imatrix"
-                    elif model_path_clean:
+                    # Show read-only text field with default name based on model path
+                    if model_path_clean:
                         default_name = f"{Path(model_path_clean).name}.imatrix"
                     else:
                         default_name = "(provide model path to see default name)"
@@ -734,12 +753,8 @@ def main():
                     with col_imatrix_default:
                         st.markdown("<br>", unsafe_allow_html=True)  # Spacer to align with text input
                         if st.button("Set to default", key="set_default_imatrix_name", use_container_width=True):
-                            # Prefer HuggingFace repo name if present, fallback to model path folder name
-                            if hf_repo and hf_repo.strip():
-                                model_name = hf_repo.strip().split('/')[-1]
-                                default_name = f"{model_name}.imatrix"
-                                config["imatrix_generate_name"] = default_name
-                            elif model_path_clean:
+                            # Use model path folder name for default
+                            if model_path_clean:
                                 default_name = f"{Path(model_path_clean).name}.imatrix"
                                 config["imatrix_generate_name"] = default_name
                             else:
@@ -887,9 +902,9 @@ def main():
             st.markdown("**Legacy Quants:**")
 
             # Callback for traditional quants
-            def save_trad_selection(qtype):
+            def save_trad_selection(qtype, widget_key):
                 def callback():
-                    config["other_quants"][qtype] = st.session_state[f"trad_{qtype}"]
+                    config["other_quants"][qtype] = st.session_state[widget_key]
                     save_config(config)
                 return callback
 
@@ -904,19 +919,37 @@ def main():
             trad_checkboxes = {}
             for idx, (qtype, tooltip) in enumerate(trad_quants.items()):
                 with trad_cols[idx % 3]:
+                    # Check if incompatible with model
+                    is_incompatible = qtype in incompatible_quants
+
+                    # Get value - force False when incompatible, otherwise use config
+                    if is_incompatible:
+                        checkbox_value = False
+                    else:
+                        checkbox_value = config.get("other_quants", {}).get(qtype, qtype == "Q8_0" if qtype == "Q8_0" else False)
+
+                    # Build help text
+                    help_text = tooltip
+                    if is_incompatible:
+                        help_text += " (Incompatible with this model - see info banner above)"
+
+                    # Include incompatibility status in key to force widget refresh when status changes
+                    widget_key = f"trad_{qtype}_{is_incompatible}"
+
                     trad_checkboxes[qtype] = st.checkbox(
                         qtype,
-                        value=config.get("other_quants", {}).get(qtype, qtype == "Q8_0" if qtype == "Q8_0" else False),
-                        help=tooltip,
-                        key=f"trad_{qtype}",
-                        on_change=save_trad_selection(qtype)
+                        value=checkbox_value,
+                        help=help_text,
+                        key=widget_key,
+                        disabled=is_incompatible,
+                        on_change=save_trad_selection(qtype, widget_key) if not is_incompatible else None
                     )
 
             # K Quants
             # Callback to save quantization selection immediately
-            def save_quant_selection(qtype):
+            def save_quant_selection(qtype, widget_key):
                 def callback():
-                    config["other_quants"][qtype] = st.session_state[f"k_{qtype}"]
+                    config["other_quants"][qtype] = st.session_state[widget_key]
                     save_config(config)
                 return callback
 
@@ -937,22 +970,30 @@ def main():
             k_cols = st.columns(3)
             for idx, (qtype, tooltip) in enumerate(k_quants.items()):
                 with k_cols[idx % 3]:
-                    default_val = config.get("other_quants", {}).get(qtype, qtype == "Q4_K_M")
-
                     # Check if incompatible with model
                     is_incompatible = qtype in incompatible_quants
+
+                    # Get value - force False when incompatible, otherwise use config
+                    if is_incompatible:
+                        checkbox_value = False
+                    else:
+                        checkbox_value = config.get("other_quants", {}).get(qtype, qtype == "Q4_K_M")
+
+                    # Build help text
                     help_text = tooltip
                     if is_incompatible:
                         help_text += " (Incompatible with this model - see info banner above)"
-                        default_val = False
+
+                    # Include incompatibility status in key to force widget refresh when status changes
+                    widget_key = f"k_{qtype}_{is_incompatible}"
 
                     k_checkboxes[qtype] = st.checkbox(
                         qtype,
-                        value=default_val,
+                        value=checkbox_value,
                         help=help_text,
-                        key=f"k_{qtype}",
+                        key=widget_key,
                         disabled=is_incompatible,
-                        on_change=save_quant_selection(qtype) if not is_incompatible else None
+                        on_change=save_quant_selection(qtype, widget_key) if not is_incompatible else None
                     )
 
             # I Quants
@@ -972,9 +1013,7 @@ def main():
                 "IQ1_S": "1-bit IQ small",
             }
 
-            # Initialize saved checkbox states if not in session state
-            if "iq_checkbox_states" not in st.session_state:
-                st.session_state.iq_checkbox_states = config.get("other_quants", {})
+            # Note: iq_checkbox_states initialized earlier with incompatibility handling
 
             i_checkboxes = {}
             i_cols = st.columns(3)
@@ -985,9 +1024,9 @@ def main():
                     incompatible_disabled = qtype in incompatible_quants
                     is_disabled = imatrix_disabled or incompatible_disabled
 
-                    # Widget key includes imatrix state to force refresh on toggle
-                    widget_key = f"i_{qtype}_{use_imatrix}"
-                    prev_key = f"i_{qtype}_{not use_imatrix}"
+                    # Widget key includes imatrix state AND incompatibility to force refresh
+                    widget_key = f"i_{qtype}_{use_imatrix}_{incompatible_disabled}"
+                    prev_key = f"i_{qtype}_{not use_imatrix}_{incompatible_disabled}"
 
                     # When transitioning from enabled to disabled, save the previous state
                     # Only save if the previous state was enabled (not disabled)
@@ -1053,7 +1092,6 @@ def main():
             # Strip quotes from paths
             model_path_clean = strip_quotes(model_path)
             output_dir_clean = strip_quotes(output_dir)
-            hf_repo_clean = strip_quotes(hf_repo)
 
             if not model_path_clean:
                 st.error("Please provide a model path")
@@ -1066,7 +1104,6 @@ def main():
                 config["verbose"] = verbose
                 config["nthreads"] = nthreads
                 config["use_imatrix"] = use_imatrix
-                config["hf_repo"] = hf_repo_clean
                 config["model_path"] = model_path_clean
                 config["output_dir"] = output_dir_clean
                 config["intermediate_type"] = intermediate_type
@@ -1086,37 +1123,6 @@ def main():
                 save_config(config)
 
                 try:
-                    # Determine actual model path (may be adjusted for HuggingFace downloads)
-                    actual_model_path = model_path_clean
-
-                    if hf_repo_clean and hf_repo_clean.strip():
-                        # Extract model name from HuggingFace repo ID
-                        hf_model_name = hf_repo_clean.strip().split('/')[-1]
-                        model_path_obj = Path(model_path_clean)
-
-                        # Check if the last folder in model path matches the HuggingFace model name
-                        # If it does, use the parent directory to avoid redundant nesting
-                        if model_path_obj.name == hf_model_name:
-                            download_dir = model_path_obj.parent
-                            # The actual model will be at parent/model-name/
-                            actual_model_path = str(model_path_obj)
-                        else:
-                            download_dir = model_path_obj
-                            # The actual model will be at download_dir/model-name/
-                            actual_model_path = str(download_dir / hf_model_name)
-
-                        with st.spinner(f"Downloading {hf_repo_clean} from HuggingFace..."):
-                            download_path = converter.download_model(
-                                repo_id=hf_repo_clean.strip(),
-                                output_dir=download_dir
-                            )
-                            # Update with actual download path (should match our calculation)
-                            actual_model_path = str(download_path)
-                            st.info(f"Downloaded to: {actual_model_path}")
-
-                            # Update the saved model path to reflect where it actually is
-                            config["model_path"] = actual_model_path
-                            save_config(config)
 
                     # Determine imatrix parameters based on mode
                     generate_imatrix_flag = False
@@ -1165,7 +1171,7 @@ def main():
 
                     with st.spinner("Converting and quantizing... This may take a while."):
                         output_files = converter.convert_and_quantize(
-                            model_path=actual_model_path,
+                            model_path=model_path_clean,
                             output_dir=output_dir_clean,
                             quantization_types=selected_quants,
                             intermediate_type=intermediate_type,
@@ -1192,13 +1198,13 @@ def main():
                             if imatrix_output_filename:
                                 actual_imatrix_path = Path(output_dir_clean) / imatrix_output_filename
                             else:
-                                model_name = Path(actual_model_path).name
+                                model_name = Path(model_path_clean).name
                                 actual_imatrix_path = Path(output_dir_clean) / f"{model_name}.imatrix"
                         else:  # Reuse existing
                             actual_imatrix_path = imatrix_path_to_use
 
                         # Save paths for statistics tab
-                        intermediate_path = Path(output_dir_clean) / f"{Path(actual_model_path).name}_{intermediate_type.upper()}.gguf"
+                        intermediate_path = Path(output_dir_clean) / f"{Path(model_path_clean).name}_{intermediate_type.upper()}.gguf"
 
                         if actual_imatrix_path and actual_imatrix_path.exists():
                             config["imatrix_stats_path"] = str(actual_imatrix_path)
@@ -1773,8 +1779,17 @@ def main():
 
     with tab4:
         st.header("HuggingFace Downloader")
-        st.markdown("Download a model without converting")
+        st.markdown("Download models from HuggingFace")
         st.markdown("[Browse models on HuggingFace](https://huggingface.co/models)")
+
+        # Toast test button
+        if st.button("Test Toast Notification"):
+            st.toast("This is a toast notification!")
+            st.success("If you see this success message but NOT a small popup in the bottom-right corner, toasts aren't working.")
+
+        # Initialize session state for downloaded model path
+        if "downloaded_model_path" not in st.session_state:
+            st.session_state.downloaded_model_path = None
 
         # Repository ID with Check Repo button
         col_repo, col_repo_btn = st.columns([5, 1])
@@ -1802,10 +1817,24 @@ def main():
         # Download directory with Browse and Check Folder buttons
         col_download, col_download_browse, col_download_check = st.columns([4, 1, 1])
         with col_download:
+            # Create dynamic label based on repository ID
+            download_dir_label = "Download directory"
+            if repo_id and repo_id.strip():
+                # Extract model name from repo ID (e.g., "username/model-name" -> "model-name")
+                model_name = repo_id.strip().split('/')[-1]
+                # Only show the note if the download path doesn't already end with the model name
+                current_path = config.get("download_dir", "")
+                if current_path:
+                    current_path_name = Path(current_path.strip().strip('"').strip("'")).name
+                    if current_path_name != model_name:
+                        download_dir_label = f"Download directory (/{model_name}/ folder will be created)"
+                else:
+                    download_dir_label = f"Download directory (/{model_name}/ folder will be created)"
+
             download_dir = st.text_input(
-                "Download directory",
+                download_dir_label,
                 value=config.get("download_dir", ""),
-                placeholder="E:/Models/downloads"
+                placeholder="E:/Models"
             )
         with col_download_browse:
             st.markdown("<br>", unsafe_allow_html=True)  # Spacer to align with input
@@ -1859,8 +1888,8 @@ def main():
                     with st.spinner(f"Downloading {repo_id_clean}..."):
                         model_path = converter.download_model(repo_id_clean, download_dir_clean)
 
-                    st.success(f"Downloaded to: {model_path}")
-                    st.code(str(model_path), language=None)
+                    # Store in session state so it persists across reruns
+                    st.session_state.downloaded_model_path = str(model_path)
 
                 except Exception as e:
                     # Show in Streamlit UI
@@ -1870,6 +1899,32 @@ def main():
                     print(f"\nError: {e}", flush=True)
                     import traceback
                     traceback.print_exc()
+
+        # Show success message if we just downloaded
+        if st.session_state.downloaded_model_path:
+            st.success(f"Downloaded to: {st.session_state.downloaded_model_path}")
+
+        # Always show last downloaded path section (if one exists)
+        st.markdown("---")
+        st.subheader("Last Downloaded Model")
+
+        if st.session_state.downloaded_model_path:
+            col_path, col_set_path = st.columns([4, 1])
+            with col_path:
+                st.code(st.session_state.downloaded_model_path, language=None)
+            with col_set_path:
+                if st.button("Set as model path", key="set_model_path_btn", use_container_width=True, help="Set this as the model path in Convert & Quantize tab"):
+                    path_to_set = st.session_state.downloaded_model_path
+                    config["model_path"] = path_to_set
+                    save_config(config)
+                    # Force reload config from disk on next run
+                    if "config" in st.session_state:
+                        del st.session_state.config
+                    print(f"DEBUG: Set model_path to: {path_to_set}", flush=True)
+                    print(f"DEBUG: Config now contains: {config.get('model_path')}", flush=True)
+                    st.rerun()
+        else:
+            st.info("No model downloaded yet in this session.")
 
     with tab5:
         st.header("About")
@@ -1995,7 +2050,7 @@ def main():
                         st.toast("Binaries updated successfully!")
                     except Exception as e:
                         print(f"\n--- An error occurred ---\n{str(e)}")
-                        st.toast(f"An error occurred during binary update: {e}", icon="🔥")
+                        st.toast(f"An error occurred during binary update: {e}")
                 
                 output = f.getvalue()
                 output_container.code(output, language='bash')
