@@ -39,6 +39,7 @@ def get_default_config():
         "imatrix_no_ppl": False,  # Disable perplexity
         "imatrix_parse_special": False,  # Parse special tokens
         "imatrix_output_frequency": 10,  # Save interval
+        "imatrix_ngl": 0,  # GPU layers (0 = CPU only)
         "imatrix_stats_model": "",  # Model for statistics utility
         "imatrix_stats_path": "",  # Imatrix file for statistics
 
@@ -60,7 +61,12 @@ def get_default_config():
 
         # Download tab
         "repo_id": "",
-        "download_dir": ""
+        "download_dir": "",
+
+        # Custom binaries
+        "use_custom_binaries": False,
+        "custom_quantize_path": "",
+        "custom_imatrix_path": ""
     }
 
 

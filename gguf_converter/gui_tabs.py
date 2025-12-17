@@ -323,21 +323,24 @@ def render_convert_tab(converter, config, verbose, nthreads, ignore_incompatibil
             col_imatrix_select, col_imatrix_update = st.columns([5, 1])
             with col_imatrix_select:
                 # Determine default selection
-                saved_mode = config.get("imatrix_mode", "generate")
+                saved_mode = config.get("imatrix_mode", "")
                 saved_reuse_path = config.get("imatrix_reuse_path", "")
                 default_index = 0
 
                 if saved_mode == "generate_custom":
                     # Previously selected custom name - select that option
                     default_index = len(dropdown_options) - 1
+                elif saved_mode == "generate":
+                    # Previously selected generate default - select that option
+                    default_index = len(imatrix_files)  # Index of generate_default_option
                 elif saved_mode == "reuse" and saved_reuse_path and saved_reuse_path in imatrix_files:
                     # Previously selected a specific file - select it
                     default_index = imatrix_files.index(saved_reuse_path)
                 elif imatrix_files:
-                    # If there are existing files, select the first (newest) one
+                    # No saved preference - auto-select the first (newest) existing file
                     default_index = 0
                 else:
-                    # Otherwise select the generate default option
+                    # No existing files and no saved preference - select generate default
                     default_index = len(imatrix_files)  # Index of generate_default_option
 
                 imatrix_selection = st.selectbox(
@@ -826,6 +829,7 @@ def render_convert_tab(converter, config, verbose, nthreads, ignore_incompatibil
                         imatrix_collect_output=config.get("imatrix_collect_output_weight", False),
                         imatrix_calibration_file=calibration_file_path,
                         imatrix_output_name=imatrix_output_filename,
+                        imatrix_ngl=int(config.get("imatrix_ngl", 0)) if config.get("imatrix_ngl", 0) > 0 else None,
                         ignore_incompatibilities=ignore_incompatibilities
                     )
 
@@ -948,13 +952,16 @@ def render_imatrix_settings_tab(converter, config):
             save_config(config)
             calibration_data_dir = Path(calibration_dir_input_clean)
 
-        # Scan directory for .txt files
+        # Scan directory for .txt and .raw files
         calibration_files = []
         if calibration_data_dir.exists() and calibration_data_dir.is_dir():
-            calibration_files = sorted([f.name for f in calibration_data_dir.glob("*.txt")])
+            txt_files = list(calibration_data_dir.glob("*.txt"))
+            raw_files = list(calibration_data_dir.glob("*.raw"))
+            all_files = txt_files + raw_files
+            calibration_files = sorted([f.name for f in all_files])
 
         if not calibration_files:
-            st.warning(f"No .txt files found in: {calibration_data_dir}")
+            st.warning(f"No .txt or .raw files found in: {calibration_data_dir}")
             calibration_files = ["(no files found)"]
 
         # Determine default selection
@@ -1095,6 +1102,28 @@ def render_imatrix_settings_tab(converter, config):
             key=f"imatrix_collect_output_input_{st.session_state.reset_count}",
             on_change=save_collect_output
         )
+
+        # GPU offloading (only show if custom binaries enabled)
+        if config.get("use_custom_binaries", False):
+            st.markdown("---")
+            st.markdown("**GPU Offloading**")
+            st.info("GPU offloading requires llama.cpp binaries compiled with CUDA/ROCm/Metal/Vulkan support.")
+
+            # Auto-save callback for ngl
+            def save_ngl():
+                config["imatrix_ngl"] = int(st.session_state[f"imatrix_ngl_{st.session_state.reset_count}"])
+                save_config(config)
+
+            imatrix_ngl_input = st.number_input(
+                "GPU layers (-ngl)",
+                min_value=0,
+                max_value=999,
+                value=int(config.get("imatrix_ngl", 0)),
+                step=1,
+                help="Number of model layers to offload to GPU. 0 = CPU only, 99 = fully offload. Requires GPU-enabled llama.cpp build.",
+                key=f"imatrix_ngl_{st.session_state.reset_count}",
+                on_change=save_ngl
+            )
 
         # Reset button
         st.markdown("---")

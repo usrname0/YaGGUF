@@ -58,9 +58,17 @@ def main():
     st.title("YaGUFF - Yet Another GGUF Converter")
     st.markdown("*Because there are simultaneously too many and not enough GGUF converters*")
 
-    # Initialize converter
+    # Initialize converter with custom paths if specified
     if 'converter' not in st.session_state:
-        st.session_state.converter = GGUFConverter()
+        config = st.session_state.get('config', load_config())
+        if config.get("use_custom_binaries", False):
+            custom_paths = {
+                'quantize': config.get("custom_quantize_path", ""),
+                'imatrix': config.get("custom_imatrix_path", "")
+            }
+            st.session_state.converter = GGUFConverter(custom_binary_paths=custom_paths)
+        else:
+            st.session_state.converter = GGUFConverter()
 
     # Load config on first run
     if 'config' not in st.session_state:
@@ -146,6 +154,49 @@ def main():
             key="nthreads_input",
             on_change=save_nthreads
         )
+
+        st.markdown("---")
+        st.markdown("**Custom Binaries:**")
+
+        # Auto-save callback for use_custom_binaries
+        def save_use_custom_binaries():
+            config["use_custom_binaries"] = st.session_state.use_custom_binaries_checkbox
+            save_config(config)
+
+        use_custom_binaries = st.checkbox(
+            "Use custom binaries",
+            value=config.get("use_custom_binaries", False),
+            help="Use custom llama.cpp binaries instead of auto-downloaded ones. Leave paths blank to use system PATH.",
+            key="use_custom_binaries_checkbox",
+            on_change=save_use_custom_binaries
+        )
+
+        if use_custom_binaries:
+            st.markdown("**Binary Paths** (leave blank for PATH):")
+
+            # llama-quantize path
+            quantize_path = st.text_input(
+                "llama-quantize",
+                value=config.get("custom_quantize_path", ""),
+                placeholder="llama-quantize (or full path)",
+                help="Path to llama-quantize binary. Leave blank to use 'llama-quantize' from PATH.",
+                key="custom_quantize_path_input"
+            )
+            if quantize_path != config.get("custom_quantize_path", ""):
+                config["custom_quantize_path"] = quantize_path
+                save_config(config)
+
+            # llama-imatrix path
+            imatrix_path = st.text_input(
+                "llama-imatrix",
+                value=config.get("custom_imatrix_path", ""),
+                placeholder="llama-imatrix (or full path)",
+                help="Path to llama-imatrix binary. Leave blank to use 'llama-imatrix' from PATH.",
+                key="custom_imatrix_path_input"
+            )
+            if imatrix_path != config.get("custom_imatrix_path", ""):
+                config["custom_imatrix_path"] = imatrix_path
+                save_config(config)
 
         # Reset settings button (removed Save button)
         st.markdown("---")

@@ -68,15 +68,21 @@ class GGUFConverter:
         # },
     }
 
-    def __init__(self):
-        """Initialize the converter and binary manager"""
-        self.binary_manager = BinaryManager()
-        # Ensure binaries are available on init
-        if not self.binary_manager.ensure_binaries():
-            raise RuntimeError(
-                "Failed to get llama.cpp binaries. "
-                "Please check your internet connection or install llama.cpp manually."
-            )
+    def __init__(self, custom_binary_paths=None):
+        """
+        Initialize the converter and binary manager
+
+        Args:
+            custom_binary_paths: Optional dict of custom binary paths {'quantize': 'path', 'imatrix': 'path'}
+        """
+        self.binary_manager = BinaryManager(custom_paths=custom_binary_paths)
+        # Only ensure binaries if not using custom paths
+        if not custom_binary_paths:
+            if not self.binary_manager.ensure_binaries():
+                raise RuntimeError(
+                    "Failed to get llama.cpp binaries. "
+                    "Please check your internet connection or install llama.cpp manually."
+                )
         # Ensure llama.cpp repo is cloned and up to date
         self._ensure_llama_cpp_repo()
 
@@ -754,6 +760,7 @@ class GGUFConverter:
         imatrix_collect_output: bool = False,
         imatrix_calibration_file: Optional[Union[str, Path]] = None,
         imatrix_output_name: Optional[str] = None,
+        imatrix_ngl: Optional[int] = None,
         ignore_incompatibilities: bool = False
     ) -> List[Path]:
         """
@@ -909,7 +916,8 @@ class GGUFConverter:
                 nthreads=nthreads,
                 verbose=verbose,
                 chunks=imatrix_chunks,
-                collect_output_weight=imatrix_collect_output
+                collect_output_weight=imatrix_collect_output,
+                ngl=imatrix_ngl
             )
 
             # Use the generated imatrix
