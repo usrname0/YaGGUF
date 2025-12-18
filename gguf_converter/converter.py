@@ -68,16 +68,18 @@ class GGUFConverter:
         # },
     }
 
-    def __init__(self, custom_binary_paths=None):
+    def __init__(self, custom_binaries_folder=None):
         """
         Initialize the converter and binary manager
 
         Args:
-            custom_binary_paths: Optional dict of custom binary paths {'quantize': 'path', 'imatrix': 'path'}
+            custom_binaries_folder: Optional path to folder containing custom llama.cpp binaries.
+                                   If empty string, will use system PATH.
+                                   If None, will use auto-downloaded binaries.
         """
-        self.binary_manager = BinaryManager(custom_paths=custom_binary_paths)
-        # Only ensure binaries if not using custom paths
-        if not custom_binary_paths:
+        self.binary_manager = BinaryManager(custom_binaries_folder=custom_binaries_folder)
+        # Only ensure binaries if not using custom binaries
+        if custom_binaries_folder is None:
             if not self.binary_manager.ensure_binaries():
                 raise RuntimeError(
                     "Failed to get llama.cpp binaries. "

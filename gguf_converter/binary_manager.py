@@ -24,13 +24,15 @@ class BinaryManager:
     # GitHub release URL template (using ggml-org, not ggerganov)
     RELEASE_URL_TEMPLATE = "https://github.com/ggml-org/llama.cpp/releases/download/{tag}/{filename}"
 
-    def __init__(self, bin_dir: Optional[Path] = None, custom_paths: Optional[Dict[str, str]] = None):
+    def __init__(self, bin_dir: Optional[Path] = None, custom_binaries_folder: Optional[str] = None):
         """
         Initialize binary manager
 
         Args:
             bin_dir: Directory to store binaries (default: ./bin/)
-            custom_paths: Optional dict of custom binary paths {'quantize': 'path', 'imatrix': 'path'}
+            custom_binaries_folder: Optional path to folder containing custom llama.cpp binaries.
+                                   If empty string, will use system PATH.
+                                   If None, will use auto-downloaded binaries.
         """
         if bin_dir is None:
             # Use project root bin directory
@@ -40,7 +42,7 @@ class BinaryManager:
         self.bin_dir = Path(bin_dir)
         self.bin_dir.mkdir(parents=True, exist_ok=True)
 
-        self.custom_paths = custom_paths or {}
+        self.custom_binaries_folder = custom_binaries_folder
         self.platform_info = self._detect_platform()
 
     def _detect_platform(self) -> Dict[str, str]:
@@ -287,20 +289,32 @@ class BinaryManager:
 
     def get_quantize_path(self) -> Path:
         """Get path to llama-quantize executable"""
-        # Check custom path first
-        if 'quantize' in self.custom_paths and self.custom_paths['quantize']:
-            custom = self.custom_paths['quantize']
-            # If it's not an absolute path, try to find it in PATH
-            if not os.path.isabs(custom):
-                system_path = shutil.which(custom)
+        # Check if custom binaries folder is configured
+        if self.custom_binaries_folder is not None:
+            # If custom folder is blank, use system PATH
+            if not self.custom_binaries_folder:
+                system_path = shutil.which('llama-quantize')
                 if system_path:
                     return Path(system_path)
-            return Path(custom)
+                else:
+                    raise RuntimeError("Custom binaries enabled with blank path, but 'llama-quantize' not found in system PATH")
 
-        # Then check downloaded binaries
+            # Custom folder specified - look for binary there
+            custom_folder = Path(self.custom_binaries_folder)
+            binary_name = 'llama-quantize'
+            if platform.system().lower() == 'windows':
+                binary_name = 'llama-quantize.exe'
+
+            binary_path = custom_folder / binary_name
+            if binary_path.exists():
+                return binary_path
+            else:
+                raise RuntimeError(f"llama-quantize not found in custom binaries folder: {custom_folder}")
+
+        # Use auto-downloaded binaries
         path = self.get_binary_path('llama-quantize')
 
-        # Fallback to system PATH
+        # Fallback to system PATH if auto-downloaded binaries don't exist
         if not path.exists():
             system_path = shutil.which('llama-quantize')
             if system_path:
@@ -310,20 +324,32 @@ class BinaryManager:
 
     def get_imatrix_path(self) -> Path:
         """Get path to llama-imatrix executable"""
-        # Check custom path first
-        if 'imatrix' in self.custom_paths and self.custom_paths['imatrix']:
-            custom = self.custom_paths['imatrix']
-            # If it's not an absolute path, try to find it in PATH
-            if not os.path.isabs(custom):
-                system_path = shutil.which(custom)
+        # Check if custom binaries folder is configured
+        if self.custom_binaries_folder is not None:
+            # If custom folder is blank, use system PATH
+            if not self.custom_binaries_folder:
+                system_path = shutil.which('llama-imatrix')
                 if system_path:
                     return Path(system_path)
-            return Path(custom)
+                else:
+                    raise RuntimeError("Custom binaries enabled with blank path, but 'llama-imatrix' not found in system PATH")
 
-        # Then check downloaded binaries
+            # Custom folder specified - look for binary there
+            custom_folder = Path(self.custom_binaries_folder)
+            binary_name = 'llama-imatrix'
+            if platform.system().lower() == 'windows':
+                binary_name = 'llama-imatrix.exe'
+
+            binary_path = custom_folder / binary_name
+            if binary_path.exists():
+                return binary_path
+            else:
+                raise RuntimeError(f"llama-imatrix not found in custom binaries folder: {custom_folder}")
+
+        # Use auto-downloaded binaries
         path = self.get_binary_path('llama-imatrix')
 
-        # Fallback to system PATH
+        # Fallback to system PATH if auto-downloaded binaries don't exist
         if not path.exists():
             system_path = shutil.which('llama-imatrix')
             if system_path:

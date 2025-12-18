@@ -13,12 +13,14 @@ import platform
 import tkinter as tk
 from tkinter import filedialog
 import io
+from contextlib import redirect_stdout
 
 from pathlib import Path
 from .gui_utils import (
     strip_quotes, open_folder, browse_folder,
     save_config, run_and_stream_command,
     get_current_version, get_binary_version,
+    get_default_config,
     CONFIG_FILE
 )
 
@@ -138,7 +140,7 @@ def render_convert_tab(converter, config, verbose, nthreads, ignore_incompatibil
 
                         # Display warning banner
                         st.info(f"""
-**Model Incompatibility Detected:** {', '.join(incompat_info['types'])}
+**Some quants disabled due to:** {', '.join(incompat_info['types'])}
 
 {chr(10).join('- ' + reason for reason in incompat_info['reasons'])}
 
@@ -220,8 +222,6 @@ def render_convert_tab(converter, config, verbose, nthreads, ignore_incompatibil
         if intermediate_type not in config["unquantized_saved_states"]:
             current_state = config["other_quants"].get(intermediate_type, False)
             config["unquantized_saved_states"][intermediate_type] = current_state
-            # Also ensure it's checked in other_quants
-            config["other_quants"][intermediate_type] = True
             save_config(config)
 
         # If intermediate format changed, update checkbox states
@@ -255,9 +255,6 @@ def render_convert_tab(converter, config, verbose, nthreads, ignore_incompatibil
             # Save the new intermediate's current state before disabling it
             current_new_state = config["other_quants"].get(intermediate_type, False)
             config["unquantized_saved_states"][intermediate_type] = current_new_state
-
-            # Force the new intermediate to be checked
-            config["other_quants"][intermediate_type] = True
 
             st.session_state.previous_intermediate = intermediate_type
             config["intermediate_type"] = intermediate_type
@@ -520,9 +517,6 @@ def render_convert_tab(converter, config, verbose, nthreads, ignore_incompatibil
             # (so we can restore it when switching away)
             config["unquantized_saved_states"][selected_format] = config.get("other_quants", {}).get(selected_format, False)
 
-            # Force new intermediate to be checked
-            config["other_quants"][selected_format] = True
-
             # Change intermediate type
             config["intermediate_type"] = selected_format
             intermediate_type = selected_format
@@ -740,7 +734,7 @@ def render_convert_tab(converter, config, verbose, nthreads, ignore_incompatibil
             config["output_dir"] = output_dir_clean
             config["intermediate_type"] = intermediate_type
 
-            # Save all quantization selections in other_quants
+            # Save all quantization selections in other_quants (excluding intermediate format)
             all_quant_selections = {}
             all_quant_selections.update(full_checkboxes)
             all_quant_selections.update(trad_checkboxes)
@@ -750,6 +744,11 @@ def render_convert_tab(converter, config, verbose, nthreads, ignore_incompatibil
                 all_quant_selections.update(st.session_state.iq_checkbox_states)
             else:
                 all_quant_selections.update(i_checkboxes)
+
+            # Remove intermediate format from saved selections (tracked separately)
+            if intermediate_type in all_quant_selections:
+                del all_quant_selections[intermediate_type]
+
             config["other_quants"] = all_quant_selections
 
             save_config(config)
@@ -767,7 +766,8 @@ def render_convert_tab(converter, config, verbose, nthreads, ignore_incompatibil
                     if imatrix_mode == "Reuse existing":
                         # Reuse existing file
                         generate_imatrix_flag = False
-                        imatrix_path_to_use = Path(output_dir_clean) / imatrix_reuse_path
+                        if imatrix_reuse_path:
+                            imatrix_path_to_use = Path(output_dir_clean) / imatrix_reuse_path
                         config["imatrix_mode"] = "reuse"
                         config["imatrix_reuse_path"] = imatrix_reuse_path
                     elif imatrix_mode == "Generate (default name)":
@@ -1163,118 +1163,138 @@ def render_imatrix_settings_tab(converter, config):
         # Try to read and preview the calibration file
         if preview_calibration_path.exists() and calibration_selection != "(no files found)":
             try:
-                with open(preview_calibration_path, 'r', encoding='utf-8') as f:
-                    full_content = f.read()
-
                 # Preview mode selection
                 preview_mode = st.radio(
                     "Preview mode",
-                    ["Full file", "Processed data"],
+                    ["No preview", "Full file", "Processed data"],
                     index=0,
-                    help="Full file shows entire calibration file. Processed data shows what will actually be used based on your settings.",
+                    help="No preview: Show file info only (recommended for large files). Full file: Show entire calibration file. Processed data: Show what will actually be used based on your settings.",
                     horizontal=True,
                     key=f"preview_mode_{st.session_state.reset_count}"
                 )
 
-                # Split into lines for chunk calculation
-                lines = full_content.split('\n')
-                total_lines = len(lines)
+                if preview_mode == "No preview":
+                    # Just show basic file info without loading content (fast for large files)
+                    file_size = preview_calibration_path.stat().st_size
+                    file_size_mb = file_size / (1024 * 1024)
 
-                if preview_mode == "Full file":
-                    # Show full file info
-                    total_chars = len(full_content)
-                    total_words = len(full_content.split())
+                    # Count lines without loading entire file into memory
+                    with open(preview_calibration_path, 'r', encoding='utf-8') as f:
+                        line_count = sum(1 for _ in f)
 
-                    info_msg = f"""**Full File Overview:**
+                    info_msg = f"""**File Information:**
+- **File**: {calibration_selection}
+- **Size**: {file_size_mb:.2f} MB ({file_size:,} bytes)
+- **Lines**: {line_count:,} total lines
+
+*Preview disabled to improve performance. Select "Full file" or "Processed data" to view content.*"""
+
+                    st.markdown(info_msg)
+
+                else:
+                    # Load file content for preview modes
+                    with open(preview_calibration_path, 'r', encoding='utf-8') as f:
+                        full_content = f.read()
+
+                    # Split into lines for chunk calculation
+                    lines = full_content.split('\n')
+                    total_lines = len(lines)
+
+                    if preview_mode == "Full file":
+                        # Show full file info
+                        total_chars = len(full_content)
+                        total_words = len(full_content.split())
+
+                        info_msg = f"""**Full File Overview:**
 - **Lines**: {total_lines:,} total lines
 - **Content**: {total_chars:,} characters, ~{total_words:,} words
 - **File**: {calibration_selection}"""
 
-                    st.markdown(info_msg)
+                        st.markdown(info_msg)
 
-                    # Show entire file with word wrap
-                    st.text_area(
-                        "Content",
-                        value=full_content,
-                        height=400,
-                        disabled=True,
-                        label_visibility="collapsed"
-                    )
+                        # Show entire file with word wrap
+                        st.text_area(
+                            "Content",
+                            value=full_content,
+                            height=400,
+                            disabled=True,
+                            label_visibility="collapsed"
+                        )
 
-                else:  # "Processed data"
-                    # Calculate what will be processed based on settings
-                    from_chunk = int(imatrix_from_chunk_input)
-                    chunks_to_process = int(imatrix_chunks_input)
+                    elif preview_mode == "Processed data":
+                        # Calculate what will be processed based on settings
+                        from_chunk = int(imatrix_from_chunk_input)
+                        chunks_to_process = int(imatrix_chunks_input)
 
-                    # Estimate lines per chunk (llama-imatrix uses context size to determine chunks)
-                    ctx_size = int(imatrix_ctx_input)
-                    # Rough estimate: each chunk processes ~ctx_size tokens, ~1 token per word, ~5 words per line
-                    estimated_lines_per_chunk = max(1, ctx_size // 5)
+                        # Estimate lines per chunk (llama-imatrix uses context size to determine chunks)
+                        ctx_size = int(imatrix_ctx_input)
+                        # Rough estimate: each chunk processes ~ctx_size tokens, ~1 token per word, ~5 words per line
+                        estimated_lines_per_chunk = max(1, ctx_size // 5)
 
-                    if chunks_to_process > 0:
-                        start_line = from_chunk * estimated_lines_per_chunk
-                        end_line = start_line + (chunks_to_process * estimated_lines_per_chunk)
-                        processed_lines = lines[start_line:end_line]
-                        processed_content = '\n'.join(processed_lines)
+                        if chunks_to_process > 0:
+                            start_line = from_chunk * estimated_lines_per_chunk
+                            end_line = start_line + (chunks_to_process * estimated_lines_per_chunk)
+                            processed_lines = lines[start_line:end_line]
+                            processed_content = '\n'.join(processed_lines)
 
-                        # Calculate totals
-                        total_chars = len(processed_content)
-                        total_words = len(processed_content.split())
-                        actual_end_line = min(end_line, total_lines)
+                            # Calculate totals
+                            total_chars = len(processed_content)
+                            total_words = len(processed_content.split())
+                            actual_end_line = min(end_line, total_lines)
 
-                        # Calculate actual chunks we're getting
-                        actual_chunks_shown = len(processed_lines) // estimated_lines_per_chunk
-                        max_chunks_available = (total_lines - start_line) // estimated_lines_per_chunk
+                            # Calculate actual chunks we're getting
+                            actual_chunks_shown = len(processed_lines) // estimated_lines_per_chunk
+                            max_chunks_available = (total_lines - start_line) // estimated_lines_per_chunk
 
-                        # Check if we're showing the whole file
-                        if len(processed_lines) >= total_lines - (from_chunk * estimated_lines_per_chunk):
-                            coverage_note = f"**Note**: Requested {chunks_to_process} chunks but only {max_chunks_available} available - showing all remaining data"
-                        else:
-                            coverage_note = ""
+                            # Check if we're showing the whole file
+                            if len(processed_lines) >= total_lines - (from_chunk * estimated_lines_per_chunk):
+                                coverage_note = f"**Note**: Requested {chunks_to_process} chunks but only {max_chunks_available} available - showing all remaining data"
+                            else:
+                                coverage_note = ""
 
-                        info_msg = f"""**Processed Data Overview:**
+                            info_msg = f"""**Processed Data Overview:**
 - **Lines**: {start_line+1} to {actual_end_line} ({len(processed_lines)} of {total_lines} total)
 - **Chunks**: Showing ~{actual_chunks_shown} chunks of {chunks_to_process} requested (at {estimated_lines_per_chunk} lines/chunk, {ctx_size} ctx size)
 - **Content**: {total_chars:,} characters, ~{total_words:,} words
 - **Skipped**: First {from_chunk} chunks ({from_chunk * estimated_lines_per_chunk} lines)
 
 {coverage_note}"""
-                    else:
-                        # Process all chunks
-                        if from_chunk > 0:
-                            start_line = from_chunk * estimated_lines_per_chunk
-                            processed_lines = lines[start_line:]
-                            processed_content = '\n'.join(processed_lines)
-                            total_chars = len(processed_content)
-                            total_words = len(processed_content.split())
-                            estimated_chunks = len(processed_lines) // estimated_lines_per_chunk
+                        else:
+                            # Process all chunks
+                            if from_chunk > 0:
+                                start_line = from_chunk * estimated_lines_per_chunk
+                                processed_lines = lines[start_line:]
+                                processed_content = '\n'.join(processed_lines)
+                                total_chars = len(processed_content)
+                                total_words = len(processed_content.split())
+                                estimated_chunks = len(processed_lines) // estimated_lines_per_chunk
 
-                            info_msg = f"""**Processed Data Overview:**
+                                info_msg = f"""**Processed Data Overview:**
 - **Lines**: {start_line+1} to {total_lines} ({len(processed_lines)} of {total_lines} total)
 - **Chunks**: ~{estimated_chunks} remaining chunks (at {estimated_lines_per_chunk} lines/chunk)
 - **Content**: {total_chars:,} characters, ~{total_words:,} words
 - **Skipped**: First {from_chunk} chunks ({from_chunk * estimated_lines_per_chunk} lines)"""
-                        else:
-                            processed_content = full_content
-                            total_chars = len(processed_content)
-                            total_words = len(processed_content.split())
-                            estimated_chunks = total_lines // estimated_lines_per_chunk
+                            else:
+                                processed_content = full_content
+                                total_chars = len(processed_content)
+                                total_words = len(processed_content.split())
+                                estimated_chunks = total_lines // estimated_lines_per_chunk
 
-                            info_msg = f"""**Processed Data Overview:**
+                                info_msg = f"""**Processed Data Overview:**
 - **Lines**: All {total_lines} lines
 - **Chunks**: ~{estimated_chunks} total chunks (at {estimated_lines_per_chunk} lines/chunk, {ctx_size} ctx size)
 - **Content**: {total_chars:,} characters, ~{total_words:,} words"""
 
-                    st.markdown(info_msg)
+                        st.markdown(info_msg)
 
-                    # Show processed data with word wrap
-                    st.text_area(
-                        "Content",
-                        value=processed_content,
-                        height=400,
-                        disabled=True,
-                        label_visibility="collapsed"
-                    )
+                        # Show processed data with word wrap
+                        st.text_area(
+                            "Content",
+                            value=processed_content,
+                            height=400,
+                            disabled=True,
+                            label_visibility="collapsed"
+                        )
 
             except Exception as e:
                 st.warning(f"Could not preview calibration file: {e}")
@@ -1287,179 +1307,182 @@ def render_imatrix_settings_tab(converter, config):
 def render_imatrix_stats_tab(converter, config):
     """Render the Imatrix Statistics tab"""
     st.header("Imatrix Statistics")
+
+    # Get verbose setting from config
+    verbose = config.get("verbose", True)
     st.markdown("Analyze existing importance matrix files to view statistics")
 
-    col1, col2 = st.columns(2)
+    st.subheader("Settings")
 
-    with col1:
-        st.subheader("Settings")
-
-        # Output directory to analyze with Browse and Check Folder buttons
-        col_stats_dir, col_stats_dir_browse, col_stats_dir_check = st.columns([4, 1, 1])
-        with col_stats_dir:
-            stats_output_dir = st.text_input(
-                "Output directory to analyze",
-                value=config.get("output_dir", ""),
-                placeholder="E:/Models/output",
-                help="Directory containing imatrix and GGUF files to analyze (uses output directory from Convert & Quantize tab)"
-            )
-        with col_stats_dir_browse:
-            st.markdown("<br>", unsafe_allow_html=True)  # Spacer to align with input + help icon
-            if st.button(
-                "Browse",
-                key="browse_imatrix_output_dir_btn",
-                use_container_width=True,
-                help="Browse for output directory"
-            ):
-                stats_dir_clean = strip_quotes(stats_output_dir)
-                initial_dir = stats_dir_clean if stats_dir_clean and Path(stats_dir_clean).exists() else None
-                selected_folder = browse_folder(initial_dir)
-                if selected_folder:
-                    config["output_dir"] = selected_folder
-                    save_config(config)
-                    st.rerun()
-        with col_stats_dir_check:
-            st.markdown("<br>", unsafe_allow_html=True)  # Spacer to align with input + help icon
+    # Output directory to analyze with Browse and Check Folder buttons
+    col_stats_dir, col_stats_dir_browse, col_stats_dir_check = st.columns([4, 1, 1])
+    with col_stats_dir:
+        stats_output_dir = st.text_input(
+            "Output directory to analyze",
+            value=config.get("output_dir", ""),
+            placeholder="E:/Models/output",
+            help="Directory containing imatrix and GGUF files to analyze (uses output directory from Convert & Quantize tab)"
+        )
+    with col_stats_dir_browse:
+        st.markdown("<br>", unsafe_allow_html=True)  # Spacer to align with input + help icon
+        if st.button(
+            "Browse",
+            key="browse_imatrix_output_dir_btn",
+            use_container_width=True,
+            help="Browse for output directory"
+        ):
             stats_dir_clean = strip_quotes(stats_output_dir)
-            stats_dir_exists = bool(stats_dir_clean and Path(stats_dir_clean).exists())
-            if st.button(
-                "Check Folder",
-                key="check_imatrix_output_dir_btn",
-                use_container_width=True,
-                disabled=not stats_dir_exists,
-                help="Open folder in file explorer" if stats_dir_exists else "Path doesn't exist yet"
-            ):
-                if stats_dir_exists:
-                    try:
-                        open_folder(stats_dir_clean)
-                        st.toast("Opened folder")
-                    except Exception as e:
-                        st.toast(f"Could not open folder: {e}")
-
-        # Strip quotes from path for later use
+            initial_dir = stats_dir_clean if stats_dir_clean and Path(stats_dir_clean).exists() else None
+            selected_folder = browse_folder(initial_dir)
+            if selected_folder:
+                config["output_dir"] = selected_folder
+                save_config(config)
+                st.rerun()
+    with col_stats_dir_check:
+        st.markdown("<br>", unsafe_allow_html=True)  # Spacer to align with input + help icon
         stats_dir_clean = strip_quotes(stats_output_dir)
-
-        # Scan directory for imatrix files
-        imatrix_files = []
-        if stats_dir_clean and Path(stats_dir_clean).exists() and Path(stats_dir_clean).is_dir():
-            imatrix_files = sorted([str(f) for f in Path(stats_dir_clean).glob("*.imatrix")])
-
-        if not imatrix_files:
-            imatrix_files = ["(no .imatrix files found)"]
-
-        # Determine default selection for imatrix file
-        saved_imatrix = config.get("imatrix_stats_path", "")
-        imatrix_default_index = 0
-        if saved_imatrix in imatrix_files:
-            imatrix_default_index = imatrix_files.index(saved_imatrix)
-
-        # Imatrix file dropdown with Update File List button
-        col_imatrix, col_imatrix_btn = st.columns([5, 1])
-        with col_imatrix:
-            imatrix_stats_path = st.selectbox(
-                "Imatrix file to analyze",
-                options=imatrix_files,
-                index=imatrix_default_index,
-                help="Select an imatrix file from the directory above",
-                key=f"imatrix_stats_path_{st.session_state.reset_count}"
-            )
-        with col_imatrix_btn:
-            st.markdown("<br>", unsafe_allow_html=True)  # Spacer to align with selectbox + help icon
-            if st.button(
-                "Refresh File List",
-                key="update_imatrix_files_btn",
-                use_container_width=True,
-                help="Rescan directory for imatrix files"
-            ):
-                st.toast("Updated imatrix file list")
-                st.rerun()
-
-        # Scan directory for GGUF model files
-        gguf_files = []
-        if stats_dir_clean and Path(stats_dir_clean).exists() and Path(stats_dir_clean).is_dir():
-            gguf_files = sorted([str(f) for f in Path(stats_dir_clean).glob("*.gguf")])
-
-        if not gguf_files:
-            gguf_files = ["(no .gguf files found)"]
-
-        # Determine default selection for model file
-        saved_model = config.get("imatrix_stats_model", "")
-        model_default_index = 0
-        if saved_model in gguf_files:
-            model_default_index = gguf_files.index(saved_model)
-
-        # Model path dropdown with Update File List button
-        col_model, col_model_btn = st.columns([5, 1])
-        with col_model:
-            imatrix_stats_model = st.selectbox(
-                "Model path for statistics",
-                options=gguf_files,
-                index=model_default_index,
-                help="Select a GGUF model file from the directory above (required by llama-imatrix for showing statistics)",
-                key=f"imatrix_stats_model_{st.session_state.reset_count}"
-            )
-        with col_model_btn:
-            st.markdown("<br>", unsafe_allow_html=True)  # Spacer to align with selectbox + help icon
-            if st.button(
-                "Refresh File List",
-                key="update_model_files_btn",
-                use_container_width=True,
-                help="Rescan directory for GGUF files"
-            ):
-                st.toast("Updated model file list")
-                st.rerun()
-
-        if st.button("Show Statistics", use_container_width=True, key="show_stats_btn"):
-            # Strip quotes from paths
-            imatrix_stats_path_clean = strip_quotes(imatrix_stats_path)
-            imatrix_stats_model_clean = strip_quotes(imatrix_stats_model)
-
-            if not imatrix_stats_path_clean:
-                st.error("Please provide an imatrix file path")
-            elif not imatrix_stats_model_clean:
-                st.error("Please provide a model path")
-            else:
+        stats_dir_exists = bool(stats_dir_clean and Path(stats_dir_clean).exists())
+        if st.button(
+            "Check Folder",
+            key="check_imatrix_output_dir_btn",
+            use_container_width=True,
+            disabled=not stats_dir_exists,
+            help="Open folder in file explorer" if stats_dir_exists else "Path doesn't exist yet"
+        ):
+            if stats_dir_exists:
                 try:
-                    with st.spinner("Reading imatrix statistics..."):
-                        stats = converter.show_imatrix_statistics(
-                            imatrix_stats_path_clean,
-                            imatrix_stats_model_clean,
-                            verbose=verbose
-                        )
-                    st.session_state.imatrix_stats_result = stats
-                    st.session_state.imatrix_stats_error = None
+                    open_folder(stats_dir_clean)
+                    st.toast("Opened folder")
                 except Exception as e:
-                    st.session_state.imatrix_stats_result = None
-                    st.session_state.imatrix_stats_error = str(e)
+                    st.toast(f"Could not open folder: {e}")
 
-        # Show info/error messages below the button
-        if 'imatrix_stats_error' in st.session_state and st.session_state.imatrix_stats_error:
-            st.error(f"Error: {st.session_state.imatrix_stats_error}")
-            if verbose:
-                st.exception(st.session_state.imatrix_stats_error)
-        elif 'imatrix_stats_result' in st.session_state and st.session_state.imatrix_stats_result:
-            st.success("Statistics generated!")
-        elif 'imatrix_stats_result' not in st.session_state or not st.session_state.imatrix_stats_result:
-            st.info("Click 'Show Statistics' to analyze an imatrix file")
+    # Strip quotes from path for later use
+    stats_dir_clean = strip_quotes(stats_output_dir)
 
-    with col2:
-        st.subheader("Statistics Output")
+    # Scan directory for imatrix files
+    imatrix_files = []
+    if stats_dir_clean and Path(stats_dir_clean).exists() and Path(stats_dir_clean).is_dir():
+        imatrix_files = sorted([str(f) for f in Path(stats_dir_clean).glob("*.imatrix")])
 
-        # Display results if available
-        if 'imatrix_stats_result' in st.session_state and st.session_state.imatrix_stats_result:
-            # Add horizontal scroll for wide statistics output
-            st.markdown("""
-                <style>
-                .stats-output pre {
-                    overflow-x: auto;
-                    white-space: pre;
-                }
-                </style>
-            """, unsafe_allow_html=True)
+    if not imatrix_files:
+        imatrix_files = ["(no .imatrix files found)"]
 
-            st.markdown('<div class="stats-output">', unsafe_allow_html=True)
-            st.code(st.session_state.imatrix_stats_result, language=None)
-            st.markdown('</div>', unsafe_allow_html=True)
+    # Determine default selection for imatrix file
+    saved_imatrix = config.get("imatrix_stats_path", "")
+    imatrix_default_index = 0
+    if saved_imatrix in imatrix_files:
+        imatrix_default_index = imatrix_files.index(saved_imatrix)
+
+    # Imatrix file dropdown with Update File List button
+    col_imatrix, col_imatrix_btn = st.columns([5, 1])
+    with col_imatrix:
+        imatrix_stats_path = st.selectbox(
+            "Imatrix file to analyze",
+            options=imatrix_files,
+            index=imatrix_default_index,
+            help="Select an imatrix file from the directory above",
+            key=f"imatrix_stats_path_{st.session_state.reset_count}"
+        )
+    with col_imatrix_btn:
+        st.markdown("<br>", unsafe_allow_html=True)  # Spacer to align with selectbox + help icon
+        if st.button(
+            "Refresh File List",
+            key="update_imatrix_files_btn",
+            use_container_width=True,
+            help="Rescan directory for imatrix files"
+        ):
+            st.toast("Updated imatrix file list")
+            st.rerun()
+
+    # Scan directory for GGUF model files
+    gguf_files = []
+    if stats_dir_clean and Path(stats_dir_clean).exists() and Path(stats_dir_clean).is_dir():
+        gguf_files = sorted([str(f) for f in Path(stats_dir_clean).glob("*.gguf")])
+
+    if not gguf_files:
+        gguf_files = ["(no .gguf files found)"]
+
+    # Determine default selection for model file
+    saved_model = config.get("imatrix_stats_model", "")
+    model_default_index = 0
+    if saved_model in gguf_files:
+        model_default_index = gguf_files.index(saved_model)
+
+    # Model path dropdown with Update File List button
+    col_model, col_model_btn = st.columns([5, 1])
+    with col_model:
+        imatrix_stats_model = st.selectbox(
+            "Model path for statistics",
+            options=gguf_files,
+            index=model_default_index,
+            help="Select a GGUF model file from the directory above (required by llama-imatrix for showing statistics)",
+            key=f"imatrix_stats_model_{st.session_state.reset_count}"
+        )
+    with col_model_btn:
+        st.markdown("<br>", unsafe_allow_html=True)  # Spacer to align with selectbox + help icon
+        if st.button(
+            "Refresh File List",
+            key="update_model_files_btn",
+            use_container_width=True,
+            help="Rescan directory for GGUF files"
+        ):
+            st.toast("Updated model file list")
+            st.rerun()
+
+    if st.button("Show Statistics", use_container_width=True, key="show_stats_btn"):
+        # Strip quotes from paths
+        imatrix_stats_path_clean = strip_quotes(imatrix_stats_path)
+        imatrix_stats_model_clean = strip_quotes(imatrix_stats_model)
+
+        if not imatrix_stats_path_clean:
+            st.error("Please provide an imatrix file path")
+        elif not imatrix_stats_model_clean:
+            st.error("Please provide a model path")
+        else:
+            try:
+                with st.spinner("Reading imatrix statistics..."):
+                    stats = converter.show_imatrix_statistics(
+                        imatrix_stats_path_clean,
+                        imatrix_stats_model_clean,
+                        verbose=verbose
+                    )
+                st.session_state.imatrix_stats_result = stats
+                st.session_state.imatrix_stats_error = None
+            except Exception as e:
+                st.session_state.imatrix_stats_result = None
+                st.session_state.imatrix_stats_error = str(e)
+
+    # Show info/error messages below the button
+    if 'imatrix_stats_error' in st.session_state and st.session_state.imatrix_stats_error:
+        st.error(f"Error: {st.session_state.imatrix_stats_error}")
+        if verbose:
+            st.exception(st.session_state.imatrix_stats_error)
+    elif 'imatrix_stats_result' in st.session_state and st.session_state.imatrix_stats_result:
+        st.success("Statistics generated!")
+    elif 'imatrix_stats_result' not in st.session_state or not st.session_state.imatrix_stats_result:
+        st.info("Click 'Show Statistics' to analyze an imatrix file")
+
+    st.markdown("---")
+
+    st.subheader("Statistics Output")
+
+    # Display results if available
+    if 'imatrix_stats_result' in st.session_state and st.session_state.imatrix_stats_result:
+        # Add horizontal scroll for wide statistics output
+        st.markdown("""
+            <style>
+            .stats-output pre {
+                overflow-x: auto;
+                white-space: pre;
+            }
+            </style>
+        """, unsafe_allow_html=True)
+
+        st.markdown('<div class="stats-output">', unsafe_allow_html=True)
+        st.code(st.session_state.imatrix_stats_result, language=None)
+        st.markdown('</div>', unsafe_allow_html=True)
+    else:
+        st.info("Statistics will appear here after you click 'Show Statistics'")
 
 
 
@@ -1627,8 +1650,9 @@ def render_info_tab(converter, config):
     2. **Imatrix Settings** - Configure calibration data and processing settings
     3. **Imatrix Statistics** - Analyze existing imatrix files
     4. **HuggingFace Downloader** - Download models from HuggingFace
-    5. **Info** - This tab
-    6. **Update** - Update application, dependencies, and binaries
+    5. **llama.cpp** - Configure and manage llama.cpp binaries
+    6. **Info** - This tab
+    7. **Update** - Update application and dependencies
 
     **Settings:**
     - Your settings are automatically saved as you change them
@@ -1698,6 +1722,194 @@ def render_info_tab(converter, config):
 
 
 
+def render_llama_cpp_tab(converter, config):
+    """Render the llama.cpp tab"""
+    st.header("llama.cpp Binaries")
+
+    st.markdown("""
+    By default, YaGUFF automatically downloads pre-compiled llama.cpp binaries that use the CPU (good for most cases).
+    """)
+
+    # Binary Settings Section
+    col_bin1, col_bin2 = st.columns(2)
+    with col_bin1:
+        st.subheader("Local/Custom Binary Settings")
+        # Auto-save callback for use_custom_binaries
+        def save_use_custom_binaries():
+            config["use_custom_binaries"] = st.session_state.use_custom_binaries_checkbox_update
+            save_config(config)
+            # Reinitialize converter with new settings
+            if config.get("use_custom_binaries", False):
+                custom_folder = config.get("custom_binaries_folder", "")
+                from .converter import GGUFConverter
+                st.session_state.converter = GGUFConverter(custom_binaries_folder=custom_folder)
+            else:
+                from .converter import GGUFConverter
+                st.session_state.converter = GGUFConverter()
+
+        use_custom_binaries = st.checkbox(
+            "Use local/custom binaries",
+            value=config.get("use_custom_binaries", False),
+            help="Use local or system llama.cpp binaries instead of YaGUFF's auto-downloaded ones. Leave path blank to use system PATH.",
+            key="use_custom_binaries_checkbox_update",
+            on_change=save_use_custom_binaries
+        )
+
+        st.markdown("**Binaries Folder Path** (leave blank for system PATH):")
+
+        # Single folder path with Browse and Check Folder buttons
+        col_folder, col_browse, col_check = st.columns([4, 1, 1])
+        with col_folder:
+            binaries_folder = st.text_input(
+                "llama.cpp binaries folder",
+                value=config.get("custom_binaries_folder", ""),
+                placeholder="D:/llama.cpp/build/bin or leave blank for PATH",
+                help="Path to folder containing llama-quantize and llama-imatrix. Leave blank to use system PATH.",
+                key="custom_binaries_folder_input_update",
+                label_visibility="collapsed",
+                disabled=not use_custom_binaries
+            )
+        with col_browse:
+            if st.button(
+                "Browse",
+                key="browse_binaries_folder_btn",
+                use_container_width=True,
+                help="Browse for binaries folder",
+                disabled=not use_custom_binaries
+            ):
+                binaries_folder_clean = strip_quotes(binaries_folder)
+                initial_dir = binaries_folder_clean if binaries_folder_clean and Path(binaries_folder_clean).exists() else None
+                selected_folder = browse_folder(initial_dir)
+                if selected_folder:
+                    config["custom_binaries_folder"] = selected_folder
+                    save_config(config)
+                    # Reinitialize converter
+                    from .converter import GGUFConverter
+                    st.session_state.converter = GGUFConverter(custom_binaries_folder=selected_folder)
+                    st.rerun()
+        with col_check:
+            binaries_folder_clean = strip_quotes(binaries_folder)
+            binaries_folder_exists = bool(binaries_folder_clean and Path(binaries_folder_clean).exists())
+            if st.button(
+                "Check Folder",
+                key="check_binaries_folder_btn",
+                use_container_width=True,
+                disabled=not use_custom_binaries or not binaries_folder_exists,
+                help="Open folder in file explorer" if binaries_folder_exists else "Path doesn't exist yet"
+            ):
+                if binaries_folder_exists:
+                    try:
+                        open_folder(binaries_folder_clean)
+                        st.toast("Opened folder")
+                    except Exception as e:
+                        st.toast(f"Could not open folder: {e}")
+
+        # Save changes to folder path (only if enabled)
+        if use_custom_binaries and binaries_folder != config.get("custom_binaries_folder", ""):
+            config["custom_binaries_folder"] = binaries_folder
+            save_config(config)
+            # Reinitialize converter with new folder
+            from .converter import GGUFConverter
+            st.session_state.converter = GGUFConverter(custom_binaries_folder=binaries_folder)
+
+        # Show help text below folder path
+        st.markdown("""
+        Enable local/custom binaries if you want to:
+        - Use a custom-compiled llama.cpp with GPU support (CUDA/ROCm/Metal/Vulkan)
+        - Use binaries from your system PATH
+        - Use a specific llama.cpp version
+
+        **Note:** Custom binaries with GPU support are required for GPU offloading in imatrix generation (see Imatrix Settings tab).
+        """)
+
+    with col_bin2:
+        st.subheader("Local/Custom Binary Detection")
+
+        # If custom binaries enabled, show system/custom binary info
+        if config.get("use_custom_binaries", False):
+            custom_folder = config.get("custom_binaries_folder", "")
+
+            # Check which binaries are found
+            quantize_found = False
+            imatrix_found = False
+            quantize_path = None
+            imatrix_path = None
+
+            try:
+                quantize_path = st.session_state.converter.binary_manager.get_quantize_path()
+                quantize_found = quantize_path.exists()
+            except:
+                pass
+
+            try:
+                imatrix_path = st.session_state.converter.binary_manager.get_imatrix_path()
+                imatrix_found = imatrix_path.exists()
+            except:
+                pass
+
+            if custom_folder:
+                st.info(f"Looking in: `{custom_folder}`")
+            else:
+                st.info("Looking in system PATH")
+
+            # Show found binaries
+            if quantize_found and imatrix_found:
+                st.success("All required binaries found")
+                st.markdown(f"- `llama-quantize`: {quantize_path}")
+                st.markdown(f"- `llama-imatrix`: {imatrix_path}")
+            elif quantize_found or imatrix_found:
+                st.warning("Some binaries missing")
+                if quantize_found:
+                    st.markdown(f"- `llama-quantize`: {quantize_path}")
+                else:
+                    st.markdown("- `llama-quantize`: Not found")
+                if imatrix_found:
+                    st.markdown(f"- `llama-imatrix`: {imatrix_path}")
+                else:
+                    st.markdown("- `llama-imatrix`: Not found")
+            else:
+                st.error("No binaries found")
+                st.markdown("- `llama-quantize`: Not found")
+                st.markdown("- `llama-imatrix`: Not found")
+        else:
+            st.info("Disabled - Using YaGUFF binaries")
+
+    st.markdown("---")
+
+    col3, col4 = st.columns(2)
+    with col3:
+        st.subheader("Update YaGUFF Binaries")
+        st.markdown("Force a re-download of the `llama.cpp` binaries that come with YaGUFF. This is useful if the binaries are corrupted or to ensure you have the version matching the application.")
+        
+        if st.button("Force Binary Update"):
+            output_container = st.empty()
+            output_container.code("Starting binary update...\nThis may take a moment.", language='bash')
+            
+            f = io.StringIO()
+            with redirect_stdout(f):
+                try:
+                    st.session_state.converter.binary_manager.download_binaries(force=True)
+                    st.toast("Binaries updated successfully!")
+                except Exception as e:
+                    print(f"\n--- An error occurred ---\n{str(e)}")
+                    st.toast(f"An error occurred during binary update: {e}")
+            
+            output = f.getvalue()
+            output_container.code(output, language='bash')
+    with col4:
+        st.subheader("YaGUFF Binary Information")
+        binary_info = get_binary_version(st.session_state.converter)
+        if binary_info["status"] == "ok":
+            st.success(binary_info['message'])
+            if binary_info["version"]:
+                st.code(binary_info["version"], language=None)
+        elif binary_info["status"] == "missing":
+            st.warning(binary_info['message'])
+        else:
+            st.error(binary_info['message'])
+        st.markdown("[llama.cpp on GitHub](https://github.com/ggerganov/llama.cpp)")
+
+
 def render_update_tab(converter, config):
     """Render the Update tab"""
     st.header("Update")
@@ -1716,50 +1928,15 @@ def render_update_tab(converter, config):
 
     st.markdown("---")
 
+    st.subheader("Dependencies")
     col3, col4 = st.columns(2)
     with col3:
-        st.subheader("Update Binaries")
-        st.markdown("Force a re-download of the `llama.cpp` binaries. This is useful if the binaries are corrupted or to ensure you have the version matching the application.")
-        
-        if st.button("Force Binary Update"):
-            output_container = st.empty()
-            output_container.code("Starting binary update...\nThis may take a moment.", language='bash')
-            
-            f = io.StringIO()
-            with redirect_stdout(f):
-                try:
-                    st.session_state.converter.binary_manager.download_binaries(force=True)
-                    st.toast("Binaries updated successfully!")
-                except Exception as e:
-                    print(f"\n--- An error occurred ---\n{str(e)}")
-                    st.toast(f"An error occurred during binary update: {e}")
-            
-            output = f.getvalue()
-            output_container.code(output, language='bash')
-    with col4:
-        st.subheader("Binary Information")
-        binary_info = get_binary_version(st.session_state.converter)
-        if binary_info["status"] == "ok":
-            st.success(binary_info['message'])
-            if binary_info["version"]:
-                st.code(binary_info["version"], language=None)
-        elif binary_info["status"] == "missing":
-            st.warning(binary_info['message'])
-        else:
-            st.error(binary_info['message'])
-        st.markdown("[llama.cpp on GitHub](https://github.com/ggerganov/llama.cpp)")
-
-    st.markdown("---")
-
-    st.subheader("Dependencies")
-    col5, col6 = st.columns(2)
-    with col5:
         st.markdown("Update Python dependencies from `requirements.txt`.")
         if st.button("Update Dependencies"):
             venv_py = sys.executable
             run_and_stream_command([venv_py, "-m", "pip", "install", "--upgrade", "-r", "requirements.txt"])
 
-    with col6:
+    with col4:
         try:
             req_path = Path(__file__).parent.parent / "requirements.txt"
             if req_path.exists():

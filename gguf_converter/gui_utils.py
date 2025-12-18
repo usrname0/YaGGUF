@@ -65,8 +65,7 @@ def get_default_config():
 
         # Custom binaries
         "use_custom_binaries": False,
-        "custom_quantize_path": "",
-        "custom_imatrix_path": ""
+        "custom_binaries_folder": ""
     }
 
 
