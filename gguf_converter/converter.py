@@ -16,6 +16,17 @@ from .binary_manager import BinaryManager
 # Initialize colorama for cross-platform color support
 colorama_init(autoreset=True)
 
+# Theme for terminal colors
+theme = {
+    "info": Fore.YELLOW,
+    "success": Fore.CYAN,
+    "warning": Fore.YELLOW,
+    "error": Fore.RED,
+    "highlight": Fore.CYAN,
+    "metadata": Fore.YELLOW,
+}
+
+
 
 class GGUFConverter:
     """
@@ -99,7 +110,7 @@ class GGUFConverter:
         output_dir = Path(output_dir)
         output_dir.mkdir(parents=True, exist_ok=True)
 
-        print(f"Downloading {repo_id} from HuggingFace...")
+        print(f"{theme['info']}Downloading {repo_id} from HuggingFace...{Style.RESET_ALL}")
         model_path = snapshot_download(
             repo_id=repo_id,
             local_dir=output_dir / Path(repo_id).name,
@@ -164,11 +175,11 @@ class GGUFConverter:
 
         # Check if model requires special handling
         if self._is_ministral3_model(model_path):
-            print(f"Detected Ministral-3 model, using --mistral-format flag")
+            print(f"{theme['info']}Detected Ministral-3 model, using --mistral-format flag{Style.RESET_ALL}")
             cmd.append("--mistral-format")
 
-        print(f"{Fore.YELLOW}Converting {model_path.name} to GGUF format...{Style.RESET_ALL}")
-        print(f"Command: {' '.join(cmd)}")
+        print(f"{theme['info']}Converting {model_path.name} to GGUF format...{Style.RESET_ALL}")
+        print(f"{theme['highlight']}Command: {' '.join(cmd)}{Style.RESET_ALL}")
 
         result = subprocess.run(cmd, capture_output=not verbose, text=True)
 
@@ -181,7 +192,7 @@ class GGUFConverter:
         if verbose and result.stdout:
             print(result.stdout)
 
-        print(f"{Fore.GREEN}Conversion complete: {output_path}{Style.RESET_ALL}")
+        print(f"{theme['success']}Conversion complete: {output_path}{Style.RESET_ALL}")
         return output_path
 
     def _is_ministral3_model(self, model_path: Path) -> bool:
@@ -345,12 +356,12 @@ class GGUFConverter:
         if not llama_cpp_dir.exists() or not convert_script.exists():
             # Remove old repo if it exists but is incomplete
             if llama_cpp_dir.exists():
-                print(f"Removing incomplete llama.cpp repository...")
+                print(f"{theme['info']}Removing incomplete llama.cpp repository...{Style.RESET_ALL}")
                 shutil.rmtree(llama_cpp_dir)
 
             # Clone fresh copy
             expected_version = self.binary_manager.LLAMA_CPP_VERSION
-            print(f"Cloning llama.cpp repository (version {expected_version})...")
+            print(f"{theme['info']}Cloning llama.cpp repository (version {expected_version})...{Style.RESET_ALL}")
             try:
                 subprocess.run([
                     "git", "clone",
@@ -362,7 +373,7 @@ class GGUFConverter:
                 # Write version file for tracking
                 version_file = llama_cpp_dir / "REPO_VERSION"
                 version_file.write_text(expected_version)
-                print(f"llama.cpp repository ready (version {expected_version})")
+                print(f"{theme['success']}llama.cpp repository ready (version {expected_version}){Style.RESET_ALL}")
             except subprocess.CalledProcessError as e:
                 raise RuntimeError(
                     f"Failed to clone llama.cpp repository: {e.stderr if e.stderr else str(e)}\n"
@@ -448,7 +459,7 @@ class GGUFConverter:
         # Ensure output directory exists
         output_path.parent.mkdir(parents=True, exist_ok=True)
 
-        print(f"{Fore.YELLOW}Quantizing {input_path.name} to {quantization_type}...{Style.RESET_ALL}")
+        print(f"{theme['info']}Quantizing {input_path.name} to {quantization_type}...{Style.RESET_ALL}")
 
         import time
         start_time = time.time()
@@ -480,7 +491,7 @@ class GGUFConverter:
                 raise FileNotFoundError(f"Imatrix file not found: {imatrix_path}")
             cmd.extend(["--imatrix", str(imatrix_path)])
 
-        print(f"{Fore.CYAN}Running: {' '.join(cmd)}{Style.RESET_ALL}")
+        print(f"{theme['highlight']}Running: {' '.join(cmd)}{Style.RESET_ALL}")
         print()
 
         # Run llama-quantize
@@ -528,9 +539,9 @@ class GGUFConverter:
             output_size = output_path.stat().st_size / (1024**3)
             ratio = input_size / output_size if output_size > 0 else 0
 
-            print(f"\n{Fore.GREEN}Quantization complete: {output_path}{Style.RESET_ALL}")
-            print(f"{Fore.MAGENTA}Time taken: {elapsed:.2f}s ({elapsed/60:.2f} minutes){Style.RESET_ALL}")
-            print(f"{Fore.MAGENTA}Size: {input_size:.2f} GB -> {output_size:.2f} GB ({ratio:.2f}x compression){Style.RESET_ALL}")
+            print(f"\n{theme['success']}Quantization complete: {output_path}{Style.RESET_ALL}")
+            print(f"{theme['metadata']}Time taken: {elapsed:.2f}s ({elapsed/60:.2f} minutes){Style.RESET_ALL}")
+            print(f"{theme['metadata']}Size: {input_size:.2f} GB -> {output_size:.2f} GB ({ratio:.2f}x compression){Style.RESET_ALL}")
         else:
             raise RuntimeError("Quantization appeared to succeed but output file not found")
 
@@ -589,8 +600,8 @@ class GGUFConverter:
         # Ensure output directory exists
         output_path.parent.mkdir(parents=True, exist_ok=True)
 
-        print(f"{Fore.YELLOW}Generating importance matrix for {model_path.name}...{Style.RESET_ALL}")
-        print(f"{Fore.YELLOW}This may take a while...{Style.RESET_ALL}")
+        print(f"{theme['info']}Generating importance matrix for {model_path.name}...{Style.RESET_ALL}")
+        print(f"{theme['info']}This may take a while...{Style.RESET_ALL}")
 
         import time
         start_time = time.time()
@@ -643,7 +654,7 @@ class GGUFConverter:
         # Newer llama-quantize versions expect GGUF format, not DAT
         cmd.extend(["--output-format", "gguf"])
 
-        print(f"{Fore.CYAN}Running: {' '.join(cmd)}{Style.RESET_ALL}")
+        print(f"{theme['highlight']}Running: {' '.join(cmd)}{Style.RESET_ALL}")
         print()
 
         # Run llama-imatrix
@@ -666,8 +677,8 @@ class GGUFConverter:
 
         # Print summary
         if output_path.exists():
-            print(f"\n{Fore.GREEN}Imatrix generation complete: {output_path}{Style.RESET_ALL}")
-            print(f"{Fore.MAGENTA}Time taken: {elapsed:.2f}s ({elapsed/60:.2f} minutes){Style.RESET_ALL}")
+            print(f"\n{theme['success']}Imatrix generation complete: {output_path}{Style.RESET_ALL}")
+            print(f"{theme['metadata']}Time taken: {elapsed:.2f}s ({elapsed/60:.2f} minutes){Style.RESET_ALL}")
         else:
             raise RuntimeError("Imatrix generation appeared to succeed but output file not found")
 
@@ -710,7 +721,7 @@ class GGUFConverter:
         ]
 
         if verbose:
-            print(f"\nRunning: {' '.join(cmd)}\n", flush=True)
+            print(f"\n{theme['highlight']}Running: {' '.join(cmd)}\n{Style.RESET_ALL}", flush=True)
 
         try:
             if verbose:
@@ -816,7 +827,7 @@ class GGUFConverter:
 
         # Check if it's a HuggingFace repo ID (before Path conversion changes the separators)
         if not model_path.exists() and "/" in model_path_str:
-            print(f"Downloading from HuggingFace: {model_path_str}")
+            print(f"{theme['info']}Downloading from HuggingFace: {model_path_str}{Style.RESET_ALL}")
             model_path = self.download_model(model_path_str, output_dir / "downloads")
 
         # Validate model path is a source model directory with config.json
@@ -840,21 +851,21 @@ class GGUFConverter:
                 original_types = quantization_types.copy()
                 quantization_types = [q for q in quantization_types if q not in incompatible]
 
-                print(f"\n{Fore.YELLOW}WARNING: Model incompatibility detected!{Style.RESET_ALL}")
-                print(f"{Fore.YELLOW}Detected issues: {', '.join(incompat_info['types'])}{Style.RESET_ALL}")
-                print(f"\n{Fore.YELLOW}Incompatible quantizations requested:{Style.RESET_ALL}")
+                print(f"\n{theme['warning']}WARNING: Model incompatibility detected!{Style.RESET_ALL}")
+                print(f"{theme['warning']}Detected issues: {', '.join(incompat_info['types'])}{Style.RESET_ALL}")
+                print(f"\n{theme['warning']}Incompatible quantizations requested:{Style.RESET_ALL}")
                 print(f"  {', '.join(requested_incompatible)}")
 
-                print(f"\n{Fore.YELLOW}Reason:{Style.RESET_ALL}")
+                print(f"\n{theme['warning']}Reason:{Style.RESET_ALL}")
                 for reason in incompat_info["reasons"]:
                     print(f"  - {reason}")
 
-                print(f"\n{Fore.CYAN}Recommended alternatives:{Style.RESET_ALL}")
+                print(f"\n{theme['highlight']}Recommended alternatives:{Style.RESET_ALL}")
                 for alt in incompat_info["alternatives"]:
                     print(f"  - {alt}")
 
                 if quantization_types:
-                    print(f"\n{Fore.GREEN}Continuing with compatible quantizations: {', '.join(quantization_types)}{Style.RESET_ALL}")
+                    print(f"\n{theme['success']}Continuing with compatible quantizations: {', '.join(quantization_types)}{Style.RESET_ALL}")
                 else:
                     raise ValueError(
                         f"All requested quantizations are incompatible with this model.\n"
@@ -868,12 +879,12 @@ class GGUFConverter:
             requested_incompatible = [q for q in quantization_types if q in incompatible]
 
             if requested_incompatible:
-                print(f"\n{Fore.YELLOW}⚠ WARNING: Incompatibility override enabled!{Style.RESET_ALL}")
-                print(f"{Fore.YELLOW}Detected issues: {', '.join(incompat_info['types'])}{Style.RESET_ALL}")
-                print(f"\n{Fore.RED}These quantizations are likely to FAIL:{Style.RESET_ALL}")
+                print(f"\n{theme['warning']}WARNING: Incompatibility override enabled!{Style.RESET_ALL}")
+                print(f"{theme['warning']}Detected issues: {', '.join(incompat_info['types'])}{Style.RESET_ALL}")
+                print(f"\n{theme['error']}These quantizations are likely to FAIL:{Style.RESET_ALL}")
                 print(f"  {', '.join(requested_incompatible)}")
-                print(f"\n{Fore.YELLOW}Proceeding anyway as requested (ignore_incompatibilities=True){Style.RESET_ALL}")
-                print(f"{Fore.CYAN}If conversion fails, use: {', '.join(incompat_info['alternatives'])}{Style.RESET_ALL}")
+                print(f"\n{theme['warning']}Proceeding anyway as requested (ignore_incompatibilities=True){Style.RESET_ALL}")
+                print(f"{theme['highlight']}If conversion fails, use: {', '.join(incompat_info['alternatives'])}{Style.RESET_ALL}")
 
         is_already_gguf = False
         model_name = model_path.name
@@ -883,10 +894,10 @@ class GGUFConverter:
 
         # Check if intermediate file already exists
         if intermediate_file.exists():
-            print(f"Intermediate file already exists: {intermediate_file.name}")
-            print("Skipping conversion, using existing file...")
+            print(f"{theme['info']}Intermediate file already exists: {intermediate_file.name}{Style.RESET_ALL}")
+            print(f"{theme['info']}Skipping conversion, using existing file...{Style.RESET_ALL}")
         else:
-            print(f"Converting {model_name} to GGUF...")
+            print(f"{theme['info']}Converting {model_name} to GGUF...{Style.RESET_ALL}")
             self.convert_to_gguf(
                 model_path=model_path,
                 output_path=intermediate_file,
@@ -905,18 +916,18 @@ class GGUFConverter:
             # Always generate fresh imatrix (overwrite if exists)
             # If user wants to reuse, they should use the "Reuse existing" option instead
             if imatrix_file.exists():
-                print(f"Importance matrix already exists: {imatrix_file.name}")
-                print("Overwriting with fresh generation...")
+                print(f"{theme['info']}Importance matrix already exists: {imatrix_file.name}{Style.RESET_ALL}")
+                print(f"{theme['info']}Overwriting with fresh generation...{Style.RESET_ALL}")
 
-            print(f"Generating importance matrix for {model_name}...")
+            print(f"{theme['info']}Generating importance matrix for {model_name}...{Style.RESET_ALL}")
 
             # Determine calibration file to use
             calibration_file = None
             if imatrix_calibration_file:
                 calibration_file = Path(imatrix_calibration_file)
                 if not calibration_file.exists():
-                    print(f"Warning: Specified calibration file not found: {calibration_file}")
-                    print("Falling back to default calibration file...")
+                    print(f"{theme['warning']}Warning: Specified calibration file not found: {calibration_file}{Style.RESET_ALL}")
+                    print(f"{theme['warning']}Falling back to default calibration file...{Style.RESET_ALL}")
                     calibration_file = None
 
             # Use default if no file specified or if specified file doesn't exist
@@ -926,7 +937,7 @@ class GGUFConverter:
                 calibration_file = project_root / "calibration_data" / "_default.txt"
 
                 if not calibration_file.exists():
-                    print("Warning: _default.txt not found in calibration_data folder, using built-in calibration data")
+                    print(f"{theme['warning']}Warning: _default.txt not found in calibration_data folder, using built-in calibration data{Style.RESET_ALL}")
                     calibration_file = None
 
             self.generate_imatrix(
@@ -953,16 +964,16 @@ class GGUFConverter:
             if quant_type.upper() in ["F16", "F32", "BF16"]:
                 # Check if this is the intermediate format
                 if quant_type.upper() == intermediate_type.upper():
-                    print(f"{quant_type} is the intermediate format (already created above)")
+                    print(f"{theme['info']}{quant_type} is the intermediate format (already created above){Style.RESET_ALL}")
                     quantized_files.append(intermediate_file)
                 # Check if output already exists
                 elif output_file.exists():
-                    print(f"{quant_type} file already exists: {output_file.name}")
-                    print("Skipping conversion, using existing file...")
+                    print(f"{theme['info']}{quant_type} file already exists: {output_file.name}{Style.RESET_ALL}")
+                    print(f"{theme['info']}Skipping conversion, using existing file...{Style.RESET_ALL}")
                     quantized_files.append(output_file)
                 # Generate from source
                 else:
-                    print(f"Converting {model_name} to {quant_type} from source...")
+                    print(f"{theme['info']}Converting {model_name} to {quant_type} from source...{Style.RESET_ALL}")
                     self.convert_to_gguf(
                         model_path=model_path,
                         output_path=output_file,
