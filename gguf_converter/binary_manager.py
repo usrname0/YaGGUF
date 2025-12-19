@@ -18,10 +18,7 @@ class BinaryManager:
     Manages llama.cpp binary downloads and locations
     """
 
-    # Pin to specific llama.cpp release for stability
-    LLAMA_CPP_VERSION = "b7364"  # Update this when upgrading
-
-    # GitHub release URL template (using ggml-org, not ggerganov)
+    LLAMA_CPP_VERSION = "b7364"
     RELEASE_URL_TEMPLATE = "https://github.com/ggml-org/llama.cpp/releases/download/{tag}/{filename}"
 
     def __init__(self, bin_dir: Optional[Path] = None, custom_binaries_folder: Optional[str] = None):
@@ -35,7 +32,6 @@ class BinaryManager:
                                    If None, will use auto-downloaded binaries.
         """
         if bin_dir is None:
-            # Use project root bin directory
             project_root = Path(__file__).parent.parent
             bin_dir = project_root / "bin"
 
@@ -55,7 +51,6 @@ class BinaryManager:
         system = platform.system().lower()
         machine = platform.machine().lower()
 
-        # Normalize architecture names
         if machine in ('x86_64', 'amd64', 'x64'):
             arch = 'x64'
         elif machine in ('arm64', 'aarch64'):
@@ -63,23 +58,18 @@ class BinaryManager:
         else:
             raise RuntimeError(f"Unsupported architecture: {machine}")
 
-        # Build filename based on platform
-        # Format: llama-{version}-bin-{os}-{type}-{arch}.zip
         if system == 'windows':
-            # Windows CPU-only builds: llama-b7222-bin-win-cpu-x64.zip
             os_name = 'win'
             build_type = 'cpu'
-            variant = arch  # For Windows, variant is the architecture
+            variant = arch
             ext = 'zip'
             filename = f"llama-{self.LLAMA_CPP_VERSION}-bin-{os_name}-{build_type}-{arch}.{ext}"
         elif system == 'linux':
-            # Linux builds: llama-b7222-bin-ubuntu-x64.zip
             os_name = 'ubuntu'
             variant = arch
             ext = 'zip'
             filename = f"llama-{self.LLAMA_CPP_VERSION}-bin-{os_name}-{variant}.{ext}"
         elif system == 'darwin':
-            # macOS builds: llama-b7222-bin-macos-arm64.zip or llama-b7222-bin-macos-x64.zip
             os_name = 'macos'
             variant = arch
             ext = 'zip'
@@ -116,13 +106,11 @@ class BinaryManager:
         Returns:
             Path to bin directory containing executables
         """
-        # Check if binaries already exist
         if not force and self._binaries_exist():
             print(f"Binaries already exist in {self.bin_dir}")
             return self.bin_dir
 
-        # Build download URL
-        tag = self.LLAMA_CPP_VERSION  # Version already includes 'b' prefix
+        tag = self.LLAMA_CPP_VERSION
         filename = self.platform_info['filename']
         url = self.RELEASE_URL_TEMPLATE.format(tag=tag, filename=filename)
 

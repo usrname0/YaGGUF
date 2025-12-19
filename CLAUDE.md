@@ -18,15 +18,11 @@ User-friendly GGUF converter that shields users from llama.cpp complexity - no m
 - All quantization types supported by llama.cpp
 - Clear error messages and progress tracking
 
-**CLI** (`gguf_converter/cli.py`):
-- Command-line interface for automation
-- Batch quantization (multiple types at once)
-- Auto-runs setup scripts if needed
-
 **GUI** (`gguf_converter/gui.py`):
-- Streamlit web interface
+- Streamlit web interface for all user interactions
 - Persistent settings
 - Auto-runs setup on first launch
+- Multi-tab interface for conversion, imatrix, downloads, and configuration
 
 **Setup Scripts**:
 - `setup_windows.bat` / `setup_linux.sh` - One-click setup

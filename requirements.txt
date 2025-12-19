@@ -2,6 +2,7 @@
 
 streamlit>=1.30.0 # GUI
 huggingface-hub>=0.36.0
+colorama>=0.4.6 # Colored terminal output (cross-platform)
 
 # For model conversion (llama.cpp convert_hf_to_gguf.py script)
 transformers>=4.57.0

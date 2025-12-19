@@ -10,7 +10,11 @@ import json
 from pathlib import Path
 from typing import Optional, Union, List
 from huggingface_hub import snapshot_download
+from colorama import Fore, Style, init as colorama_init
 from .binary_manager import BinaryManager
+
+# Initialize colorama for cross-platform color support
+colorama_init(autoreset=True)
 
 
 class GGUFConverter:
@@ -19,7 +23,6 @@ class GGUFConverter:
     No C++ compilation required - binaries are auto-downloaded
     """
 
-    # Supported quantization types (from llama.cpp)
     QUANTIZATION_TYPES = [
         "Q4_0", "Q4_1", "Q5_0", "Q5_1", "Q8_0",
         "Q2_K", "Q2_K_S",
@@ -34,7 +37,6 @@ class GGUFConverter:
     ]
 
     # Model incompatibility registry
-    # Add new model types and their incompatibilities here
     MODEL_INCOMPATIBILITIES = {
         "tied_embeddings": {
             "description": "Models with tied embeddings (shared input/output embeddings)",
@@ -57,15 +59,6 @@ class GGUFConverter:
             ],
             "reason": "These quantizations require a separate output.weight tensor. Models with tied embeddings share the same tensor for input and output, making these quantizations incompatible.",
         },
-        # Add more incompatibility types here as they're discovered
-        # Example for future:
-        # "multimodal_vision": {
-        #     "description": "Multimodal models with vision encoders",
-        #     "detection": {...},
-        #     "incompatible_quants": [...],
-        #     "alternatives": [...],
-        #     "reason": "...",
-        # },
     }
 
     def __init__(self, custom_binaries_folder=None):
@@ -78,14 +71,12 @@ class GGUFConverter:
                                    If None, will use auto-downloaded binaries.
         """
         self.binary_manager = BinaryManager(custom_binaries_folder=custom_binaries_folder)
-        # Only ensure binaries if not using custom binaries
         if custom_binaries_folder is None:
             if not self.binary_manager.ensure_binaries():
                 raise RuntimeError(
                     "Failed to get llama.cpp binaries. "
                     "Please check your internet connection or install llama.cpp manually."
                 )
-        # Ensure llama.cpp repo is cloned and up to date
         self._ensure_llama_cpp_repo()
 
     def download_model(
@@ -176,7 +167,7 @@ class GGUFConverter:
             print(f"Detected Ministral-3 model, using --mistral-format flag")
             cmd.append("--mistral-format")
 
-        print(f"Converting {model_path.name} to GGUF format...")
+        print(f"{Fore.YELLOW}Converting {model_path.name} to GGUF format...{Style.RESET_ALL}")
         print(f"Command: {' '.join(cmd)}")
 
         result = subprocess.run(cmd, capture_output=not verbose, text=True)
@@ -190,7 +181,7 @@ class GGUFConverter:
         if verbose and result.stdout:
             print(result.stdout)
 
-        print(f"Conversion complete: {output_path}")
+        print(f"{Fore.GREEN}Conversion complete: {output_path}{Style.RESET_ALL}")
         return output_path
 
     def _is_ministral3_model(self, model_path: Path) -> bool:
@@ -415,7 +406,11 @@ class GGUFConverter:
         verbose: bool = True,
         parallel: bool = True,
         num_workers: Optional[int] = None,
-        scalar_optimization: bool = False
+        scalar_optimization: bool = False,
+        allow_requantize: bool = False,
+        leave_output_tensor: bool = False,
+        pure_quantization: bool = False,
+        keep_split: bool = False
     ) -> Path:
         """
         Quantize a GGUF model using llama.cpp
@@ -430,6 +425,10 @@ class GGUFConverter:
             parallel: Ignored (kept for API compatibility)
             num_workers: Ignored (kept for API compatibility)
             scalar_optimization: Ignored (kept for API compatibility)
+            allow_requantize: Allow quantizing already-quantized models (may reduce quality)
+            leave_output_tensor: Keep output.weight unquantized for better quality (increases model size)
+            pure_quantization: Disable k-quant mixtures, quantize all tensors uniformly
+            keep_split: Keep model in same shards as input (for multi-file models)
 
         Returns:
             Path to the quantized GGUF file
@@ -449,7 +448,7 @@ class GGUFConverter:
         # Ensure output directory exists
         output_path.parent.mkdir(parents=True, exist_ok=True)
 
-        print(f"Quantizing {input_path.name} to {quantization_type}...")
+        print(f"{Fore.YELLOW}Quantizing {input_path.name} to {quantization_type}...{Style.RESET_ALL}")
 
         import time
         start_time = time.time()
@@ -463,13 +462,25 @@ class GGUFConverter:
             cmd.append(str(nthreads))
 
         # Add optional flags (must come after positional arguments)
+        if allow_requantize:
+            cmd.append("--allow-requantize")
+
+        if leave_output_tensor:
+            cmd.append("--leave-output-tensor")
+
+        if pure_quantization:
+            cmd.append("--pure")
+
+        if keep_split:
+            cmd.append("--keep-split")
+
         if imatrix_path:
             imatrix_path = Path(imatrix_path)
             if not imatrix_path.exists():
                 raise FileNotFoundError(f"Imatrix file not found: {imatrix_path}")
             cmd.extend(["--imatrix", str(imatrix_path)])
 
-        print(f"Running: {' '.join(cmd)}")
+        print(f"{Fore.CYAN}Running: {' '.join(cmd)}{Style.RESET_ALL}")
         print()
 
         # Run llama-quantize
@@ -517,9 +528,9 @@ class GGUFConverter:
             output_size = output_path.stat().st_size / (1024**3)
             ratio = input_size / output_size if output_size > 0 else 0
 
-            print(f"\nQuantization complete: {output_path}")
-            print(f"Time taken: {elapsed:.2f}s ({elapsed/60:.2f} minutes)")
-            print(f"Size: {input_size:.2f} GB -> {output_size:.2f} GB ({ratio:.2f}x compression)")
+            print(f"\n{Fore.GREEN}Quantization complete: {output_path}{Style.RESET_ALL}")
+            print(f"{Fore.MAGENTA}Time taken: {elapsed:.2f}s ({elapsed/60:.2f} minutes){Style.RESET_ALL}")
+            print(f"{Fore.MAGENTA}Size: {input_size:.2f} GB -> {output_size:.2f} GB ({ratio:.2f}x compression){Style.RESET_ALL}")
         else:
             raise RuntimeError("Quantization appeared to succeed but output file not found")
 
@@ -578,8 +589,8 @@ class GGUFConverter:
         # Ensure output directory exists
         output_path.parent.mkdir(parents=True, exist_ok=True)
 
-        print(f"Generating importance matrix for {model_path.name}...")
-        print(f"This may take a while...")
+        print(f"{Fore.YELLOW}Generating importance matrix for {model_path.name}...{Style.RESET_ALL}")
+        print(f"{Fore.YELLOW}This may take a while...{Style.RESET_ALL}")
 
         import time
         start_time = time.time()
@@ -632,7 +643,7 @@ class GGUFConverter:
         # Newer llama-quantize versions expect GGUF format, not DAT
         cmd.extend(["--output-format", "gguf"])
 
-        print(f"Running: {' '.join(cmd)}")
+        print(f"{Fore.CYAN}Running: {' '.join(cmd)}{Style.RESET_ALL}")
         print()
 
         # Run llama-imatrix
@@ -655,8 +666,8 @@ class GGUFConverter:
 
         # Print summary
         if output_path.exists():
-            print(f"\nImatrix generation complete: {output_path}")
-            print(f"Time taken: {elapsed:.2f}s ({elapsed/60:.2f} minutes)")
+            print(f"\n{Fore.GREEN}Imatrix generation complete: {output_path}{Style.RESET_ALL}")
+            print(f"{Fore.MAGENTA}Time taken: {elapsed:.2f}s ({elapsed/60:.2f} minutes){Style.RESET_ALL}")
         else:
             raise RuntimeError("Imatrix generation appeared to succeed but output file not found")
 
@@ -763,7 +774,11 @@ class GGUFConverter:
         imatrix_calibration_file: Optional[Union[str, Path]] = None,
         imatrix_output_name: Optional[str] = None,
         imatrix_ngl: Optional[int] = None,
-        ignore_incompatibilities: bool = False
+        ignore_incompatibilities: bool = False,
+        allow_requantize: bool = False,
+        leave_output_tensor: bool = False,
+        pure_quantization: bool = False,
+        keep_split: bool = False
     ) -> List[Path]:
         """
         Convert to GGUF and quantize in one go
@@ -785,6 +800,10 @@ class GGUFConverter:
             imatrix_collect_output: Collect output.weight tensor in imatrix (required for IQ quantizations)
             imatrix_calibration_file: Path to calibration file for imatrix generation (None = use default)
             ignore_incompatibilities: Skip incompatibility checks (advanced users, may cause failures)
+            allow_requantize: Allow quantizing already-quantized models (may reduce quality)
+            leave_output_tensor: Keep output.weight unquantized for better quality (increases model size)
+            pure_quantization: Disable k-quant mixtures, quantize all tensors uniformly
+            keep_split: Keep model in same shards as input (for multi-file models)
 
         Returns:
             List of paths to created quantized files
@@ -821,21 +840,21 @@ class GGUFConverter:
                 original_types = quantization_types.copy()
                 quantization_types = [q for q in quantization_types if q not in incompatible]
 
-                print(f"\nWARNING: Model incompatibility detected!")
-                print(f"Detected issues: {', '.join(incompat_info['types'])}")
-                print(f"\nIncompatible quantizations requested:")
+                print(f"\n{Fore.YELLOW}WARNING: Model incompatibility detected!{Style.RESET_ALL}")
+                print(f"{Fore.YELLOW}Detected issues: {', '.join(incompat_info['types'])}{Style.RESET_ALL}")
+                print(f"\n{Fore.YELLOW}Incompatible quantizations requested:{Style.RESET_ALL}")
                 print(f"  {', '.join(requested_incompatible)}")
 
-                print(f"\nReason:")
+                print(f"\n{Fore.YELLOW}Reason:{Style.RESET_ALL}")
                 for reason in incompat_info["reasons"]:
                     print(f"  - {reason}")
 
-                print(f"\nRecommended alternatives:")
+                print(f"\n{Fore.CYAN}Recommended alternatives:{Style.RESET_ALL}")
                 for alt in incompat_info["alternatives"]:
                     print(f"  - {alt}")
 
                 if quantization_types:
-                    print(f"\nContinuing with compatible quantizations: {', '.join(quantization_types)}")
+                    print(f"\n{Fore.GREEN}Continuing with compatible quantizations: {', '.join(quantization_types)}{Style.RESET_ALL}")
                 else:
                     raise ValueError(
                         f"All requested quantizations are incompatible with this model.\n"
@@ -849,12 +868,12 @@ class GGUFConverter:
             requested_incompatible = [q for q in quantization_types if q in incompatible]
 
             if requested_incompatible:
-                print(f"\nWARNING: Incompatibility override enabled!")
-                print(f"Detected issues: {', '.join(incompat_info['types'])}")
-                print(f"\nThese quantizations are likely to FAIL:")
+                print(f"\n{Fore.YELLOW}⚠ WARNING: Incompatibility override enabled!{Style.RESET_ALL}")
+                print(f"{Fore.YELLOW}Detected issues: {', '.join(incompat_info['types'])}{Style.RESET_ALL}")
+                print(f"\n{Fore.RED}These quantizations are likely to FAIL:{Style.RESET_ALL}")
                 print(f"  {', '.join(requested_incompatible)}")
-                print(f"\nProceeding anyway as requested (ignore_incompatibilities=True)")
-                print(f"If conversion fails, use: {', '.join(incompat_info['alternatives'])}")
+                print(f"\n{Fore.YELLOW}Proceeding anyway as requested (ignore_incompatibilities=True){Style.RESET_ALL}")
+                print(f"{Fore.CYAN}If conversion fails, use: {', '.join(incompat_info['alternatives'])}{Style.RESET_ALL}")
 
         is_already_gguf = False
         model_name = model_path.name
@@ -958,7 +977,11 @@ class GGUFConverter:
                     quantization_type=quant_type,
                     verbose=verbose,
                     imatrix_path=imatrix_path,
-                    nthreads=nthreads
+                    nthreads=nthreads,
+                    allow_requantize=allow_requantize,
+                    leave_output_tensor=leave_output_tensor,
+                    pure_quantization=pure_quantization,
+                    keep_split=keep_split
                 )
                 quantized_files.append(output_file)
 

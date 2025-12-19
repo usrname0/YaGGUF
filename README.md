@@ -81,17 +81,7 @@ The GUI will automatically open in your browser at `http://localhost:8501`
 
 ### CLI
 
-A command-line interface is available for automation and scripting:
-
-```bash
-# Convert and quantize
-python -m gguf_converter /path/to/model output/ -q Q4_K_M Q5_K_M
-
-# List available quantization types
-python -m gguf_converter --list-types
-```
-
-For advanced CLI usage, most users should use [llama.cpp](https://github.com/ggerganov/llama.cpp) directly.
+For command-line usage, use [llama.cpp](https://github.com/ggerganov/llama.cpp) directly. YaGUFF focuses on providing a user-friendly GUI experience.
 
 ## Requirements
 

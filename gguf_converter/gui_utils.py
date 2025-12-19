@@ -47,6 +47,10 @@ def get_default_config():
         "model_path": "",
         "output_dir": "",
         "intermediate_type": "F16",
+        "allow_requantize": False,
+        "leave_output_tensor": False,
+        "pure_quantization": False,
+        "keep_split": False,
 
         # Quantization types - all stored in other_quants dict
         "other_quants": {
@@ -76,7 +80,6 @@ def load_config():
             with open(CONFIG_FILE, 'r') as f:
                 saved_config = json.load(f)
 
-            # Merge with defaults to handle new settings
             config = get_default_config()
             config.update(saved_config)
             return config
@@ -126,7 +129,6 @@ def open_folder(folder_path):
     """
     path = Path(strip_quotes(folder_path))
 
-    # If it's a file, get its parent directory
     if path.is_file():
         path = path.parent
 

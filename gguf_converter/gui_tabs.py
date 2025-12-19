@@ -15,7 +15,6 @@ from tkinter import filedialog
 import io
 from contextlib import redirect_stdout
 
-from pathlib import Path
 from .gui_utils import (
     strip_quotes, open_folder, browse_folder,
     save_config, run_and_stream_command,
@@ -37,7 +36,7 @@ def render_convert_tab(converter, config, verbose, nthreads, ignore_incompatibil
         # Model path with Browse and Check Folder buttons
         col_model, col_model_browse, col_model_check = st.columns([4, 1, 1])
         with col_model:
-            # Prepare widget arguments - only set value if key not in session state (prevents warning)
+            # Only set value if key not in session state (prevents warning)
             model_path_kwargs = {
                 "label": "Model path",
                 "placeholder": "E:/Models/my-model",
@@ -46,9 +45,9 @@ def render_convert_tab(converter, config, verbose, nthreads, ignore_incompatibil
             }
             if "model_path_input" not in st.session_state:
                 model_path_kwargs["value"] = config.get("model_path", "")
-            model_path = st.text_input(**model_path_kwargs)
+            model_path = st.text_input(**model_path_kwargs)  # type: ignore[arg-type]
         with col_model_browse:
-            st.markdown("<br>", unsafe_allow_html=True)  # Spacer to align with input + help icon
+            st.markdown("<br>", unsafe_allow_html=True)  # Align with input
             if st.button(
                 "Browse",
                 key="browse_model_folder_btn",
@@ -65,7 +64,7 @@ def render_convert_tab(converter, config, verbose, nthreads, ignore_incompatibil
                     st.session_state.pending_model_path = selected_folder
                     st.rerun()
         with col_model_check:
-            st.markdown("<br>", unsafe_allow_html=True)  # Spacer to align with input + help icon
+            st.markdown("<br>", unsafe_allow_html=True)  # Align with input
             model_path_clean = strip_quotes(model_path)
             model_path_exists = bool(model_path_clean and Path(model_path_clean).exists())
             if st.button(
@@ -92,7 +91,7 @@ def render_convert_tab(converter, config, verbose, nthreads, ignore_incompatibil
                 help="Where to save the converted files"
             )
         with col_output_browse:
-            st.markdown("<br>", unsafe_allow_html=True)  # Spacer to align with input + help icon
+            st.markdown("<br>", unsafe_allow_html=True)  # Align with input
             if st.button(
                 "Browse",
                 key="browse_output_folder_btn",
@@ -107,7 +106,7 @@ def render_convert_tab(converter, config, verbose, nthreads, ignore_incompatibil
                     save_config(config)
                     st.rerun()
         with col_output_check:
-            st.markdown("<br>", unsafe_allow_html=True)  # Spacer to align with input + help icon
+            st.markdown("<br>", unsafe_allow_html=True)  # Align with input
             output_dir_clean = strip_quotes(output_dir)
             output_dir_exists = bool(output_dir_clean and Path(output_dir_clean).exists())
             if st.button(
@@ -124,7 +123,7 @@ def render_convert_tab(converter, config, verbose, nthreads, ignore_incompatibil
                     except Exception as e:
                         st.toast(f"Could not open folder: {e}")
 
-        # Strip quotes from paths for later use
+        # Strip quotes from paths
         model_path_clean = strip_quotes(model_path)
         output_dir_clean = strip_quotes(output_dir)
 
@@ -140,136 +139,162 @@ def render_convert_tab(converter, config, verbose, nthreads, ignore_incompatibil
 
                         # Display warning banner
                         st.info(f"""
-**Some quants disabled due to:** {', '.join(incompat_info['types'])}
+**Some quants are disabled due to:** {', '.join(incompat_info['types'])}
 
 {chr(10).join('- ' + reason for reason in incompat_info['reasons'])}
 
                         """)
                 except Exception as e:
-                    # Silently ignore errors in compatibility check
+                    # Ignore compatibility check errors
                     pass
 
-        # Handle save/restore of incompatible quantization selections
-        # Track previous incompatibility state to detect changes
+        # Advanced quantization options
+        with st.expander("Advanced Quantization Options"):
+            st.markdown("These options affect how llama.cpp quantizes your model. Most users won't need these.")
+
+            def save_allow_requantize():
+                config["allow_requantize"] = st.session_state.allow_requantize_checkbox
+                save_config(config)
+
+            allow_requantize = st.checkbox(
+                "Allow requantize",
+                value=config.get("allow_requantize", False),
+                help="Allow quantizing models that are already quantized. Warning: This can severely reduce quality compared to quantizing from F16/F32.",
+                key="allow_requantize_checkbox",
+                on_change=save_allow_requantize
+            )
+
+            def save_leave_output_tensor():
+                config["leave_output_tensor"] = st.session_state.leave_output_tensor_checkbox
+                save_config(config)
+
+            leave_output_tensor = st.checkbox(
+                "Leave output tensor unquantized",
+                value=config.get("leave_output_tensor", False),
+                help="Keep output.weight at higher precision for better quality (increases model size slightly). Especially useful when requantizing.",
+                key="leave_output_tensor_checkbox",
+                on_change=save_leave_output_tensor
+            )
+
+            def save_pure_quantization():
+                config["pure_quantization"] = st.session_state.pure_quantization_checkbox
+                save_config(config)
+
+            pure_quantization = st.checkbox(
+                "Pure quantization (disable mixtures)",
+                value=config.get("pure_quantization", False),
+                help="Disable k-quant mixtures and quantize all tensors to the same type. Results in more uniform quantization.",
+                key="pure_quantization_checkbox",
+                on_change=save_pure_quantization
+            )
+
+            def save_keep_split():
+                config["keep_split"] = st.session_state.keep_split_checkbox
+                save_config(config)
+
+            keep_split = st.checkbox(
+                "Keep split files",
+                value=config.get("keep_split", False),
+                help="Generate quantized model in the same shards as the input model (for multi-file models).",
+                key="keep_split_checkbox",
+                on_change=save_keep_split
+            )
+
+        # Save/restore quant selections when incompatibility status changes
         if 'previous_incompatible_quants' not in st.session_state:
             st.session_state.previous_incompatible_quants = []
 
-        # Ensure config dict exists
         if "incompatible_saved_states" not in config:
             config["incompatible_saved_states"] = {}
         if "other_quants" not in config:
             config["other_quants"] = {}
 
-        # Initialize IQ checkbox states if needed (used by IQ quant section)
+        # Initialize IQ checkbox states
         if "iq_checkbox_states" not in st.session_state:
             st.session_state.iq_checkbox_states = config.get("other_quants", {}).copy()
 
-        # Convert to sets for easier comparison
         current_incompatible = set(incompatible_quants)
         previous_incompatible = set(st.session_state.previous_incompatible_quants)
 
-        # If incompatibility list changed, handle save/restore
         if current_incompatible != previous_incompatible:
-            # Find newly incompatible quants (need to save their state)
             newly_incompatible = current_incompatible - previous_incompatible
-
-            # Find newly compatible quants (need to restore their state)
             newly_compatible = previous_incompatible - current_incompatible
 
-            # Save states of newly incompatible quants before disabling
+            # Save state before disabling newly incompatible quants
             for qtype in newly_incompatible:
                 current_state = config["other_quants"].get(qtype, False)
                 config["incompatible_saved_states"][qtype] = current_state
-                # Deselect incompatible quants in the config
                 config["other_quants"][qtype] = False
-                # Also update session state for IQ quants
                 if qtype in st.session_state.iq_checkbox_states:
                     st.session_state.iq_checkbox_states[qtype] = False
-                # Note: Widget keys include incompatibility status, so they'll naturally refresh
 
-            # Restore states of newly compatible quants
+            # Restore state for newly compatible quants
             for qtype in newly_compatible:
                 if qtype in config["incompatible_saved_states"]:
-                    # Restore the saved state
                     restored_value = config["incompatible_saved_states"][qtype]
                     config["other_quants"][qtype] = restored_value
-                    # Also update session state for IQ quants
                     st.session_state.iq_checkbox_states[qtype] = restored_value
-                    # Remove from saved states since it's no longer incompatible
                     del config["incompatible_saved_states"][qtype]
 
-            # Update the previous state
             st.session_state.previous_incompatible_quants = incompatible_quants.copy()
 
-            # Save config if any changes were made
             if newly_incompatible or newly_compatible:
                 save_config(config)
 
-        # Get intermediate format from config
         intermediate_type = config.get("intermediate_type", "F16").upper()
 
-        # Track previous intermediate format to restore checkbox state
+        # Track intermediate format changes to restore checkbox states
         if 'previous_intermediate' not in st.session_state:
             st.session_state.previous_intermediate = intermediate_type
 
-        # Ensure the current intermediate format's state is saved before disabling it
         if "unquantized_saved_states" not in config:
             config["unquantized_saved_states"] = {}
         if "other_quants" not in config:
             config["other_quants"] = {}
 
-        # On first load or if not yet saved, save the current intermediate's state
+        # Save current intermediate's state before it gets disabled
         if intermediate_type not in config["unquantized_saved_states"]:
             current_state = config["other_quants"].get(intermediate_type, False)
             config["unquantized_saved_states"][intermediate_type] = current_state
             save_config(config)
 
-        # If intermediate format changed, update checkbox states
+        # Handle intermediate format change
         if intermediate_type != st.session_state.previous_intermediate:
             prev_format = st.session_state.previous_intermediate
 
-            # Ensure config dicts exist
             if "other_quants" not in config:
                 config["other_quants"] = {}
             if "unquantized_saved_states" not in config:
                 config["unquantized_saved_states"] = {}
 
-            # Save all non-intermediate checkbox states from current render
+            # Save non-intermediate checkbox states
             for qtype in ["F32", "F16", "BF16"]:
                 checkbox_key = f"full_{qtype}_{prev_format}"
-                if checkbox_key in st.session_state:
-                    # Save this checkbox's state, but skip the old intermediate since it was locked
-                    if qtype != prev_format:
-                        config["other_quants"][qtype] = st.session_state[checkbox_key]
+                if checkbox_key in st.session_state and qtype != prev_format:
+                    config["other_quants"][qtype] = st.session_state[checkbox_key]
 
-            # Restore the previous intermediate's saved state (if it was saved before being disabled)
+            # Restore previous intermediate's state
             if prev_format in config["unquantized_saved_states"]:
                 config["other_quants"][prev_format] = config["unquantized_saved_states"][prev_format]
-                # Remove from saved states since it's no longer disabled
                 del config["unquantized_saved_states"][prev_format]
-            else:
-                # If no saved state exists, default to unchecked
-                if prev_format not in config["other_quants"]:
-                    config["other_quants"][prev_format] = False
+            elif prev_format not in config["other_quants"]:
+                config["other_quants"][prev_format] = False
 
-            # Save the new intermediate's current state before disabling it
+            # Save new intermediate's state before disabling
             current_new_state = config["other_quants"].get(intermediate_type, False)
             config["unquantized_saved_states"][intermediate_type] = current_new_state
 
             st.session_state.previous_intermediate = intermediate_type
             config["intermediate_type"] = intermediate_type
             save_config(config)
-            # Rerun to reflect the changes in the UI
             st.rerun()
 
         st.subheader("Importance Matrix (imatrix)")
 
-        # Callback to save imatrix checkbox state and custom name if present
         def save_use_imatrix():
-            # Save any custom name that was entered
+            """Save imatrix checkbox state and custom name"""
             if f"imatrix_custom_name_{st.session_state.reset_count}" in st.session_state:
                 config["imatrix_generate_name"] = st.session_state[f"imatrix_custom_name_{st.session_state.reset_count}"]
-
             config["use_imatrix"] = st.session_state[f"use_imatrix_checkbox_{st.session_state.reset_count}"]
             save_config(config)
 
@@ -281,7 +306,7 @@ def render_convert_tab(converter, config, verbose, nthreads, ignore_incompatibil
             on_change=save_use_imatrix
         )
 
-        # Show info banner if IQ quants are disabled due to imatrix being off
+        # Show info when IQ quants are disabled
         if not use_imatrix:
             st.info("""
             **Importance Matrix Disabled**
@@ -296,17 +321,16 @@ def render_convert_tab(converter, config, verbose, nthreads, ignore_incompatibil
         imatrix_reuse_path = None
 
         if use_imatrix:
-            # Scan output directory for .imatrix files and sort by modification time (newest first)
+            # Scan output directory for .imatrix files (newest first)
             imatrix_files = []
             if output_dir_clean and Path(output_dir_clean).exists():
                 output_path = Path(output_dir_clean)
-                # Get files with their modification times
+                # Get files sorted by modification time
                 files_with_mtime = [(f.name, f.stat().st_mtime) for f in output_path.glob("*.imatrix")]
-                # Sort by modification time, newest first
                 files_with_mtime.sort(key=lambda x: x[1], reverse=True)
                 imatrix_files = [f[0] for f in files_with_mtime]
 
-            # Build dropdown options: existing files + generate options
+            # Build dropdown: existing files + generate options
             if model_path_clean:
                 default_name = f"{Path(model_path_clean).name}.imatrix"
                 generate_default_option = f"Generate ({default_name})"
@@ -315,8 +339,6 @@ def render_convert_tab(converter, config, verbose, nthreads, ignore_incompatibil
 
             generate_custom_option = "Generate (custom name)"
             dropdown_options = imatrix_files + [generate_default_option, generate_custom_option]
-
-            # Dropdown with all options, plus Update button
             col_imatrix_select, col_imatrix_update = st.columns([5, 1])
             with col_imatrix_select:
                 # Determine default selection
@@ -325,20 +347,17 @@ def render_convert_tab(converter, config, verbose, nthreads, ignore_incompatibil
                 default_index = 0
 
                 if saved_mode == "generate_custom":
-                    # Previously selected custom name - select that option
                     default_index = len(dropdown_options) - 1
                 elif saved_mode == "generate":
-                    # Previously selected generate default - select that option
-                    default_index = len(imatrix_files)  # Index of generate_default_option
+                    default_index = len(imatrix_files)
                 elif saved_mode == "reuse" and saved_reuse_path and saved_reuse_path in imatrix_files:
-                    # Previously selected a specific file - select it
                     default_index = imatrix_files.index(saved_reuse_path)
                 elif imatrix_files:
-                    # No saved preference - auto-select the first (newest) existing file
+                    # Auto-select newest existing file
                     default_index = 0
                 else:
-                    # No existing files and no saved preference - select generate default
-                    default_index = len(imatrix_files)  # Index of generate_default_option
+                    # No files - select generate default
+                    default_index = len(imatrix_files)
 
                 imatrix_selection = st.selectbox(
                     "Imatrix file",
@@ -348,17 +367,14 @@ def render_convert_tab(converter, config, verbose, nthreads, ignore_incompatibil
                     key=f"imatrix_dropdown_{st.session_state.reset_count}"
                 )
             with col_imatrix_update:
-                st.markdown("<br>", unsafe_allow_html=True)  # Spacer to align with selectbox
+                st.markdown("<br>", unsafe_allow_html=True)  # Align with selectbox
                 if st.button("Refresh File List", key="update_imatrix_file_list", use_container_width=True):
                     st.rerun()
 
-            # Determine what to do based on selection
+            # Handle selection
             if imatrix_selection == generate_custom_option:
-                # Save mode to config
                 config["imatrix_mode"] = "generate_custom"
                 save_config(config)
-
-                # Show custom name input field
                 col_imatrix_name, col_imatrix_default = st.columns([5, 1])
                 with col_imatrix_name:
                     imatrix_generate_name = st.text_input(
@@ -369,21 +385,18 @@ def render_convert_tab(converter, config, verbose, nthreads, ignore_incompatibil
                         key=f"imatrix_custom_name_{st.session_state.reset_count}"
                     )
                 with col_imatrix_default:
-                    st.markdown("<br>", unsafe_allow_html=True)  # Spacer to align with text input
+                    st.markdown("<br>", unsafe_allow_html=True)  # Align with input
                     if st.button("Set to default", key="set_default_imatrix_name", use_container_width=True):
-                        # Use model path folder name for default
                         if model_path_clean:
                             default_name = f"{Path(model_path_clean).name}.imatrix"
                             config["imatrix_generate_name"] = default_name
                         else:
-                            # Otherwise just clear to empty
                             config["imatrix_generate_name"] = ""
                         save_config(config)
-                        # Increment reset_count to force widget refresh with new value
                         st.session_state.reset_count += 1
                         st.rerun()
 
-                # Auto-append .imatrix extension if missing and show info
+                # Auto-append .imatrix extension
                 if imatrix_generate_name:
                     if not imatrix_generate_name.endswith('.imatrix'):
                         final_name = f"{imatrix_generate_name}.imatrix"
@@ -391,7 +404,7 @@ def render_convert_tab(converter, config, verbose, nthreads, ignore_incompatibil
                     else:
                         final_name = imatrix_generate_name
 
-                    # Check if custom file already exists and warn
+                    # Warn if file exists
                     if output_dir_clean:
                         imatrix_file_path = Path(output_dir_clean) / final_name
                         if imatrix_file_path.exists():
@@ -401,23 +414,19 @@ def render_convert_tab(converter, config, verbose, nthreads, ignore_incompatibil
                 imatrix_mode = "Generate (custom name)"
 
             elif imatrix_selection == generate_default_option:
-                # Generate with default name
                 imatrix_generate_name = ""
                 imatrix_reuse_path = None
                 imatrix_mode = "Generate (default name)"
-
-                # Save mode to config
                 config["imatrix_mode"] = "generate"
                 save_config(config)
 
-                # Check if file already exists and warn
+                # Warn if file exists
                 if output_dir_clean and model_path_clean:
                     imatrix_file_path = Path(output_dir_clean) / default_name
                     if imatrix_file_path.exists():
                         st.warning(f"WARNING: File already exists and will be overwritten: `{default_name}`")
 
             else:
-                # Reuse existing file
                 imatrix_generate_name = None
                 imatrix_reuse_path = imatrix_selection
                 imatrix_mode = "Reuse existing"
@@ -428,18 +437,15 @@ def render_convert_tab(converter, config, verbose, nthreads, ignore_incompatibil
     with col2:
         st.subheader("Output Types")
         st.markdown("Select output formats (one intermediate format is required):")
-        # Define quantization types that require an importance matrix
+
         IMATRIX_REQUIRED_TYPES = [
             "IQ1_S", "IQ1_M",
             "IQ2_XXS", "IQ2_XS", "IQ2_S", "IQ2_M",
             "IQ3_XXS", "IQ3_XS"
         ]
-
-        # Unquantized Formats - with integrated intermediate format selection
         st.markdown("**Intermediate Formats:**")
 
-        # Checkboxes for additional output formats with inline intermediate buttons
-        # Using 6 columns with weighted widths: [checkbox:1, button:2, checkbox:1, button:2, checkbox:1, button:2]
+        # 6 columns: [checkbox:1, button:2, checkbox:1, button:2, checkbox:1, button:2]
         all_cols = st.columns([1, 2, 1, 2, 1, 2])
         full_quants = {
             "F32": "32-bit float (full precision)",
@@ -450,11 +456,9 @@ def render_convert_tab(converter, config, verbose, nthreads, ignore_incompatibil
         selected_format = None
 
         for idx, (qtype, tooltip) in enumerate(full_quants.items()):
-            # Checkbox in even columns (0, 2, 4)
             with all_cols[idx * 2]:
                 is_intermediate = qtype == intermediate_type
 
-                # If this is the intermediate format, force checked and disabled
                 if is_intermediate:
                     checkbox_value = True
                     checkbox_disabled = True
@@ -462,7 +466,6 @@ def render_convert_tab(converter, config, verbose, nthreads, ignore_incompatibil
                     checkbox_value = config.get("other_quants", {}).get(qtype, False)
                     checkbox_disabled = False
 
-                # Callback for full/unquantized checkboxes
                 def save_full_selection(qt, inter_type):
                     def callback():
                         if not st.session_state[f"full_{qt}_{inter_type}"]:
@@ -479,9 +482,7 @@ def render_convert_tab(converter, config, verbose, nthreads, ignore_incompatibil
                     on_change=save_full_selection(qtype, intermediate_type) if not checkbox_disabled else None
                 )
 
-            # Button in odd columns (1, 3, 5)
             with all_cols[idx * 2 + 1]:
-                # Intermediate format button (radio button behavior)
                 is_selected = qtype == intermediate_type
                 button_type = "primary" if is_selected else "secondary"
                 button_label = f"{qtype} Intermediate"
@@ -494,40 +495,33 @@ def render_convert_tab(converter, config, verbose, nthreads, ignore_incompatibil
 
         # Handle intermediate format change
         if selected_format and selected_format != intermediate_type:
-            # Ensure dicts exist
             if "unquantized_saved_states" not in config:
                 config["unquantized_saved_states"] = {}
             if "other_quants" not in config:
                 config["other_quants"] = {}
 
-            # Save current checkbox states before switching
+            # Save checkbox states before switching
             for qtype in ["F32", "F16", "BF16"]:
                 checkbox_key = f"full_{qtype}_{intermediate_type}"
                 if checkbox_key in st.session_state:
-                    if qtype != intermediate_type:  # Don't save the disabled intermediate checkbox
+                    if qtype != intermediate_type:
                         config["other_quants"][qtype] = st.session_state[checkbox_key]
 
-            # Restore the old intermediate's saved state (if any)
-            # This is the state it had BEFORE it became intermediate
+            # Restore old intermediate's state
             if intermediate_type in config["unquantized_saved_states"]:
                 config["other_quants"][intermediate_type] = config["unquantized_saved_states"][intermediate_type]
                 del config["unquantized_saved_states"][intermediate_type]
 
-            # Save the new intermediate's state BEFORE making it intermediate
-            # (so we can restore it when switching away)
+            # Save new intermediate's state before making it intermediate
             config["unquantized_saved_states"][selected_format] = config.get("other_quants", {}).get(selected_format, False)
 
-            # Change intermediate type
             config["intermediate_type"] = selected_format
             intermediate_type = selected_format
             st.session_state.previous_intermediate = selected_format
             save_config(config)
             st.rerun()
 
-        # Legacy Quants
         st.markdown("**Legacy Quants:**")
-
-        # Callback for traditional quants
         def save_trad_selection(qtype, widget_key):
             def callback():
                 config["other_quants"][qtype] = st.session_state[widget_key]
@@ -545,21 +539,16 @@ def render_convert_tab(converter, config, verbose, nthreads, ignore_incompatibil
         trad_checkboxes = {}
         for idx, (qtype, tooltip) in enumerate(trad_quants.items()):
             with trad_cols[idx % 3]:
-                # Check if incompatible with model
                 is_incompatible = qtype in incompatible_quants
 
-                # Get value - force False when incompatible, otherwise use config
                 if is_incompatible:
                     checkbox_value = False
                 else:
                     checkbox_value = config.get("other_quants", {}).get(qtype, qtype == "Q8_0" if qtype == "Q8_0" else False)
-
-                # Build help text
                 help_text = tooltip
                 if is_incompatible:
                     help_text += " (Incompatible with this model - see info banner above)"
 
-                # Include incompatibility status in key to force widget refresh when status changes
                 widget_key = f"trad_{qtype}_{is_incompatible}"
 
                 trad_checkboxes[qtype] = st.checkbox(
@@ -571,8 +560,6 @@ def render_convert_tab(converter, config, verbose, nthreads, ignore_incompatibil
                     on_change=save_trad_selection(qtype, widget_key) if not is_incompatible else None
                 )
 
-        # K Quants
-        # Callback to save quantization selection immediately
         def save_quant_selection(qtype, widget_key):
             def callback():
                 config["other_quants"][qtype] = st.session_state[widget_key]
@@ -596,21 +583,16 @@ def render_convert_tab(converter, config, verbose, nthreads, ignore_incompatibil
         k_cols = st.columns(3)
         for idx, (qtype, tooltip) in enumerate(k_quants.items()):
             with k_cols[idx % 3]:
-                # Check if incompatible with model
                 is_incompatible = qtype in incompatible_quants
 
-                # Get value - force False when incompatible, otherwise use config
                 if is_incompatible:
                     checkbox_value = False
                 else:
                     checkbox_value = config.get("other_quants", {}).get(qtype, qtype == "Q4_K_M")
-
-                # Build help text
                 help_text = tooltip
                 if is_incompatible:
                     help_text += " (Incompatible with this model - see info banner above)"
 
-                # Include incompatibility status in key to force widget refresh when status changes
                 widget_key = f"k_{qtype}_{is_incompatible}"
 
                 k_checkboxes[qtype] = st.checkbox(
@@ -639,34 +621,25 @@ def render_convert_tab(converter, config, verbose, nthreads, ignore_incompatibil
             "IQ1_S": "1-bit IQ small",
         }
 
-        # Note: iq_checkbox_states initialized earlier with incompatibility handling
-
         i_checkboxes = {}
         i_cols = st.columns(3)
         for idx, (qtype, tooltip) in enumerate(i_quants.items()):
             with i_cols[idx % 3]:
-                # Check if disabled due to imatrix or model incompatibility
                 imatrix_disabled = (qtype in IMATRIX_REQUIRED_TYPES) and not use_imatrix
                 incompatible_disabled = qtype in incompatible_quants
                 is_disabled = imatrix_disabled or incompatible_disabled
-
-                # Widget key includes imatrix state AND incompatibility to force refresh
                 widget_key = f"i_{qtype}_{use_imatrix}_{incompatible_disabled}"
                 prev_key = f"i_{qtype}_{not use_imatrix}_{incompatible_disabled}"
 
-                # When transitioning from enabled to disabled, save the previous state
-                # Only save if the previous state was enabled (not disabled)
+                # Save previous state when transitioning enabled→disabled
                 prev_was_enabled = (qtype not in IMATRIX_REQUIRED_TYPES) or (not use_imatrix)
                 if prev_key in st.session_state and prev_was_enabled:
                     st.session_state.iq_checkbox_states[qtype] = st.session_state[prev_key]
-
-                # Use saved state when re-enabling, or False when disabled
                 if is_disabled:
                     checkbox_value = False
                 else:
                     checkbox_value = st.session_state.iq_checkbox_states.get(qtype, False)
 
-                # Callback for IQ checkboxes
                 def save_iq_selection(qt, key):
                     def callback():
                         val = st.session_state[key]
@@ -675,7 +648,6 @@ def render_convert_tab(converter, config, verbose, nthreads, ignore_incompatibil
                         save_config(config)
                     return callback
 
-                # Build help text based on why it's disabled
                 help_text = tooltip
                 if incompatible_disabled:
                     help_text += " (Incompatible with this model - see info banner above)"
@@ -830,7 +802,11 @@ def render_convert_tab(converter, config, verbose, nthreads, ignore_incompatibil
                         imatrix_calibration_file=calibration_file_path,
                         imatrix_output_name=imatrix_output_filename,
                         imatrix_ngl=int(config.get("imatrix_ngl", 0)) if config.get("imatrix_ngl", 0) > 0 else None,
-                        ignore_incompatibilities=ignore_incompatibilities
+                        ignore_incompatibilities=ignore_incompatibilities,
+                        allow_requantize=allow_requantize,
+                        leave_output_tensor=leave_output_tensor,
+                        pure_quantization=pure_quantization,
+                        keep_split=keep_split
                     )
 
                 st.success(f"Successfully processed {len(output_files)} files!")
@@ -915,7 +891,7 @@ def render_imatrix_settings_tab(converter, config):
                 on_change=lambda: None  # Trigger to update when user changes the path
             )
         with col_dir_browse:
-            st.markdown("<br>", unsafe_allow_html=True)  # Spacer to align with input + help icon
+            st.markdown("<br>", unsafe_allow_html=True)  # Align with input
             if st.button(
                 "Browse",
                 key="browse_cal_dir_btn",
@@ -929,7 +905,7 @@ def render_imatrix_settings_tab(converter, config):
                     save_config(config)
                     st.rerun()
         with col_dir_check:
-            st.markdown("<br>", unsafe_allow_html=True)  # Spacer to align with input + help icon
+            st.markdown("<br>", unsafe_allow_html=True)  # Align with input
             cal_dir_exists = calibration_data_dir.exists() and calibration_data_dir.is_dir()
             if st.button(
                 "Check Folder",
@@ -987,7 +963,7 @@ def render_imatrix_settings_tab(converter, config):
                 on_change=save_calibration_file
             )
         with col_cal_btn:
-            st.markdown("<br>", unsafe_allow_html=True)  # Spacer to align with selectbox + help icon
+            st.markdown("<br>", unsafe_allow_html=True)  # Align with selectbox
             if st.button(
                 "Refresh File List",
                 key="update_cal_files_btn",
@@ -1107,7 +1083,8 @@ def render_imatrix_settings_tab(converter, config):
         if config.get("use_custom_binaries", False):
             st.markdown("---")
             st.markdown("**GPU Offloading**")
-            st.info("GPU offloading requires llama.cpp binaries compiled with CUDA/ROCm/Metal/Vulkan support.")
+            st.markdown("GPU offloading requires llama.cpp binaries compiled with CUDA/ROCm/Metal/Vulkan support.")
+            st.info("Custom binaries detected: GPU offloading enabled.")
 
             # Auto-save callback for ngl
             def save_ngl():
@@ -1455,8 +1432,6 @@ def render_imatrix_stats_tab(converter, config):
     # Show info/error messages below the button
     if 'imatrix_stats_error' in st.session_state and st.session_state.imatrix_stats_error:
         st.error(f"Error: {st.session_state.imatrix_stats_error}")
-        if verbose:
-            st.exception(st.session_state.imatrix_stats_error)
     elif 'imatrix_stats_result' in st.session_state and st.session_state.imatrix_stats_result:
         st.success("Statistics generated!")
     elif 'imatrix_stats_result' not in st.session_state or not st.session_state.imatrix_stats_result:
@@ -1730,7 +1705,43 @@ def render_llama_cpp_tab(converter, config):
     By default, YaGUFF automatically downloads pre-compiled llama.cpp binaries that use the CPU (good for most cases).
     """)
 
-    # Binary Settings Section
+    # Update YaGUFF Binaries Section
+    col1, col2 = st.columns(2)
+    with col1:
+        st.subheader("Update YaGUFF Binaries")
+        st.markdown("Force a re-download of the `llama.cpp` binaries that come with YaGUFF. This is useful if the binaries are corrupted or to ensure you have the version matching the application.")
+
+        if st.button("Force Binary Update"):
+            output_container = st.empty()
+            output_container.code("Starting binary update...\nThis may take a moment.", language='bash')
+
+            f = io.StringIO()
+            with redirect_stdout(f):
+                try:
+                    st.session_state.converter.binary_manager.download_binaries(force=True)
+                    st.toast("Binaries updated successfully!")
+                except Exception as e:
+                    print(f"\n--- An error occurred ---\n{str(e)}")
+                    st.toast(f"An error occurred during binary update: {e}")
+
+            output = f.getvalue()
+            output_container.code(output, language='bash')
+    with col2:
+        st.subheader("YaGUFF Binary Information")
+        binary_info = get_binary_version(st.session_state.converter)
+        if binary_info["status"] == "ok":
+            st.success(binary_info['message'])
+            if binary_info["version"]:
+                st.code(binary_info["version"], language=None)
+        elif binary_info["status"] == "missing":
+            st.warning(binary_info['message'])
+        else:
+            st.error(binary_info['message'])
+        st.markdown("[llama.cpp on GitHub](https://github.com/ggerganov/llama.cpp)")
+
+    st.markdown("---")
+
+    # Local/Custom Binary Settings Section
     col_bin1, col_bin2 = st.columns(2)
     with col_bin1:
         st.subheader("Local/Custom Binary Settings")
@@ -1838,13 +1849,13 @@ def render_llama_cpp_tab(converter, config):
             try:
                 quantize_path = st.session_state.converter.binary_manager.get_quantize_path()
                 quantize_found = quantize_path.exists()
-            except:
+            except (RuntimeError, OSError, FileNotFoundError):
                 pass
 
             try:
                 imatrix_path = st.session_state.converter.binary_manager.get_imatrix_path()
                 imatrix_found = imatrix_path.exists()
-            except:
+            except (RuntimeError, OSError, FileNotFoundError):
                 pass
 
             if custom_folder:
@@ -1873,41 +1884,6 @@ def render_llama_cpp_tab(converter, config):
                 st.markdown("- `llama-imatrix`: Not found")
         else:
             st.info("Disabled - Using YaGUFF binaries")
-
-    st.markdown("---")
-
-    col3, col4 = st.columns(2)
-    with col3:
-        st.subheader("Update YaGUFF Binaries")
-        st.markdown("Force a re-download of the `llama.cpp` binaries that come with YaGUFF. This is useful if the binaries are corrupted or to ensure you have the version matching the application.")
-        
-        if st.button("Force Binary Update"):
-            output_container = st.empty()
-            output_container.code("Starting binary update...\nThis may take a moment.", language='bash')
-            
-            f = io.StringIO()
-            with redirect_stdout(f):
-                try:
-                    st.session_state.converter.binary_manager.download_binaries(force=True)
-                    st.toast("Binaries updated successfully!")
-                except Exception as e:
-                    print(f"\n--- An error occurred ---\n{str(e)}")
-                    st.toast(f"An error occurred during binary update: {e}")
-            
-            output = f.getvalue()
-            output_container.code(output, language='bash')
-    with col4:
-        st.subheader("YaGUFF Binary Information")
-        binary_info = get_binary_version(st.session_state.converter)
-        if binary_info["status"] == "ok":
-            st.success(binary_info['message'])
-            if binary_info["version"]:
-                st.code(binary_info["version"], language=None)
-        elif binary_info["status"] == "missing":
-            st.warning(binary_info['message'])
-        else:
-            st.error(binary_info['message'])
-        st.markdown("[llama.cpp on GitHub](https://github.com/ggerganov/llama.cpp)")
 
 
 def render_update_tab(converter, config):

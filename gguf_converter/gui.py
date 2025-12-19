@@ -23,7 +23,7 @@ try:
         render_update_tab
     )
 except ImportError:
-    # Add parent directory to path for direct execution
+    # Add parent directory for direct execution
     sys.path.insert(0, str(Path(__file__).parent.parent))
     from gguf_converter.converter import GGUFConverter
     from gguf_converter.gui_utils import (
@@ -73,16 +73,15 @@ def main():
     if 'config' not in st.session_state:
         st.session_state.config = load_config()
 
-    # Track reset count to force widget refresh
     if 'reset_count' not in st.session_state:
         st.session_state.reset_count = 0
 
-    # Handle setting model path from downloader (must happen before widget creation)
+    # Handle model path from downloader (before widget creation)
     if 'pending_model_path' in st.session_state:
         st.session_state.model_path_input = st.session_state.pending_model_path
         del st.session_state.pending_model_path
 
-    # Handle reset to defaults (must happen before widget creation)
+    # Handle reset to defaults (before widget creation)
     if 'pending_reset_defaults' in st.session_state:
         defaults = get_default_config()
         st.session_state.verbose_checkbox = defaults["verbose"]
@@ -92,12 +91,10 @@ def main():
     converter = st.session_state.converter
     config = st.session_state.config
 
-    # Sidebar for settings
     with st.sidebar:
         st.header("Settings")
         st.markdown("---")
 
-        # Auto-save callback for verbose
         def save_verbose():
             config["verbose"] = st.session_state.verbose_checkbox
             save_config(config)
@@ -111,11 +108,9 @@ def main():
         }
         if "verbose_checkbox" not in st.session_state:
             verbose_kwargs["value"] = config.get("verbose", False)
-        verbose = st.checkbox(**verbose_kwargs)
+        verbose = st.checkbox(**verbose_kwargs)  # type: ignore[arg-type]
 
-        # Auto-save callback for incompatibility warnings (inverted logic)
         def save_incompatibility_warnings():
-            # Checkbox checked = warnings ON, so ignore_incompatibilities = False
             config["ignore_incompatibilities"] = not st.session_state.incompatibility_warnings_checkbox
             save_config(config)
 
@@ -127,18 +122,16 @@ def main():
             "on_change": save_incompatibility_warnings
         }
         if "incompatibility_warnings_checkbox" not in st.session_state:
-            incomp_kwargs["value"] = not config.get("ignore_incompatibilities", False)  # Inverted: default to checked (warnings ON)
-        incompatibility_warnings_enabled = st.checkbox(**incomp_kwargs)
+            incomp_kwargs["value"] = not config.get("ignore_incompatibilities", False)
+        incompatibility_warnings_enabled = st.checkbox(**incomp_kwargs)  # type: ignore[arg-type]
 
-        # For internal use, invert back to ignore_incompatibilities
         ignore_incompatibilities = not incompatibility_warnings_enabled
 
         st.markdown("---")
         st.markdown("**Performance:**")
         max_workers = multiprocessing.cpu_count()
-        default_threads = max(1, max_workers - 1)  # Leave one core free for system
+        default_threads = max(1, max_workers - 1)
 
-        # Auto-save callback for nthreads
         def save_nthreads():
             config["nthreads"] = int(st.session_state.nthreads_input)
             save_config(config)
@@ -154,27 +147,20 @@ def main():
             on_change=save_nthreads
         )
 
-        # Reset settings button (removed Save button)
         st.markdown("---")
         if st.button("Reset to defaults", use_container_width=True, help="Reset all settings to default values"):
             st.session_state.config = reset_config()
-            st.session_state.reset_count += 1  # Increment to force widget refresh
-            # Clear download success message
+            st.session_state.reset_count += 1
             if "download_just_completed" in st.session_state:
                 st.session_state.download_just_completed = False
-            # Clear model path widget state - set to empty instead of deleting
             st.session_state.model_path_input = ""
-            # Also clear pending model path flag if it exists
             if "pending_model_path" in st.session_state:
                 del st.session_state.pending_model_path
-            # Clear all quantization checkbox states
-            keys_to_delete = [k for k in st.session_state.keys() if k.startswith(('trad_', 'k_', 'i_'))]
+            keys_to_delete = [k for k in st.session_state.keys() if isinstance(k, str) and k.startswith(('trad_', 'k_', 'i_'))]
             for key in keys_to_delete:
                 del st.session_state[key]
-            # Clear IQ checkbox state tracking
             if "iq_checkbox_states" in st.session_state:
                 st.session_state.iq_checkbox_states = {}
-            # Set pending flag to update verbose and incompatibility warnings on next run
             st.session_state.pending_reset_defaults = True
             st.rerun()
 
