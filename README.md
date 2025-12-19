@@ -68,8 +68,6 @@ All quantization types from llama.cpp are supported. Choose based on your size/q
 
 ## Usage
 
-### GUI (Recommended)
-
 **Windows:**
 - Double-click `run_gui.bat`
 
@@ -80,15 +78,10 @@ All quantization types from llama.cpp are supported. Choose based on your size/q
 
 The GUI will automatically open in your browser at `http://localhost:8501`
 
-### CLI
-
-For command-line usage, use [llama.cpp](https://github.com/ggerganov/llama.cpp) directly. YaGUFF focuses on providing a user-friendly GUI experience.
-
 ## Requirements
 
 - Python 3.8 or higher
 - 8GB+ RAM (more for larger models)
-- Disk space for models and outputs
 
 ## Troubleshooting
 
@@ -102,7 +95,6 @@ For large models, ensure you have enough RAM. You can also:
 ### Conversion is slow
 
 This is normal for large models. The process is CPU-intensive.
-- Use fewer quantization types
 - Enable `--verbose` to see progress
 - Adjust parallel quantization settings
 - Be patient - it will finish!
