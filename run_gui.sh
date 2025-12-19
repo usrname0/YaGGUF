@@ -13,7 +13,7 @@ if [ ! -d "venv" ]; then
     printf "Press Enter to run setup now, or Ctrl+C to cancel..."
     read _
     echo ""
-    bash setup/setup_linux.sh
+    bash scripts/setup_linux.sh
     if [ $? -ne 0 ]; then
         echo ""
         echo "Setup failed. Please check the errors above."
@@ -29,7 +29,7 @@ fi
 
 # Check and update binaries if needed
 echo ""
-python check_binaries.py
+python scripts/check_binaries.py
 echo ""
 
 echo "Starting GGUF Converter GUI..."

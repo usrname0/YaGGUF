@@ -13,6 +13,7 @@ import platform
 import tkinter as tk
 from tkinter import filedialog
 import io
+import os
 from contextlib import redirect_stdout
 
 from .gui_utils import (
@@ -1908,9 +1909,39 @@ def render_update_tab(converter, config):
     col3, col4 = st.columns(2)
     with col3:
         st.markdown("Update Python dependencies from `requirements.txt`.")
-        if st.button("Update Dependencies"):
-            venv_py = sys.executable
-            run_and_stream_command([venv_py, "-m", "pip", "install", "--upgrade", "-r", "requirements.txt"])
+        st.info("The GUI will restart automatically after updating.")
+
+        if st.button("Update Dependencies & Restart"):
+            # Determine platform-specific restart script
+            if platform.system() == "Windows":
+                restart_script = Path(__file__).parent.parent / "scripts" / "update_and_restart.bat"
+            else:
+                restart_script = Path(__file__).parent.parent / "scripts" / "update_and_restart.sh"
+
+            if restart_script.exists():
+                st.success("Triggering update and restart...")
+                st.info("The GUI will close and restart automatically in a few seconds.")
+
+                # Start the update script in detached mode
+                if platform.system() == "Windows":
+                    # Run batch file through cmd.exe in a new console
+                    subprocess.Popen(
+                        ["cmd", "/c", "start", "cmd", "/k", str(restart_script)],
+                        cwd=str(restart_script.parent),
+                        shell=True
+                    )
+                else:
+                    subprocess.Popen(
+                        [str(restart_script)],
+                        start_new_session=True,
+                        cwd=str(restart_script.parent)
+                    )
+
+                # Exit Streamlit gracefully
+                st.stop()
+                os._exit(0)
+            else:
+                st.error(f"Restart script not found: {restart_script}")
 
     with col4:
         try:

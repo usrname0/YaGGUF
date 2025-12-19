@@ -13,7 +13,7 @@ if not exist venv (
     echo Press any key to run setup now, or Ctrl+C to cancel...
     pause >nul
     echo.
-    call setup\setup_windows.bat
+    call scripts\setup_windows.bat
     if errorlevel 1 (
         echo.
         echo Setup failed. Please check the errors above.
@@ -30,7 +30,7 @@ call venv\Scripts\activate.bat
 
 REM Check and update binaries if needed
 echo.
-python check_binaries.py
+python scripts\check_binaries.py
 echo.
 
 echo Starting GGUF Converter GUI...

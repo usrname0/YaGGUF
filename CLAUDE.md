@@ -24,8 +24,9 @@ User-friendly GGUF converter that shields users from llama.cpp complexity - no m
 - Auto-runs setup on first launch
 - Multi-tab interface for conversion, imatrix, downloads, and configuration
 
-**Setup Scripts**:
+**Scripts** (`scripts/`):
 - `setup_windows.bat` / `setup_linux.sh` - One-click setup
+- `update_and_restart.bat` / `update_and_restart.sh` - Update dependencies with auto-restart
 - `run_gui.bat` / `run_gui.sh` - Launch GUI (auto-setup if needed)
 - Downloads/installs llama.cpp binaries automatically
 
