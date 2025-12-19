@@ -149,16 +149,14 @@ def open_folder(folder_path):
 
 def get_current_version():
     """
-    Get current version from VERSION file
+    Get current version from __init__.py
 
     Returns:
-        str: Version string or "unknown" if file not found
+        str: Version string or "unknown" if not found
     """
     try:
-        version_file = Path(__file__).parent.parent / "VERSION"
-        if version_file.exists():
-            return version_file.read_text().strip()
-        return "unknown"
+        from gguf_converter import __version__
+        return __version__
     except Exception:
         return "unknown"
 

@@ -58,22 +58,12 @@ def main():
 
     manager = BinaryManager()
 
-    # Check if binaries exist and are correct version
+    # Check if binaries exist
     binaries_updated = False
     if manager._binaries_exist():
         print(f"Binaries up to date (version {manager.LLAMA_CPP_VERSION})")
     else:
-        # Need to download/update
-        version_file = manager.bin_dir / "BINARY_VERSION"
-        if version_file.exists():
-            try:
-                installed_version = version_file.read_text().strip()
-                print(f"Binary update available: {installed_version} -> {manager.LLAMA_CPP_VERSION}")
-            except Exception:
-                print("Binary version check needed")
-        else:
-            print("Binaries not installed")
-
+        print("Binaries not installed")
         print("Downloading llama.cpp binaries...")
         print("This may take a few minutes...")
         print()

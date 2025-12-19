@@ -143,11 +143,7 @@ class BinaryManager:
         if not self._check_binary_files_exist():
             raise RuntimeError("Binary extraction succeeded but executables not found")
 
-        # Write version file to track installed binary version
-        version_file = self.bin_dir / "BINARY_VERSION"
-        version_file.write_text(self.LLAMA_CPP_VERSION)
         print(f"Installed binary version: {self.LLAMA_CPP_VERSION}")
-
         print(f"Binaries ready in {self.bin_dir}")
         return self.bin_dir
 
