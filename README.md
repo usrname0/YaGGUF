@@ -60,7 +60,8 @@ All quantization types from llama.cpp are supported. Choose based on your size/q
 ```bash
 # Clone the repository
     git clone https://github.com/usrname0/YaGUFF.git
-    cd YaGUFF# Run the launcher script for your platform (runs a setup script if no venv detected):
+    cd YaGUFF
+# Run the launcher script for your platform (runs a setup script if no venv detected):
 - Windows: `run_gui.bat`
 - Linux/Mac: `./run_gui.sh`
 ```
