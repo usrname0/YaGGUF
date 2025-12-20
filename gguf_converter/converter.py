@@ -3,7 +3,6 @@ Core GGUF conversion and quantization functionality
 """
 
 import os
-import shutil
 import subprocess
 import sys
 import json
@@ -346,46 +345,24 @@ class GGUFConverter:
 
     def _ensure_llama_cpp_repo(self):
         """
-        Ensure llama.cpp repository exists (download if missing)
-        Does NOT auto-update - use Upgrade tab in GUI for updates
+        Verify llama.cpp repository exists
+        Repository should be cloned during startup by check_binaries.py
         """
         llama_cpp_dir = Path(__file__).parent.parent / "llama.cpp"
         convert_script = llama_cpp_dir / "convert_hf_to_gguf.py"
 
-        # Only clone if missing - don't auto-update
         if not llama_cpp_dir.exists() or not convert_script.exists():
-            # Remove old repo if it exists but is incomplete
-            if llama_cpp_dir.exists():
-                print(f"{theme['info']}Removing incomplete llama.cpp repository...{Style.RESET_ALL}")
-                shutil.rmtree(llama_cpp_dir)
-
-            # Clone fresh copy
-            expected_version = self.binary_manager.LLAMA_CPP_VERSION
-            print(f"{theme['info']}Cloning llama.cpp repository (version {expected_version})...{Style.RESET_ALL}")
-            try:
-                subprocess.run([
-                    "git", "clone",
-                    "https://github.com/ggml-org/llama.cpp.git",
-                    "--depth=1",
-                    str(llama_cpp_dir)
-                ], check=True, capture_output=True, text=True)
-
-                # Write version file for tracking
-                version_file = llama_cpp_dir / "REPO_VERSION"
-                version_file.write_text(expected_version)
-                print(f"{theme['success']}llama.cpp repository ready (version {expected_version}){Style.RESET_ALL}")
-            except subprocess.CalledProcessError as e:
-                raise RuntimeError(
-                    f"Failed to clone llama.cpp repository: {e.stderr if e.stderr else str(e)}\n"
-                    f"Please check your git installation and internet connection."
-                )
+            raise RuntimeError(
+                "llama.cpp repository not found. This should have been cloned during startup.\n"
+                "Please restart the application or run the startup script again."
+            )
 
     def _find_convert_script(self) -> Optional[Path]:
         """
         Find the convert_hf_to_gguf.py script
 
-        Note: _ensure_llama_cpp_repo() is called during init, so the repo
-        should already be cloned and up to date
+        Note: The repo is cloned during startup by check_binaries.py, and
+        _ensure_llama_cpp_repo() verifies it exists during init
         """
         # Primary location (managed by this tool)
         llama_cpp_dir = Path(__file__).parent.parent / "llama.cpp"
