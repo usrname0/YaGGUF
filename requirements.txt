@@ -9,5 +9,5 @@ transformers>=4.57.0
 sentencepiece>=0.1.99
 numpy>=2.0.0
 gguf>=0.10.0
-mistral-common>=1.8.0  # Required for Ministral-3 and newer Mistral models
 tokenizers>=0.20.0
+mistral-common>=1.8.0  # Required for Ministral-3 and newer Mistral models

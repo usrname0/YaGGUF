@@ -1893,8 +1893,8 @@ def render_update_tab(converter, config):
 
     col1, col2 = st.columns(2)
     with col1:
-        st.subheader("Update GUI")
-        st.markdown("Check for the latest version of the application from GitHub.")
+        st.subheader("Update YaGUFF")
+        st.markdown("Check for the latest version of YaGUFF from GitHub.")
         if st.button("Check for Updates (`git pull`)"):
             run_and_stream_command(["git", "pull"])
     with col2:
@@ -1905,13 +1905,21 @@ def render_update_tab(converter, config):
 
     st.markdown("---")
 
-    st.subheader("Dependencies")
+    st.subheader("Update Dependencies")
     col3, col4 = st.columns(2)
     with col3:
-        st.markdown("Update Python dependencies from `requirements.txt`.")
+        st.markdown("Update PyTorch and Python dependencies from `requirements.txt`.")
         st.info("The GUI will restart automatically after updating.")
 
         if st.button("Update Dependencies & Restart"):
+            # Update PyTorch first while GUI is still running
+            st.info("Updating PyTorch (CPU)...")
+            venv_py = sys.executable
+            run_and_stream_command([venv_py, "-m", "pip", "install", "--upgrade", "torch", "--index-url", "https://download.pytorch.org/whl/cpu"])
+
+            # Now trigger restart script for requirements.txt and restart
+            st.success("PyTorch updated! Now updating other dependencies and restarting...")
+
             # Determine platform-specific restart script
             if platform.system() == "Windows":
                 restart_script = Path(__file__).parent.parent / "scripts" / "update_and_restart.bat"
@@ -1919,26 +1927,21 @@ def render_update_tab(converter, config):
                 restart_script = Path(__file__).parent.parent / "scripts" / "update_and_restart.sh"
 
             if restart_script.exists():
-                st.success("Triggering update and restart...")
                 st.info("The GUI will close and restart automatically in a few seconds.")
 
-                # Start the update script in detached mode
+                # Start the update script - output will show in original terminal
                 if platform.system() == "Windows":
-                    # Run batch file through cmd.exe in a new console
                     subprocess.Popen(
-                        ["cmd", "/c", "start", "cmd", "/k", str(restart_script)],
-                        cwd=str(restart_script.parent),
-                        shell=True
+                        ["cmd", "/c", str(restart_script)],
+                        cwd=str(restart_script.parent)
                     )
                 else:
                     subprocess.Popen(
                         [str(restart_script)],
-                        start_new_session=True,
                         cwd=str(restart_script.parent)
                     )
 
-                # Exit Streamlit gracefully
-                st.stop()
+                # Exit Streamlit - this releases the port
                 os._exit(0)
             else:
                 st.error(f"Restart script not found: {restart_script}")
