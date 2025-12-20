@@ -1,6 +1,9 @@
 @echo off
 REM Update dependencies and restart Streamlit
 
+REM Change to project root
+cd /d "%~dp0.."
+
 echo.
 echo ========================================
 echo Updating Dependencies and Restarting

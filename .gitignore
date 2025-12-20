@@ -212,3 +212,6 @@ llama.cpp/
 bin/
 !bin/BINARY_VERSION
 nul
+CLAUDE.md
+GEMINI.md
+test_variants.py

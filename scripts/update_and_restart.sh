@@ -1,6 +1,9 @@
 #!/bin/bash
 # Update dependencies and restart Streamlit
 
+# Change to project root
+cd "$(dirname "$0")/.."
+
 echo ""
 echo "========================================"
 echo "Updating Dependencies and Restarting"
