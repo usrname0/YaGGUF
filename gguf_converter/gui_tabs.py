@@ -18,8 +18,8 @@ from contextlib import redirect_stdout
 
 from .gui_utils import (
     strip_quotes, open_folder, browse_folder,
-    save_config, run_and_stream_command,
-    get_current_version, get_binary_version,
+    save_config, make_config_saver, run_and_stream_command,
+    get_current_version, get_binary_version, display_binary_version_status,
     get_default_config,
     CONFIG_FILE
 )
@@ -153,52 +153,36 @@ def render_convert_tab(converter, config, verbose, nthreads, ignore_incompatibil
         with st.expander("Advanced Quantization Options"):
             st.markdown("These options affect how llama.cpp quantizes your model. Most users won't need these.")
 
-            def save_allow_requantize():
-                config["allow_requantize"] = st.session_state.allow_requantize_checkbox
-                save_config(config)
-
             allow_requantize = st.checkbox(
                 "Allow requantize",
                 value=config.get("allow_requantize", False),
                 help="Allow quantizing models that are already quantized. Warning: This can severely reduce quality compared to quantizing from F16/F32.",
                 key="allow_requantize_checkbox",
-                on_change=save_allow_requantize
+                on_change=make_config_saver(config, "allow_requantize", "allow_requantize_checkbox")
             )
-
-            def save_leave_output_tensor():
-                config["leave_output_tensor"] = st.session_state.leave_output_tensor_checkbox
-                save_config(config)
 
             leave_output_tensor = st.checkbox(
                 "Leave output tensor unquantized",
                 value=config.get("leave_output_tensor", False),
                 help="Keep output.weight at higher precision for better quality (increases model size slightly). Especially useful when requantizing.",
                 key="leave_output_tensor_checkbox",
-                on_change=save_leave_output_tensor
+                on_change=make_config_saver(config, "leave_output_tensor", "leave_output_tensor_checkbox")
             )
-
-            def save_pure_quantization():
-                config["pure_quantization"] = st.session_state.pure_quantization_checkbox
-                save_config(config)
 
             pure_quantization = st.checkbox(
                 "Pure quantization (disable mixtures)",
                 value=config.get("pure_quantization", False),
                 help="Disable k-quant mixtures and quantize all tensors to the same type. Results in more uniform quantization.",
                 key="pure_quantization_checkbox",
-                on_change=save_pure_quantization
+                on_change=make_config_saver(config, "pure_quantization", "pure_quantization_checkbox")
             )
-
-            def save_keep_split():
-                config["keep_split"] = st.session_state.keep_split_checkbox
-                save_config(config)
 
             keep_split = st.checkbox(
                 "Keep split files",
                 value=config.get("keep_split", False),
                 help="Generate quantized model in the same shards as the input model (for multi-file models).",
                 key="keep_split_checkbox",
-                on_change=save_keep_split
+                on_change=make_config_saver(config, "keep_split", "keep_split_checkbox")
             )
 
         # Save/restore quant selections when incompatibility status changes
@@ -1042,42 +1026,28 @@ def render_imatrix_settings_tab(converter, config):
         )
 
         # Auto-save callback for no ppl
-        def save_no_ppl():
-            config["imatrix_no_ppl"] = st.session_state[f"imatrix_no_ppl_input_{st.session_state.reset_count}"]
-            save_config(config)
-
         imatrix_no_ppl_input = st.checkbox(
             "Disable perplexity calculation",
             value=config.get("imatrix_no_ppl", False),
             help="Skip PPL calculation to speed up processing",
             key=f"imatrix_no_ppl_input_{st.session_state.reset_count}",
-            on_change=save_no_ppl
+            on_change=make_config_saver(config, "imatrix_no_ppl", f"imatrix_no_ppl_input_{st.session_state.reset_count}")
         )
-
-        # Auto-save callback for parse special
-        def save_parse_special():
-            config["imatrix_parse_special"] = st.session_state[f"imatrix_parse_special_input_{st.session_state.reset_count}"]
-            save_config(config)
 
         imatrix_parse_special_input = st.checkbox(
             "Parse special tokens",
             value=config.get("imatrix_parse_special", False),
             help="Parse special tokens like <|im_start|>, <|im_end|>, etc. Recommended for chat models (Qwen, Llama 3, ChatML-based models). Warning: Can significantly slow down imatrix generation.",
             key=f"imatrix_parse_special_input_{st.session_state.reset_count}",
-            on_change=save_parse_special
+            on_change=make_config_saver(config, "imatrix_parse_special", f"imatrix_parse_special_input_{st.session_state.reset_count}")
         )
-
-        # Auto-save callback for collect output
-        def save_collect_output():
-            config["imatrix_collect_output_weight"] = st.session_state[f"imatrix_collect_output_input_{st.session_state.reset_count}"]
-            save_config(config)
 
         imatrix_collect_output_input = st.checkbox(
             "Collect output.weight tensor",
             value=config.get("imatrix_collect_output_weight", False),
             help="Collect importance matrix data for output.weight tensor. Typically better to leave disabled (default), as the importance matrix is generally not beneficial for this tensor.",
             key=f"imatrix_collect_output_input_{st.session_state.reset_count}",
-            on_change=save_collect_output
+            on_change=make_config_saver(config, "imatrix_collect_output_weight", f"imatrix_collect_output_input_{st.session_state.reset_count}")
         )
 
         # GPU offloading (only show if custom binaries enabled)
@@ -1709,16 +1679,20 @@ def render_llama_cpp_tab(converter, config):
 
     # YaGUFF Binary Information (Reference)
     st.subheader("YaGUFF Binary Information")
-    binary_info = get_binary_version(st.session_state.converter)
-    if binary_info["status"] == "ok":
-        st.success(binary_info['message'])
-        if binary_info["version"]:
-            st.code(binary_info["version"], language=None)
-    elif binary_info["status"] == "missing":
-        st.warning(binary_info['message'])
-    else:
-        st.error(binary_info['message'])
-    st.markdown("[llama.cpp on GitHub](https://github.com/ggml-org/llama.cpp)")
+
+    col_info1, col_info2 = st.columns(2)
+    with col_info1:
+        binary_info = get_binary_version(st.session_state.converter)
+        if binary_info["status"] == "ok":
+            st.success(binary_info['message'])
+        elif binary_info["status"] == "missing":
+            st.warning(binary_info['message'])
+        else:
+            st.error(binary_info['message'])
+        st.markdown("[llama.cpp on GitHub](https://github.com/ggml-org/llama.cpp)")
+
+    with col_info2:
+        display_binary_version_status(st.session_state.converter)
 
     st.markdown("---")
 
@@ -1915,26 +1889,14 @@ def render_update_tab(converter, config):
     with col_bin2:
         st.subheader("YaGUFF Binary Information")
         binary_info = get_binary_version(st.session_state.converter)
-        expected_version = st.session_state.converter.binary_manager.LLAMA_CPP_VERSION
-
         if binary_info["status"] == "ok":
             st.success(binary_info['message'])
-            if binary_info["version"]:
-                st.code(binary_info["version"], language=None)
-                # Strip 'b' prefix from expected version for comparison (b7486 -> 7486)
-                expected_numeric = expected_version.lstrip('b')
-                if expected_numeric not in binary_info["version"]:
-                    # Show mismatch warning
-                    st.warning(f"Expected binary version: **{expected_version}**")
-                else:
-                    # Show positive confirmation when versions match
-                    st.info("You are on the latest YaGUFF tested binary")
         elif binary_info["status"] == "missing":
             st.warning(binary_info['message'])
-            st.info(f"Expected binary version: **{expected_version}**")
         else:
             st.error(binary_info['message'])
 
+        display_binary_version_status(st.session_state.converter)
         st.markdown("[llama.cpp on GitHub](https://github.com/ggml-org/llama.cpp)")
 
     st.markdown("---")
@@ -1982,6 +1944,3 @@ def render_update_tab(converter, config):
                 st.warning("`requirements.txt` not found.")
         except Exception as e:
             st.error(f"Could not read requirements.txt: {e}")
-
-
-

@@ -98,6 +98,29 @@ def save_config(config):
         print(f"Warning: Could not save config: {e}", flush=True)
 
 
+def make_config_saver(config, config_key, session_key):
+    """
+    Factory function to create config save callbacks for Streamlit widgets
+
+    Args:
+        config: Config dictionary to update
+        config_key: Key in config dict to update
+        session_key: Key in st.session_state to read from
+
+    Returns:
+        Callback function that saves the value from session state to config
+
+    Example:
+        st.checkbox("Enable feature",
+                    key="my_feature_checkbox",
+                    on_change=make_config_saver(config, "my_feature", "my_feature_checkbox"))
+    """
+    def save():
+        config[config_key] = st.session_state[session_key]
+        save_config(config)
+    return save
+
+
 def reset_config():
     """Reset configuration to defaults"""
     config = get_default_config()
@@ -256,6 +279,36 @@ def get_binary_version(converter):
             "version": None,
             "message": f"Error checking binaries: {e}"
         }
+
+
+def display_binary_version_status(converter):
+    """
+    Display binary version information with status message
+
+    Shows version code block and status message comparing installed vs expected version
+
+    Args:
+        converter: GGUFConverter instance
+
+    Returns:
+        None (displays directly using Streamlit)
+    """
+    binary_info = get_binary_version(converter)
+    expected_version = converter.binary_manager.LLAMA_CPP_VERSION
+
+    if binary_info["status"] == "ok" and binary_info["version"]:
+        st.code(binary_info["version"], language=None)
+
+        # Show version match status
+        expected_numeric = expected_version.lstrip('b')
+        if expected_numeric not in binary_info["version"]:
+            # Show mismatch warning
+            st.warning(f"Expected binary version: **{expected_version}**")
+        else:
+            # Show positive confirmation when versions match
+            st.info("You are on the latest YaGUFF tested binary")
+    elif binary_info["status"] == "missing":
+        st.info(f"Expected binary version: **{expected_version}**")
 
 
 def run_and_stream_command(command):
