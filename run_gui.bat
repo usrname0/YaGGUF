@@ -39,4 +39,4 @@ echo Opening browser to http://localhost:8501
 echo Press Ctrl+C to stop the server
 echo.
 
-streamlit run gguf_converter/gui.py
+streamlit run gguf_converter/gui.py --server.address=localhost

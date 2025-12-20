@@ -11,14 +11,20 @@ echo "========================================"
 echo ""
 
 # Wait for port 8501 to be released
-echo "Waiting for Streamlit to shut down..."
+printf "Waiting for port 8501 to be free"
 while lsof -Pi :8501 -sTCP:LISTEN -t >/dev/null 2>&1 ; do
+    printf "."
     sleep 1
 done
+echo ""
 echo "Port 8501 is free"
 
 # Activate venv
 source venv/bin/activate
+
+# Update PyTorch (CPU)
+echo "Updating PyTorch (CPU)..."
+python -m pip install --upgrade torch --index-url https://download.pytorch.org/whl/cpu
 
 # Update dependencies from requirements.txt
 echo "Updating dependencies from requirements.txt..."
@@ -31,4 +37,4 @@ echo "========================================"
 echo ""
 
 # Restart Streamlit without opening new browser tab
-streamlit run gguf_converter/gui.py --server.headless=true
+streamlit run gguf_converter/gui.py --server.headless=true --server.address=localhost

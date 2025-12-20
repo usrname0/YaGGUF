@@ -1704,41 +1704,21 @@ def render_llama_cpp_tab(converter, config):
 
     st.markdown("""
     By default, YaGUFF automatically downloads pre-compiled llama.cpp binaries that use the CPU (good for most cases).
+    You can update binaries from the **Update** tab.
     """)
 
-    # Update YaGUFF Binaries Section
-    col1, col2 = st.columns(2)
-    with col1:
-        st.subheader("Update YaGUFF Binaries")
-        st.markdown("Force a re-download of the `llama.cpp` binaries that come with YaGUFF. This is useful if the binaries are corrupted or to ensure you have the version matching the application.")
-
-        if st.button("Force Binary Update"):
-            output_container = st.empty()
-            output_container.code("Starting binary update...\nThis may take a moment.", language='bash')
-
-            f = io.StringIO()
-            with redirect_stdout(f):
-                try:
-                    st.session_state.converter.binary_manager.download_binaries(force=True)
-                    st.toast("Binaries updated successfully!")
-                except Exception as e:
-                    print(f"\n--- An error occurred ---\n{str(e)}")
-                    st.toast(f"An error occurred during binary update: {e}")
-
-            output = f.getvalue()
-            output_container.code(output, language='bash')
-    with col2:
-        st.subheader("YaGUFF Binary Information")
-        binary_info = get_binary_version(st.session_state.converter)
-        if binary_info["status"] == "ok":
-            st.success(binary_info['message'])
-            if binary_info["version"]:
-                st.code(binary_info["version"], language=None)
-        elif binary_info["status"] == "missing":
-            st.warning(binary_info['message'])
-        else:
-            st.error(binary_info['message'])
-        st.markdown("[llama.cpp on GitHub](https://github.com/ggerganov/llama.cpp)")
+    # YaGUFF Binary Information (Reference)
+    st.subheader("YaGUFF Binary Information")
+    binary_info = get_binary_version(st.session_state.converter)
+    if binary_info["status"] == "ok":
+        st.success(binary_info['message'])
+        if binary_info["version"]:
+            st.code(binary_info["version"], language=None)
+    elif binary_info["status"] == "missing":
+        st.warning(binary_info['message'])
+    else:
+        st.error(binary_info['message'])
+    st.markdown("[llama.cpp on GitHub](https://github.com/ggml-org/llama.cpp)")
 
     st.markdown("---")
 
@@ -1897,6 +1877,7 @@ def render_update_tab(converter, config):
         st.markdown("Check for the latest version of YaGUFF from GitHub.")
         if st.button("Check for Updates (`git pull`)"):
             run_and_stream_command(["git", "pull"])
+            st.rerun()
     with col2:
         st.subheader("Application Version")
         current_version = get_current_version()
@@ -1905,21 +1886,66 @@ def render_update_tab(converter, config):
 
     st.markdown("---")
 
+    # Update YaGUFF Binaries Section
+    col_bin1, col_bin2 = st.columns(2)
+    with col_bin1:
+        st.subheader("Update YaGUFF Binaries")
+        st.markdown("Force a re-download of the `llama.cpp` binaries that come with YaGUFF. This is useful if the binaries are corrupted or to ensure you have the version matching the application.")
+
+        if st.button("Force Binary Update"):
+            output_container = st.empty()
+            output_container.code("Starting binary update...\nThis may take a moment.", language='bash')
+
+            f = io.StringIO()
+            with redirect_stdout(f):
+                try:
+                    st.session_state.converter.binary_manager.download_binaries(force=True)
+                    st.toast("Binaries updated successfully!")
+                    success = True
+                except Exception as e:
+                    print(f"\n--- An error occurred ---\n{str(e)}")
+                    st.toast(f"An error occurred during binary update: {e}")
+                    success = False
+
+            output = f.getvalue()
+            output_container.code(output, language='bash')
+
+            if success:
+                st.rerun()
+    with col_bin2:
+        st.subheader("YaGUFF Binary Information")
+        binary_info = get_binary_version(st.session_state.converter)
+        expected_version = st.session_state.converter.binary_manager.LLAMA_CPP_VERSION
+
+        if binary_info["status"] == "ok":
+            st.success(binary_info['message'])
+            if binary_info["version"]:
+                st.code(binary_info["version"], language=None)
+                # Strip 'b' prefix from expected version for comparison (b7486 -> 7486)
+                expected_numeric = expected_version.lstrip('b')
+                if expected_numeric not in binary_info["version"]:
+                    # Show mismatch warning
+                    st.warning(f"Expected binary version: **{expected_version}**")
+                else:
+                    # Show positive confirmation when versions match
+                    st.info("You are on the latest YaGUFF tested binary")
+        elif binary_info["status"] == "missing":
+            st.warning(binary_info['message'])
+            st.info(f"Expected binary version: **{expected_version}**")
+        else:
+            st.error(binary_info['message'])
+
+        st.markdown("[llama.cpp on GitHub](https://github.com/ggml-org/llama.cpp)")
+
+    st.markdown("---")
+
     st.subheader("Update Dependencies")
     col3, col4 = st.columns(2)
     with col3:
         st.markdown("Update PyTorch and Python dependencies from `requirements.txt`.")
-        st.info("The GUI will restart automatically after updating.")
+        st.info("The GUI will close and restart automatically. All updates will run in the terminal.")
 
         if st.button("Update Dependencies & Restart"):
-            # Update PyTorch first while GUI is still running
-            st.info("Updating PyTorch (CPU)...")
-            venv_py = sys.executable
-            run_and_stream_command([venv_py, "-m", "pip", "install", "--upgrade", "torch", "--index-url", "https://download.pytorch.org/whl/cpu"])
-
-            # Now trigger restart script for requirements.txt and restart
-            st.success("PyTorch updated! Now updating other dependencies and restarting...")
-
             # Determine platform-specific restart script
             if platform.system() == "Windows":
                 restart_script = Path(__file__).parent.parent / "scripts" / "update_and_restart.bat"
@@ -1927,7 +1953,7 @@ def render_update_tab(converter, config):
                 restart_script = Path(__file__).parent.parent / "scripts" / "update_and_restart.sh"
 
             if restart_script.exists():
-                st.info("The GUI will close and restart automatically in a few seconds.")
+                st.info("Closing GUI and starting update process...")
 
                 # Start the update script - output will show in original terminal
                 if platform.system() == "Windows":
