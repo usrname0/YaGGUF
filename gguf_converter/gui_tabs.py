@@ -19,7 +19,8 @@ from contextlib import redirect_stdout
 from .gui_utils import (
     strip_quotes, open_folder, browse_folder,
     save_config, make_config_saver, run_and_stream_command,
-    get_current_version, get_binary_version, display_binary_version_status,
+    get_current_version, check_git_updates_available,
+    get_binary_version, display_binary_version_status,
     get_default_config,
     CONFIG_FILE
 )
@@ -1682,6 +1683,9 @@ def render_llama_cpp_tab(converter, config):
 
     col_info1, col_info2 = st.columns(2)
     with col_info1:
+        st.markdown("[View llama.cpp on GitHub](https://github.com/ggml-org/llama.cpp)")
+
+    with col_info2:
         binary_info = get_binary_version(st.session_state.converter)
         if binary_info["status"] == "ok":
             st.success(binary_info['message'])
@@ -1689,9 +1693,7 @@ def render_llama_cpp_tab(converter, config):
             st.warning(binary_info['message'])
         else:
             st.error(binary_info['message'])
-        st.markdown("[llama.cpp on GitHub](https://github.com/ggml-org/llama.cpp)")
 
-    with col_info2:
         display_binary_version_status(st.session_state.converter)
 
     st.markdown("---")
@@ -1849,14 +1851,23 @@ def render_update_tab(converter, config):
     with col1:
         st.subheader("Update YaGUFF")
         st.markdown("Check for the latest version of YaGUFF from GitHub.")
-        if st.button("Check for Updates (`git pull`)"):
+        st.markdown("[View YaGUFF on GitHub](https://github.com/usrname0/YaGUFF)")
+        if st.button("Pull YaGUFF Updates (`git pull`)"):
             run_and_stream_command(["git", "pull"])
             st.rerun()
     with col2:
-        st.subheader("Application Version")
+        st.subheader("YaGUFF Version Information")
         current_version = get_current_version()
-        st.info(f"**Version:** {current_version}")
-        st.markdown("[View on GitHub](https://github.com/usrname0/YaGUFF)")
+        st.code(f"version: {current_version}", language=None)
+
+        # Check if updates are available
+        update_status = check_git_updates_available()
+        if update_status["status"] == "updates_available":
+            st.warning(update_status["message"])
+        elif update_status["status"] == "up_to_date":
+            st.info(update_status["message"])
+        else:
+            st.info(update_status["message"])
 
     st.markdown("---")
 
@@ -1865,7 +1876,7 @@ def render_update_tab(converter, config):
     with col_bin1:
         st.subheader("Update YaGUFF Binaries")
         st.markdown("Force a re-download of the `llama.cpp` binaries that come with YaGUFF. This is useful if the binaries are corrupted or to ensure you have the version matching the application.")
-
+        st.markdown("[View llama.cpp on GitHub](https://github.com/ggml-org/llama.cpp)")
         if st.button("Force Binary Update"):
             output_container = st.empty()
             output_container.code("Starting binary update...\nThis may take a moment.", language='bash')
@@ -1897,7 +1908,6 @@ def render_update_tab(converter, config):
             st.error(binary_info['message'])
 
         display_binary_version_status(st.session_state.converter)
-        st.markdown("[llama.cpp on GitHub](https://github.com/ggml-org/llama.cpp)")
 
     st.markdown("---")
 

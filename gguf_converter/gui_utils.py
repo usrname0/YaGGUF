@@ -184,6 +184,58 @@ def get_current_version():
         return "unknown"
 
 
+def check_git_updates_available():
+    """
+    Check if git updates are available from remote
+
+    Returns:
+        dict: Status info with keys 'status', 'message', 'behind_count'
+    """
+    try:
+        # Fetch remote refs without updating local branches
+        result = subprocess.run(
+            ["git", "fetch", "--dry-run"],
+            capture_output=True,
+            text=True,
+            timeout=5
+        )
+
+        # Check how many commits behind
+        result = subprocess.run(
+            ["git", "rev-list", "--count", "HEAD..origin/main"],
+            capture_output=True,
+            text=True,
+            timeout=5
+        )
+
+        if result.returncode == 0:
+            behind_count = int(result.stdout.strip()) if result.stdout.strip() else 0
+            if behind_count > 0:
+                return {
+                    "status": "updates_available",
+                    "message": f"Updates available ({behind_count} commit{'s' if behind_count > 1 else ''} behind)",
+                    "behind_count": behind_count
+                }
+            else:
+                return {
+                    "status": "up_to_date",
+                    "message": "You are on the latest version of YaGUFF",
+                    "behind_count": 0
+                }
+        else:
+            return {
+                "status": "unknown",
+                "message": "Use 'Check for Updates' to pull the latest version from GitHub",
+                "behind_count": 0
+            }
+    except Exception:
+        return {
+            "status": "unknown",
+            "message": "Use 'Check for Updates' to pull the latest version from GitHub",
+            "behind_count": 0
+        }
+
+
 def browse_folder(initial_dir=None):
     """
     Open a native folder picker dialog
@@ -306,7 +358,7 @@ def display_binary_version_status(converter):
             st.warning(f"Expected binary version: **{expected_version}**")
         else:
             # Show positive confirmation when versions match
-            st.info("You are on the latest YaGUFF tested binary")
+            st.info("You are on the latest YaGUFF-tested llama.cpp binary")
     elif binary_info["status"] == "missing":
         st.info(f"Expected binary version: **{expected_version}**")
 

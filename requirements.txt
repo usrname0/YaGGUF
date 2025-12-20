@@ -1,7 +1,7 @@
 # Note: PyTorch is installed separately by setup scripts (CPU-only version)
 
 streamlit>=1.40.0 # GUI
-huggingface-hub>=1.0.0
+huggingface-hub>=0.36.0
 colorama>=0.4.6 # Colored terminal output
 
 # For model conversion (llama.cpp convert_hf_to_gguf.py script)
