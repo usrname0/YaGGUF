@@ -320,11 +320,11 @@ def render_convert_tab(converter, config, verbose, nthreads, ignore_incompatibil
             # Build dropdown: existing files + generate options
             if model_path_clean:
                 default_name = f"{Path(model_path_clean).name}.imatrix"
-                generate_default_option = f"Generate ({default_name})"
+                generate_default_option = f"GENERATE ({default_name})"
             else:
-                generate_default_option = "Generate (provide model path)"
+                generate_default_option = "GENERATE (provide model path)"
 
-            generate_custom_option = "Generate (custom name)"
+            generate_custom_option = "GENERATE (custom name)"
             dropdown_options = imatrix_files + [generate_default_option, generate_custom_option]
             col_imatrix_select, col_imatrix_update = st.columns([5, 1])
             with col_imatrix_select:
@@ -398,12 +398,12 @@ def render_convert_tab(converter, config, verbose, nthreads, ignore_incompatibil
                             st.warning(f"WARNING: File already exists and will be overwritten: `{final_name}`")
 
                 imatrix_reuse_path = None
-                imatrix_mode = "Generate (custom name)"
+                imatrix_mode = "GENERATE (custom name)"
 
             elif imatrix_selection == generate_default_option:
                 imatrix_generate_name = ""
                 imatrix_reuse_path = None
-                imatrix_mode = "Generate (default name)"
+                imatrix_mode = "GENERATE (default name)"
                 config["imatrix_mode"] = "generate"
                 save_config(config)
 
@@ -729,7 +729,7 @@ def render_convert_tab(converter, config, verbose, nthreads, ignore_incompatibil
                             imatrix_path_to_use = Path(output_dir_clean) / imatrix_reuse_path
                         config["imatrix_mode"] = "reuse"
                         config["imatrix_reuse_path"] = imatrix_reuse_path
-                    elif imatrix_mode == "Generate (default name)":
+                    elif imatrix_mode == "GENERATE (default name)":
                         # Generate with default name
                         generate_imatrix_flag = True
                         imatrix_output_filename = None  # Use default naming
@@ -745,7 +745,7 @@ def render_convert_tab(converter, config, verbose, nthreads, ignore_incompatibil
                             # Use default calibration_data directory (one level up from gguf_converter module)
                             default_cal_dir = Path(__file__).parent.parent / "calibration_data"
                             calibration_file_path = default_cal_dir / cal_file
-                    elif imatrix_mode == "Generate (custom name)":
+                    elif imatrix_mode == "GENERATE (custom name)":
                         # Generate with custom name
                         generate_imatrix_flag = True
                         config["imatrix_mode"] = "generate_custom"
@@ -774,6 +774,13 @@ def render_convert_tab(converter, config, verbose, nthreads, ignore_incompatibil
                     save_config(config)
 
                 with st.spinner("Converting and quantizing... This may take a while."):
+                    # Only use GPU offloading if custom binaries are enabled
+                    # YaGUFF binaries are CPU-only and don't support -ngl
+                    use_ngl = None
+                    if config.get("use_custom_binaries", False):
+                        ngl_value = int(config.get("imatrix_ngl", 0))
+                        use_ngl = ngl_value if ngl_value > 0 else None
+
                     output_files = converter.convert_and_quantize(
                         model_path=model_path_clean,
                         output_dir=output_dir_clean,
@@ -788,7 +795,7 @@ def render_convert_tab(converter, config, verbose, nthreads, ignore_incompatibil
                         imatrix_collect_output=config.get("imatrix_collect_output_weight", False),
                         imatrix_calibration_file=calibration_file_path,
                         imatrix_output_name=imatrix_output_filename,
-                        imatrix_ngl=int(config.get("imatrix_ngl", 0)) if config.get("imatrix_ngl", 0) > 0 else None,
+                        imatrix_ngl=use_ngl,
                         ignore_incompatibilities=ignore_incompatibilities,
                         allow_requantize=allow_requantize,
                         leave_output_tensor=leave_output_tensor,
@@ -805,11 +812,11 @@ def render_convert_tab(converter, config, verbose, nthreads, ignore_incompatibil
                     if imatrix_mode == "Reuse existing":
                         # Reused existing file
                         actual_imatrix_path = imatrix_path_to_use
-                    elif imatrix_mode == "Generate (default name)":
+                    elif imatrix_mode == "GENERATE (default name)":
                         # Generated with default name
                         model_name = Path(model_path_clean).name
                         actual_imatrix_path = Path(output_dir_clean) / f"{model_name}.imatrix"
-                    elif imatrix_mode == "Generate (custom name)":
+                    elif imatrix_mode == "GENERATE (custom name)":
                         # Generated with custom name
                         if imatrix_output_filename:
                             actual_imatrix_path = Path(output_dir_clean) / imatrix_output_filename
@@ -1707,6 +1714,9 @@ def render_llama_cpp_tab(converter, config):
         def save_use_custom_binaries():
             config["use_custom_binaries"] = st.session_state.use_custom_binaries_checkbox_update
             save_config(config)
+            # Clear version cache when switching
+            if "custom_binary_versions" in st.session_state:
+                del st.session_state.custom_binary_versions
             # Reinitialize converter with new settings
             if config.get("use_custom_binaries", False):
                 custom_folder = config.get("custom_binaries_folder", "")
@@ -1729,6 +1739,18 @@ def render_llama_cpp_tab(converter, config):
         # Single folder path with Browse and Check Folder buttons
         col_folder, col_browse, col_check = st.columns([4, 1, 1])
         with col_folder:
+            def save_binaries_folder():
+                new_folder = st.session_state.custom_binaries_folder_input_update
+                if new_folder != config.get("custom_binaries_folder", ""):
+                    config["custom_binaries_folder"] = new_folder
+                    save_config(config)
+                    # Clear version cache when folder changes
+                    if "custom_binary_versions" in st.session_state:
+                        del st.session_state.custom_binary_versions
+                    # Reinitialize converter with new folder
+                    from .converter import GGUFConverter
+                    st.session_state.converter = GGUFConverter(custom_binaries_folder=new_folder)
+
             binaries_folder = st.text_input(
                 "llama.cpp binaries folder",
                 value=config.get("custom_binaries_folder", ""),
@@ -1736,7 +1758,8 @@ def render_llama_cpp_tab(converter, config):
                 help="Path to folder containing llama-quantize and llama-imatrix. Leave blank to use system PATH.",
                 key="custom_binaries_folder_input_update",
                 label_visibility="collapsed",
-                disabled=not use_custom_binaries
+                disabled=not use_custom_binaries,
+                on_change=save_binaries_folder
             )
         with col_browse:
             if st.button(
@@ -1752,6 +1775,9 @@ def render_llama_cpp_tab(converter, config):
                 if selected_folder:
                     config["custom_binaries_folder"] = selected_folder
                     save_config(config)
+                    # Clear version cache when folder changes
+                    if "custom_binary_versions" in st.session_state:
+                        del st.session_state.custom_binary_versions
                     # Reinitialize converter
                     from .converter import GGUFConverter
                     st.session_state.converter = GGUFConverter(custom_binaries_folder=selected_folder)
@@ -1773,14 +1799,6 @@ def render_llama_cpp_tab(converter, config):
                     except Exception as e:
                         st.toast(f"Could not open folder: {e}")
 
-        # Save changes to folder path (only if enabled)
-        if use_custom_binaries and binaries_folder != config.get("custom_binaries_folder", ""):
-            config["custom_binaries_folder"] = binaries_folder
-            save_config(config)
-            # Reinitialize converter with new folder
-            from .converter import GGUFConverter
-            st.session_state.converter = GGUFConverter(custom_binaries_folder=binaries_folder)
-
         # Show help text below folder path
         st.markdown("""
         Enable local/custom binaries if you want to:
@@ -1792,7 +1810,16 @@ def render_llama_cpp_tab(converter, config):
         """)
 
     with col_bin2:
-        st.subheader("Local/Custom Binary Detection")
+        col_header, col_refresh = st.columns([4, 1])
+        with col_header:
+            st.subheader("Local/Custom Binary Detection")
+        with col_refresh:
+            st.markdown("<br>", unsafe_allow_html=True)  # Align with header
+            if st.button("Refresh", key="refresh_custom_binary_detection", use_container_width=True, disabled=not config.get("use_custom_binaries", False)):
+                # Clear cached version info
+                if "custom_binary_versions" in st.session_state:
+                    del st.session_state.custom_binary_versions
+                st.rerun()
 
         # If custom binaries enabled, show system/custom binary info
         if config.get("use_custom_binaries", False):
@@ -1821,12 +1848,24 @@ def render_llama_cpp_tab(converter, config):
             else:
                 st.info("Looking in system PATH")
 
+            # Initialize version cache if needed
+            if "custom_binary_versions" not in st.session_state:
+                st.session_state.custom_binary_versions = {}
+
+            # Cache key based on path
+            cache_key = f"{custom_folder}_{imatrix_found}"
+
             # Show found binaries
             if quantize_found and imatrix_found:
                 st.success("All required binaries found")
 
-                # Get version from llama-imatrix (represents system version)
-                system_version = get_binary_version_from_path(imatrix_path)
+                # Get version from cache or fetch it
+                if cache_key not in st.session_state.custom_binary_versions:
+                    system_version = get_binary_version_from_path(imatrix_path)
+                    st.session_state.custom_binary_versions[cache_key] = system_version
+                else:
+                    system_version = st.session_state.custom_binary_versions[cache_key]
+
                 if system_version:
                     st.code(system_version, language=None)
                 else:
@@ -1844,8 +1883,14 @@ def render_llama_cpp_tab(converter, config):
 
                 if imatrix_found:
                     st.markdown(f"- `llama-imatrix`: {imatrix_path}")
-                    # Show version when available
-                    imatrix_version = get_binary_version_from_path(imatrix_path)
+
+                    # Get version from cache or fetch it
+                    if cache_key not in st.session_state.custom_binary_versions:
+                        imatrix_version = get_binary_version_from_path(imatrix_path)
+                        st.session_state.custom_binary_versions[cache_key] = imatrix_version
+                    else:
+                        imatrix_version = st.session_state.custom_binary_versions[cache_key]
+
                     if imatrix_version:
                         st.code(imatrix_version, language=None)
                 else:
