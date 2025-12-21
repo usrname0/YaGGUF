@@ -58,7 +58,6 @@ def main():
     """, unsafe_allow_html=True)
 
     st.title("YaGUFF - Yet Another GGUF Converter")
-    st.markdown("*Because there are simultaneously too many and not enough GGUF converters*")
 
     # Initialize converter with custom binaries folder if specified
     if 'converter' not in st.session_state:
