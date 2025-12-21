@@ -86,6 +86,7 @@ def main():
         defaults = get_default_config()
         st.session_state.verbose_checkbox = defaults["verbose"]
         st.session_state.incompatibility_warnings_checkbox = not defaults["ignore_incompatibilities"]
+        st.session_state.imatrix_warnings_checkbox = not defaults["ignore_imatrix_warnings"]
         del st.session_state.pending_reset_defaults
 
     converter = st.session_state.converter
@@ -126,6 +127,23 @@ def main():
         incompatibility_warnings_enabled = st.checkbox(**incomp_kwargs)  # type: ignore[arg-type]
 
         ignore_incompatibilities = not incompatibility_warnings_enabled
+
+        def save_imatrix_warnings():
+            config["ignore_imatrix_warnings"] = not st.session_state.imatrix_warnings_checkbox
+            save_config(config)
+
+        # Only set value if not already in session state (prevents warning)
+        imatrix_warn_kwargs = {
+            "label": "Imatrix warnings",
+            "help": "Warn when selecting IQ quants without an importance matrix. Uncheck to allow IQ quants without imatrix (advanced users only).",
+            "key": "imatrix_warnings_checkbox",
+            "on_change": save_imatrix_warnings
+        }
+        if "imatrix_warnings_checkbox" not in st.session_state:
+            imatrix_warn_kwargs["value"] = not config.get("ignore_imatrix_warnings", False)
+        imatrix_warnings_enabled = st.checkbox(**imatrix_warn_kwargs)  # type: ignore[arg-type]
+
+        ignore_imatrix_warnings = not imatrix_warnings_enabled
 
         st.markdown("---")
         st.markdown("**Performance:**")
@@ -176,7 +194,7 @@ def main():
     ])
 
     with tab1:
-        render_convert_tab(converter, config, verbose, nthreads, ignore_incompatibilities)
+        render_convert_tab(converter, config, verbose, nthreads, ignore_incompatibilities, ignore_imatrix_warnings)
 
     with tab2:
         render_imatrix_settings_tab(converter, config)

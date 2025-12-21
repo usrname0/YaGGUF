@@ -23,6 +23,7 @@ def get_default_config():
         "use_imatrix": True,
         "nthreads": None,  # None = auto-detect
         "ignore_incompatibilities": False,  # Allow incompatible quantizations (advanced users only)
+        "ignore_imatrix_warnings": False,  # Allow IQ quants without imatrix (advanced users only)
 
         # Imatrix mode (on Convert & Quantize tab)
         "imatrix_mode": "generate",  # "generate", "generate_custom", or "reuse"

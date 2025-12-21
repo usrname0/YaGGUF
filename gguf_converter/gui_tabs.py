@@ -27,7 +27,7 @@ from .gui_utils import (
 )
 
 
-def render_convert_tab(converter, config, verbose, nthreads, ignore_incompatibilities):
+def render_convert_tab(converter, config, verbose, nthreads, ignore_incompatibilities, ignore_imatrix_warnings):
     """Render the Convert & Quantize tab"""
     st.header("Convert and Quantize Model")
 
@@ -294,7 +294,7 @@ def render_convert_tab(converter, config, verbose, nthreads, ignore_incompatibil
         )
 
         # Show info when IQ quants are disabled
-        if not use_imatrix:
+        if not use_imatrix and not ignore_imatrix_warnings:
             st.info("""
             **Importance Matrix Disabled**
 
@@ -612,14 +612,14 @@ def render_convert_tab(converter, config, verbose, nthreads, ignore_incompatibil
         i_cols = st.columns(3)
         for idx, (qtype, tooltip) in enumerate(i_quants.items()):
             with i_cols[idx % 3]:
-                imatrix_disabled = (qtype in IMATRIX_REQUIRED_TYPES) and not use_imatrix
+                imatrix_disabled = (qtype in IMATRIX_REQUIRED_TYPES) and not use_imatrix and not ignore_imatrix_warnings
                 incompatible_disabled = qtype in incompatible_quants
                 is_disabled = imatrix_disabled or incompatible_disabled
-                widget_key = f"i_{qtype}_{use_imatrix}_{incompatible_disabled}"
-                prev_key = f"i_{qtype}_{not use_imatrix}_{incompatible_disabled}"
+                widget_key = f"i_{qtype}_{use_imatrix}_{incompatible_disabled}_{ignore_imatrix_warnings}"
+                prev_key = f"i_{qtype}_{not use_imatrix}_{incompatible_disabled}_{not ignore_imatrix_warnings}"
 
                 # Save previous state when transitioning enabled→disabled
-                prev_was_enabled = (qtype not in IMATRIX_REQUIRED_TYPES) or (not use_imatrix)
+                prev_was_enabled = (qtype not in IMATRIX_REQUIRED_TYPES) or (not use_imatrix) or ignore_imatrix_warnings
                 if prev_key in st.session_state and prev_was_enabled:
                     st.session_state.iq_checkbox_states[qtype] = st.session_state[prev_key]
                 if is_disabled:
@@ -1061,10 +1061,6 @@ def render_imatrix_settings_tab(converter, config):
 
         # GPU offloading (only show if custom binaries enabled)
         if config.get("use_custom_binaries", False):
-            st.markdown("---")
-            st.markdown("**GPU Offloading**")
-            st.markdown("GPU offloading requires llama.cpp binaries compiled with CUDA/ROCm/Metal/Vulkan support.")
-            st.info("Custom binaries detected: GPU offloading enabled.")
 
             # Auto-save callback for ngl
             def save_ngl():
@@ -1083,7 +1079,6 @@ def render_imatrix_settings_tab(converter, config):
             )
 
         # Reset button
-        st.markdown("---")
         if st.button("Reset to Defaults", use_container_width=True, key="reset_imatrix_settings_btn"):
             # Reset imatrix settings to defaults
             defaults = get_default_config()
@@ -1389,15 +1384,12 @@ def render_imatrix_stats_tab(converter, config):
         st.error(f"Error: {st.session_state.imatrix_stats_error}")
     elif 'imatrix_stats_result' in st.session_state and st.session_state.imatrix_stats_result:
         st.success("Statistics generated!")
-    elif 'imatrix_stats_result' not in st.session_state or not st.session_state.imatrix_stats_result:
-        st.info("Click 'Show Statistics' to analyze an imatrix file")
-
-    st.markdown("---")
-
-    st.subheader("Statistics Output")
 
     # Display results if available
     if 'imatrix_stats_result' in st.session_state and st.session_state.imatrix_stats_result:
+        st.markdown("---")
+        st.subheader("Statistics Output")
+
         # Add horizontal scroll for wide statistics output
         st.markdown("""
             <style>
@@ -1411,8 +1403,6 @@ def render_imatrix_stats_tab(converter, config):
         st.markdown('<div class="stats-output">', unsafe_allow_html=True)
         st.code(st.session_state.imatrix_stats_result, language=None)
         st.markdown('</div>', unsafe_allow_html=True)
-    else:
-        st.info("Statistics will appear here after you click 'Show Statistics'")
 
 
 

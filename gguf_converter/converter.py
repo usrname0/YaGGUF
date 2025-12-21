@@ -666,7 +666,7 @@ class GGUFConverter:
     def show_imatrix_statistics(
         self,
         imatrix_path: Union[str, Path],
-        model_path: Union[str, Path] = None,
+        model_path: Union[str, Path, None] = None,
         verbose: bool = False
     ) -> str:
         """
@@ -825,7 +825,7 @@ class GGUFConverter:
             if requested_incompatible:
                 print(f"\n{theme['warning']}WARNING: Incompatibility override enabled!{Style.RESET_ALL}")
                 print(f"{theme['warning']}Detected issues: {', '.join(incompat_info['types'])}{Style.RESET_ALL}")
-                print(f"\n{theme['error']}These quantizations are likely to FAIL:{Style.RESET_ALL}")
+                print(f"\n{theme['error']}These quantizations are likely to have issues or FAIL:{Style.RESET_ALL}")
                 print(f"  {', '.join(requested_incompatible)}")
                 print(f"\n{theme['warning']}Proceeding anyway as requested (ignore_incompatibilities=True){Style.RESET_ALL}")
                 print(f"{theme['highlight']}If conversion fails, use: {', '.join(incompat_info['alternatives'])}{Style.RESET_ALL}")
