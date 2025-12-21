@@ -1,15 +1,17 @@
 # YaGUFF - Yet Another GGUF Converter
 
-There are simultaneously too many and not enough GGUF converters in the world. I can fix this.
+There are simultaneously too many and not enough GGUF converters in the world.
 
+ ![demo](./examples/convert_and_quantize.png)
+ 
 ## Features
 
-- **llama.cpp under the hood** - So you can trust that part
+- **llama.cpp under the hood** - so that part should work well
 - **Convert** - safetensors and PyTorch models to GGUF format
 - **Quantize** - to multiple formats at once
-- **Cross-platform** - scripts install on Windows, Mac, and Linux 
-- **No compiling** - installs llama.cpp binaries
-- **No mess** - it all lives in one folder/venv
+- **Cross-platform** - scripts install on Windows and Linux (and probably Mac but I'm not testing that)
+- **Easy** - auto-installs an environment + llama.cpp + binaries for quantizing
+- **Minimal mess** - everything but a settings.json lives in one folder/venv
 
 ## Quantization Types
 
