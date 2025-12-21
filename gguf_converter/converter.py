@@ -6,11 +6,13 @@ import os
 import subprocess
 import sys
 import json
+import io
 from pathlib import Path
 from typing import Optional, Union, List
 from huggingface_hub import snapshot_download
 from colorama import Fore, Style, init as colorama_init
 from .binary_manager import BinaryManager
+from . import imatrix_stats
 
 # Initialize colorama for cross-platform color support
 colorama_init(autoreset=True)
@@ -664,84 +666,49 @@ class GGUFConverter:
     def show_imatrix_statistics(
         self,
         imatrix_path: Union[str, Path],
-        model_path: Union[str, Path],
+        model_path: Union[str, Path] = None,
         verbose: bool = False
     ) -> str:
         """
-        Show statistics about an imatrix file
+        Show statistics about an imatrix file using native Python implementation
 
         Args:
-            imatrix_path: Path to imatrix file
-            model_path: Path to model file (required by llama-imatrix)
+            imatrix_path: Path to imatrix file (.gguf format)
+            model_path: (DEPRECATED) No longer required - kept for backward compatibility
             verbose: If True, print output to terminal in real-time
 
         Returns:
             Statistics output as string
         """
         imatrix_path = Path(imatrix_path)
-        model_path = Path(model_path)
 
         if not imatrix_path.exists():
             raise FileNotFoundError(f"Imatrix file not found: {imatrix_path}")
 
-        if not model_path.exists():
-            raise FileNotFoundError(f"Model not found: {model_path}")
-
-        # Build llama-imatrix command with --show-statistics
-        # Note: llama-imatrix requires a model even for showing statistics
-        imatrix_bin = self.binary_manager.get_imatrix_path()
-        cmd = [
-            str(imatrix_bin),
-            "-m", str(model_path),
-            "--in-file", str(imatrix_path),
-            "--show-statistics"
-        ]
-
-        if verbose:
-            print(f"\n{theme['highlight']}Running: {' '.join(cmd)}\n{Style.RESET_ALL}", flush=True)
+        # Use native Python implementation (no longer requires llama-imatrix binary or model file)
+        # Capture stdout to return as string
+        old_stdout = sys.stdout
+        sys.stdout = buffer = io.StringIO()
 
         try:
+            # Call our Python implementation
+            success = imatrix_stats.show_statistics(str(imatrix_path))
+
+            # Get the output
+            output = buffer.getvalue()
+
+            # If verbose, also print to terminal
             if verbose:
-                # Stream output to terminal in real-time AND capture for GUI
-                process = subprocess.Popen(
-                    cmd,
-                    stdout=subprocess.PIPE,
-                    stderr=subprocess.STDOUT,
-                    text=True,
-                    encoding='utf-8',
-                    bufsize=1
-                )
+                print(output, file=old_stdout, end='')
 
-                # Collect output while streaming to terminal
-                output_lines = []
-                assert process.stdout is not None  # We set stdout=PIPE above
-                for line in process.stdout:
-                    print(line, end='', flush=True)  # Real-time terminal output
-                    output_lines.append(line)  # Capture for GUI
+            if not success:
+                raise RuntimeError("Failed to compute statistics")
 
-                # Wait for process to complete
-                process.wait()
+            return output if output.strip() else "No statistics output (file may be empty or incompatible)"
 
-                if process.returncode != 0:
-                    raise subprocess.CalledProcessError(process.returncode, cmd)
-
-                output = ''.join(output_lines)
-                return output if output.strip() else "No statistics output (file may be empty or incompatible)"
-            else:
-                # Capture output for display in GUI only
-                result = subprocess.run(
-                    cmd,
-                    capture_output=True,
-                    text=True,
-                    encoding='utf-8',
-                    check=True
-                )
-                # Combine stdout and stderr since llama-imatrix may output to either
-                output = result.stdout + result.stderr
-                return output if output.strip() else "No statistics output (file may be empty or incompatible)"
-        except subprocess.CalledProcessError as e:
-            error_msg = e.stderr if e.stderr else str(e)
-            raise RuntimeError(f"Failed to show statistics: {error_msg}")
+        finally:
+            # Restore stdout
+            sys.stdout = old_stdout
 
     def convert_and_quantize(
         self,

@@ -1365,42 +1365,17 @@ def render_imatrix_stats_tab(converter, config):
     if saved_model in gguf_files:
         model_default_index = gguf_files.index(saved_model)
 
-    # Model path dropdown with Update File List button
-    col_model, col_model_btn = st.columns([5, 1])
-    with col_model:
-        imatrix_stats_model = st.selectbox(
-            "Model path for statistics",
-            options=gguf_files,
-            index=model_default_index,
-            help="Select a GGUF model file from the directory above (required by llama-imatrix for showing statistics)",
-            key=f"imatrix_stats_model_{st.session_state.reset_count}"
-        )
-    with col_model_btn:
-        st.markdown("<br>", unsafe_allow_html=True)  # Spacer to align with selectbox + help icon
-        if st.button(
-            "Refresh File List",
-            key="update_model_files_btn",
-            use_container_width=True,
-            help="Rescan directory for GGUF files"
-        ):
-            st.toast("Updated model file list")
-            st.rerun()
-
     if st.button("Show Statistics", use_container_width=True, key="show_stats_btn"):
         # Strip quotes from paths
         imatrix_stats_path_clean = strip_quotes(imatrix_stats_path)
-        imatrix_stats_model_clean = strip_quotes(imatrix_stats_model)
 
         if not imatrix_stats_path_clean:
             st.error("Please provide an imatrix file path")
-        elif not imatrix_stats_model_clean:
-            st.error("Please provide a model path")
         else:
             try:
                 with st.spinner("Reading imatrix statistics..."):
                     stats = converter.show_imatrix_statistics(
                         imatrix_stats_path_clean,
-                        imatrix_stats_model_clean,
                         verbose=verbose
                     )
                 st.session_state.imatrix_stats_result = stats
