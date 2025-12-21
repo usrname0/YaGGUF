@@ -333,6 +333,41 @@ def get_binary_version(converter):
         }
 
 
+def get_binary_version_from_path(binary_path):
+    """
+    Get version from a specific binary path by running it with --version
+
+    Args:
+        binary_path: Path to the binary (e.g., llama-quantize or llama-imatrix)
+
+    Returns:
+        str: Version string or None if unable to get version
+    """
+    try:
+        result = subprocess.run(
+            [str(binary_path), "--version"],
+            capture_output=True,
+            text=True,
+            timeout=5
+        )
+
+        if result.returncode == 0:
+            # Parse version from output (may be in stdout or stderr)
+            output = result.stderr if result.stderr else result.stdout
+            if output:
+                # Extract just the version line
+                for line in output.split('\n'):
+                    if line.startswith('version:'):
+                        return line.strip()
+                # If no version line found, return first non-empty line
+                first_line = output.strip().split('\n')[0]
+                if first_line:
+                    return first_line
+        return None
+    except Exception:
+        return None
+
+
 def display_binary_version_status(converter):
     """
     Display binary version information with status message

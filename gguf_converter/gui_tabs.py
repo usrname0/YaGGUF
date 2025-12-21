@@ -21,6 +21,7 @@ from .gui_utils import (
     save_config, make_config_saver, run_and_stream_command,
     get_current_version, check_git_updates_available,
     get_binary_version, display_binary_version_status,
+    get_binary_version_from_path,
     get_default_config,
     CONFIG_FILE
 )
@@ -1823,6 +1824,15 @@ def render_llama_cpp_tab(converter, config):
             # Show found binaries
             if quantize_found and imatrix_found:
                 st.success("All required binaries found")
+
+                # Get version from llama-imatrix (represents system version)
+                system_version = get_binary_version_from_path(imatrix_path)
+                if system_version:
+                    st.code(system_version, language=None)
+                else:
+                    st.info("Version: Unable to detect")
+
+                # Show binary paths
                 st.markdown(f"- `llama-quantize`: {quantize_path}")
                 st.markdown(f"- `llama-imatrix`: {imatrix_path}")
             elif quantize_found or imatrix_found:
@@ -1831,8 +1841,13 @@ def render_llama_cpp_tab(converter, config):
                     st.markdown(f"- `llama-quantize`: {quantize_path}")
                 else:
                     st.markdown("- `llama-quantize`: Not found")
+
                 if imatrix_found:
                     st.markdown(f"- `llama-imatrix`: {imatrix_path}")
+                    # Show version when available
+                    imatrix_version = get_binary_version_from_path(imatrix_path)
+                    if imatrix_version:
+                        st.code(imatrix_version, language=None)
                 else:
                     st.markdown("- `llama-imatrix`: Not found")
             else:
