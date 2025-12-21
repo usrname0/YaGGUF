@@ -10,7 +10,7 @@ There are simultaneously too many and not enough GGUF converters in the world.
 - **Convert** - safetensors and PyTorch models to GGUF format
 - **Quantize** - to multiple formats at once
 - **Cross-platform** - scripts install on Windows and Linux (and probably Mac but I'm not testing that)
-- **Easy** - auto-installs an environment + llama.cpp + binaries for quantizing
+- **Easy** - auto-installs an environment + llama.cpp + CPU binaries for quantizing
 - **Minimal mess** - everything but a settings.json lives in one folder/venv
 
 ## Quantization Types
