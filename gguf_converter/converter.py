@@ -2,11 +2,11 @@
 Core GGUF conversion and quantization functionality
 """
 
-import os
 import subprocess
 import sys
 import json
 import io
+import time
 from pathlib import Path
 from typing import Optional, Union, List
 from huggingface_hub import snapshot_download
@@ -444,7 +444,6 @@ class GGUFConverter:
 
         print(f"{theme['info']}Quantizing {input_path.name} to {quantization_type}...{Style.RESET_ALL}")
 
-        import time
         start_time = time.time()
 
         # Build llama-quantize command
@@ -591,7 +590,6 @@ class GGUFConverter:
         print(f"{theme['info']}Generating importance matrix for {model_path.name}...{Style.RESET_ALL}")
         print(f"{theme['info']}This may take a while...{Style.RESET_ALL}")
 
-        import time
         start_time = time.time()
 
         # Build llama-imatrix command

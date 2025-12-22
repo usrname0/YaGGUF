@@ -45,9 +45,6 @@ def ensure_llama_cpp_repo(binary_manager):
                 str(llama_cpp_dir)
             ], check=True, capture_output=True, text=True)
 
-            # Write version file for tracking
-            version_file = llama_cpp_dir / "REPO_VERSION"
-            version_file.write_text(expected_version)
             print(f"llama.cpp repository ready (version {expected_version})")
             return True
         except subprocess.CalledProcessError as e:

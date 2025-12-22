@@ -326,7 +326,8 @@ def get_binary_version(converter):
                         "version": version_line,
                         "message": "Binaries are installed"
                     }
-        except Exception:
+        except (FileNotFoundError, subprocess.SubprocessError, OSError, PermissionError):
+            # llama-cli not found or not executable - that's fine, we'll check bin_dir existence next
             pass
 
         # Check if binaries exist

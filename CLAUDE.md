@@ -27,7 +27,7 @@ User-friendly GGUF converter that shields users from llama.cpp complexity - no m
 
 **Binary Manager** (`gguf_converter/binary_manager.py`):
 - Downloads pre-compiled llama.cpp binaries from GitHub releases
-- Current version: b7484
+- Version specified by `LLAMA_CPP_VERSION` constant in binary_manager.py
 - Platform detection and architecture support (x64, arm64)
 - Custom binary path support for advanced users
 

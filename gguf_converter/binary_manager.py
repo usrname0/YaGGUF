@@ -196,7 +196,7 @@ class BinaryManager:
                 tf.extractall(self.bin_dir)
 
         # On Unix systems, set execute permissions on binaries
-        if platform.system().lower() != 'windows':
+        if self.platform_info['os'] != 'win':
             self._set_execute_permissions()
 
     def _set_execute_permissions(self):
@@ -245,7 +245,7 @@ class BinaryManager:
             Path to the executable
         """
         # On Windows, add .exe extension
-        if platform.system().lower() == 'windows':
+        if self.platform_info['os'] == 'win':
             name = f"{name}.exe"
 
         # Binaries might be in a subdirectory after extraction
@@ -308,75 +308,87 @@ class BinaryManager:
 
         return True
 
-    def get_quantize_path(self) -> Path:
-        """Get path to llama-quantize executable"""
+    def _get_binaries_folder(self) -> Optional[Path]:
+        """
+        Determine the folder containing llama.cpp binaries
+
+        Returns:
+            Path to binaries folder, or None if using system PATH
+        """
         # Check if custom binaries folder is configured
         if self.custom_binaries_folder is not None:
             # If custom folder is blank, use system PATH
             if not self.custom_binaries_folder:
-                system_path = shutil.which('llama-quantize')
-                if system_path:
-                    return Path(system_path)
-                else:
-                    raise RuntimeError("Custom binaries enabled with blank path, but 'llama-quantize' not found in system PATH")
+                return None
+            # Custom folder specified
+            return Path(self.custom_binaries_folder)
 
-            # Custom folder specified - look for binary there
-            custom_folder = Path(self.custom_binaries_folder)
-            binary_name = 'llama-quantize'
-            if platform.system().lower() == 'windows':
-                binary_name = 'llama-quantize.exe'
+        # Use auto-downloaded binaries folder
+        return self.bin_dir
 
-            binary_path = custom_folder / binary_name
+    def _get_binary_path_with_fallback(self, binary_name: str) -> Path:
+        """
+        Get path to a llama.cpp binary with fallback logic
+
+        Args:
+            binary_name: Name of binary without extension (e.g., 'llama-quantize')
+
+        Returns:
+            Path to the executable
+
+        Raises:
+            RuntimeError: If binary cannot be found
+        """
+        binaries_folder = self._get_binaries_folder()
+
+        # Add .exe extension on Windows
+        if self.platform_info['os'] == 'win':
+            binary_filename = f'{binary_name}.exe'
+        else:
+            binary_filename = binary_name
+
+        # Using system PATH
+        if binaries_folder is None:
+            system_path = shutil.which(binary_name)
+            if system_path:
+                return Path(system_path)
+            else:
+                raise RuntimeError(
+                    f"Custom binaries enabled with blank path, but '{binary_name}' not found in system PATH"
+                )
+
+        # Using custom or auto-downloaded folder
+        binary_path = binaries_folder / binary_filename
+
+        # If custom folder, binary must exist there
+        if self.custom_binaries_folder:
             if binary_path.exists():
                 return binary_path
             else:
-                raise RuntimeError(f"llama-quantize not found in custom binaries folder: {custom_folder}")
+                raise RuntimeError(
+                    f"{binary_name} not found in custom binaries folder: {binaries_folder}"
+                )
 
-        # Use auto-downloaded binaries
-        path = self.get_binary_path('llama-quantize')
+        # For auto-downloaded binaries, check multiple possible locations
+        # (binaries might be in subdirectories after extraction)
+        if not binary_path.exists():
+            binary_path = self.get_binary_path(binary_name)
 
         # Fallback to system PATH if auto-downloaded binaries don't exist
-        if not path.exists():
-            system_path = shutil.which('llama-quantize')
+        if not binary_path.exists():
+            system_path = shutil.which(binary_name)
             if system_path:
                 return Path(system_path)
 
-        return path
+        return binary_path
+
+    def get_quantize_path(self) -> Path:
+        """Get path to llama-quantize executable"""
+        return self._get_binary_path_with_fallback('llama-quantize')
 
     def get_imatrix_path(self) -> Path:
         """Get path to llama-imatrix executable"""
-        # Check if custom binaries folder is configured
-        if self.custom_binaries_folder is not None:
-            # If custom folder is blank, use system PATH
-            if not self.custom_binaries_folder:
-                system_path = shutil.which('llama-imatrix')
-                if system_path:
-                    return Path(system_path)
-                else:
-                    raise RuntimeError("Custom binaries enabled with blank path, but 'llama-imatrix' not found in system PATH")
-
-            # Custom folder specified - look for binary there
-            custom_folder = Path(self.custom_binaries_folder)
-            binary_name = 'llama-imatrix'
-            if platform.system().lower() == 'windows':
-                binary_name = 'llama-imatrix.exe'
-
-            binary_path = custom_folder / binary_name
-            if binary_path.exists():
-                return binary_path
-            else:
-                raise RuntimeError(f"llama-imatrix not found in custom binaries folder: {custom_folder}")
-
-        # Use auto-downloaded binaries
-        path = self.get_binary_path('llama-imatrix')
-
-        # Fallback to system PATH if auto-downloaded binaries don't exist
-        if not path.exists():
-            system_path = shutil.which('llama-imatrix')
-            if system_path:
-                return Path(system_path)
-
-        return path
+        return self._get_binary_path_with_fallback('llama-imatrix')
 
     def update_conversion_scripts(self, use_recommended: bool = True) -> Dict[str, str]:
         """

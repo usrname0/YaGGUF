@@ -10,8 +10,6 @@ import json
 import webbrowser
 import subprocess
 import platform
-import tkinter as tk
-from tkinter import filedialog
 import io
 import os
 from contextlib import redirect_stdout
@@ -148,8 +146,8 @@ def render_convert_tab(converter, config, verbose, nthreads, ignore_incompatibil
 {chr(10).join('- ' + reason for reason in incompat_info['reasons'])}
 
                         """)
-                except Exception as e:
-                    # Ignore compatibility check errors
+                except (ValueError, OSError, KeyError, UnicodeDecodeError):
+                    # Ignore config parsing errors - compatibility check is optional metadata display
                     pass
 
         # Advanced quantization options
@@ -1836,12 +1834,14 @@ def render_llama_cpp_tab(converter, config):
                 quantize_path = st.session_state.converter.binary_manager.get_quantize_path()
                 quantize_found = quantize_path.exists()
             except (RuntimeError, OSError, FileNotFoundError):
+                # Binary not found - quantize_found stays False, UI will show appropriate status
                 pass
 
             try:
                 imatrix_path = st.session_state.converter.binary_manager.get_imatrix_path()
                 imatrix_found = imatrix_path.exists()
             except (RuntimeError, OSError, FileNotFoundError):
+                # Binary not found - imatrix_found stays False, UI will show appropriate status
                 pass
 
             if custom_folder:
@@ -2099,7 +2099,8 @@ def render_update_tab(converter, config):
                 port = "8501"
 
             # Determine platform-specific restart script
-            if platform.system() == "Windows":
+            is_windows = platform.system() == "Windows"
+            if is_windows:
                 restart_script = Path(__file__).parent.parent / "scripts" / "update_and_restart.bat"
             else:
                 restart_script = Path(__file__).parent.parent / "scripts" / "update_and_restart.sh"
@@ -2112,7 +2113,7 @@ def render_update_tab(converter, config):
                 time.sleep(0.5)
 
                 # Start the update script with port parameter - output will show in original terminal
-                if platform.system() == "Windows":
+                if is_windows:
                     subprocess.Popen(
                         ["cmd", "/c", str(restart_script), port],
                         cwd=str(restart_script.parent)
