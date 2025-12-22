@@ -400,7 +400,9 @@ class GGUFConverter:
         allow_requantize: bool = False,
         leave_output_tensor: bool = False,
         pure_quantization: bool = False,
-        keep_split: bool = False
+        keep_split: bool = False,
+        output_tensor_type: Optional[str] = None,
+        token_embedding_type: Optional[str] = None
     ) -> Path:
         """
         Quantize a GGUF model using llama.cpp
@@ -419,6 +421,8 @@ class GGUFConverter:
             leave_output_tensor: Keep output.weight unquantized for better quality (increases model size)
             pure_quantization: Disable k-quant mixtures, quantize all tensors uniformly
             keep_split: Keep model in same shards as input (for multi-file models)
+            output_tensor_type: Override quantization type for output.weight tensor (e.g., "Q8_0", "F16")
+            token_embedding_type: Override quantization type for token embeddings (e.g., "Q8_0", "F16")
 
         Returns:
             Path to the quantized GGUF file
@@ -469,6 +473,12 @@ class GGUFConverter:
             if not imatrix_path.exists():
                 raise FileNotFoundError(f"Imatrix file not found: {imatrix_path}")
             cmd.extend(["--imatrix", str(imatrix_path)])
+
+        if output_tensor_type:
+            cmd.extend(["--output-tensor-type", output_tensor_type])
+
+        if token_embedding_type:
+            cmd.extend(["--token-embedding-type", token_embedding_type])
 
         print(f"{theme['highlight']}Running: {' '.join(cmd)}{Style.RESET_ALL}")
         print()
@@ -530,7 +540,7 @@ class GGUFConverter:
         self,
         model_path: Union[str, Path],
         output_path: Union[str, Path],
-        calibration_file: Optional[Union[str, Path]] = None,
+        calibration_file: Union[str, Path],
         ctx_size: int = 512,
         nthreads: Optional[int] = None,
         verbose: bool = True,
@@ -549,7 +559,7 @@ class GGUFConverter:
         Args:
             model_path: Path to GGUF model file (f16/f32)
             output_path: Path for output imatrix file
-            calibration_file: Text file with calibration data (default: uses built-in)
+            calibration_file: Text file with calibration data (required)
             ctx_size: Context window size for processing (default: 512)
             nthreads: Number of threads to use
             verbose: Verbosity control (False=normal/1, True=debug/2)
@@ -567,14 +577,13 @@ class GGUFConverter:
         """
         model_path = Path(model_path)
         output_path = Path(output_path)
+        calibration_file = Path(calibration_file)
 
         if not model_path.exists():
             raise FileNotFoundError(f"Model not found: {model_path}")
 
-        if calibration_file:
-            calibration_file = Path(calibration_file)
-            if not calibration_file.exists():
-                raise FileNotFoundError(f"Calibration file not found: {calibration_file}")
+        if not calibration_file.exists():
+            raise FileNotFoundError(f"Calibration file not found: {calibration_file}")
 
         # Ensure output directory exists
         output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -591,12 +600,11 @@ class GGUFConverter:
             str(imatrix_bin),
             "-m", str(model_path),
             "-o", str(output_path),
-            "-c", str(ctx_size)
+            "-c", str(ctx_size),
+            "-f", str(calibration_file)
         ]
 
         # Add optional arguments
-        if calibration_file:
-            cmd.extend(["-f", str(calibration_file)])
 
         if chunks:
             cmd.extend(["--chunks", str(chunks)])
@@ -734,7 +742,9 @@ class GGUFConverter:
         allow_requantize: bool = False,
         leave_output_tensor: bool = False,
         pure_quantization: bool = False,
-        keep_split: bool = False
+        keep_split: bool = False,
+        output_tensor_type: Optional[str] = None,
+        token_embedding_type: Optional[str] = None
     ) -> List[Path]:
         """
         Convert to GGUF and quantize in one go
@@ -761,6 +771,8 @@ class GGUFConverter:
             leave_output_tensor: Keep output.weight unquantized for better quality (increases model size)
             pure_quantization: Disable k-quant mixtures, quantize all tensors uniformly
             keep_split: Keep model in same shards as input (for multi-file models)
+            output_tensor_type: Override quantization type for output.weight tensor (e.g., "Q8_0", "F16")
+            token_embedding_type: Override quantization type for token embeddings (e.g., "Q8_0", "F16")
 
         Returns:
             List of paths to created quantized files
@@ -889,19 +901,16 @@ class GGUFConverter:
             if imatrix_calibration_file:
                 calibration_file = Path(imatrix_calibration_file)
                 if not calibration_file.exists():
-                    print(f"{theme['warning']}Warning: Specified calibration file not found: {calibration_file}{Style.RESET_ALL}")
-                    print(f"{theme['warning']}Falling back to default calibration file...{Style.RESET_ALL}")
-                    calibration_file = None
-
-            # Use default if no file specified or if specified file doesn't exist
-            if not calibration_file:
-                # Look in calibration_data folder at project root (one level up from gguf_converter module)
-                project_root = Path(__file__).parent.parent
-                calibration_file = project_root / "calibration_data" / "_default.txt"
-
-                if not calibration_file.exists():
-                    print(f"{theme['warning']}Warning: _default.txt not found in calibration_data folder, using built-in calibration data{Style.RESET_ALL}")
-                    calibration_file = None
+                    raise FileNotFoundError(
+                        f"Calibration file not found: {calibration_file}\n"
+                        f"llama-imatrix requires a calibration file. Please add a calibration file "
+                        f"(like wiki.train.raw) to the calibration_data directory."
+                    )
+            else:
+                raise ValueError(
+                    "No calibration file specified. llama-imatrix requires a calibration file. "
+                    "Please select a calibration file in the Imatrix Settings tab."
+                )
 
             self.generate_imatrix(
                 model_path=intermediate_file,
@@ -955,7 +964,9 @@ class GGUFConverter:
                     allow_requantize=allow_requantize,
                     leave_output_tensor=leave_output_tensor,
                     pure_quantization=pure_quantization,
-                    keep_split=keep_split
+                    keep_split=keep_split,
+                    output_tensor_type=output_tensor_type,
+                    token_embedding_type=token_embedding_type
                 )
                 quantized_files.append(output_file)
 

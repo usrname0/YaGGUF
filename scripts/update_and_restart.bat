@@ -49,5 +49,5 @@ echo Update complete! Restarting GUI...
 echo ========================================
 echo.
 
-REM Restart Streamlit without opening new browser tab
-streamlit run gguf_converter/gui.py --server.headless=true --server.address=localhost
+REM Restart Streamlit on the same port without opening new browser tab
+streamlit run gguf_converter/gui.py --server.headless=true --server.address=localhost --server.port=%PORT%

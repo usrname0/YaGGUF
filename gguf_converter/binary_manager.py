@@ -8,9 +8,10 @@ import sys
 import zipfile
 import tarfile
 import shutil
+import json
 from pathlib import Path
 from typing import Optional, Dict
-from urllib.request import urlretrieve
+from urllib.request import urlretrieve, urlopen
 
 
 class BinaryManager:
@@ -96,12 +97,30 @@ class BinaryManager:
             mb_total = total_size / (1024 * 1024)
             print(f"\rDownloading: {percent:.1f}% ({mb_downloaded:.1f}/{mb_total:.1f} MB)", end='')
 
-    def download_binaries(self, force: bool = False) -> Path:
+    def get_latest_version(self) -> str:
+        """
+        Get the latest llama.cpp release tag from GitHub
+
+        Returns:
+            Latest release tag (e.g., "b7493")
+        """
+        try:
+            api_url = "https://api.github.com/repos/ggml-org/llama.cpp/releases/latest"
+            with urlopen(api_url) as response:
+                data = json.loads(response.read().decode())
+                return data['tag_name']
+        except Exception as e:
+            print(f"Warning: Could not fetch latest version: {e}")
+            print(f"Falling back to recommended version: {self.LLAMA_CPP_VERSION}")
+            return self.LLAMA_CPP_VERSION
+
+    def download_binaries(self, force: bool = False, version: Optional[str] = None) -> Path:
         """
         Download llama.cpp binaries if not already present
 
         Args:
             force: Force re-download even if binaries exist
+            version: Specific version to download (None = use recommended LLAMA_CPP_VERSION)
 
         Returns:
             Path to bin directory containing executables
@@ -110,11 +129,29 @@ class BinaryManager:
             print(f"Binaries already exist in {self.bin_dir}")
             return self.bin_dir
 
-        tag = self.LLAMA_CPP_VERSION
-        filename = self.platform_info['filename']
+        # Use specified version or default to recommended
+        tag = version if version else self.LLAMA_CPP_VERSION
+
+        # Update filename to use the specified version
+        os_name = self.platform_info['os']
+        arch = self.platform_info['arch']
+
+        if os_name == "win":
+            build_type = "cuda-cu12.2.0" if self.platform_info.get('cuda') else "cpu"
+            ext = "zip"
+            filename = f"llama-{tag}-bin-{os_name}-{build_type}-{arch}.{ext}"
+        elif os_name == "mac":
+            variant = self.platform_info['variant']
+            ext = "zip"
+            filename = f"llama-{tag}-bin-{os_name}-{variant}.{ext}"
+        else:  # linux
+            variant = self.platform_info['variant']
+            ext = "tar.gz"
+            filename = f"llama-{tag}-bin-{os_name}-{variant}.{ext}"
+
         url = self.RELEASE_URL_TEMPLATE.format(tag=tag, filename=filename)
 
-        print(f"Downloading llama.cpp {self.LLAMA_CPP_VERSION} for {self.platform_info['os']}-{self.platform_info['arch']}...")
+        print(f"Downloading llama.cpp {tag} for {os_name}-{arch}...")
         print(f"URL: {url}")
 
         # Download to temporary file
@@ -143,7 +180,7 @@ class BinaryManager:
         if not self._check_binary_files_exist():
             raise RuntimeError("Binary extraction succeeded but executables not found")
 
-        print(f"Installed binary version: {self.LLAMA_CPP_VERSION}")
+        print(f"Installed binary version: {tag}")
         print(f"Binaries ready in {self.bin_dir}")
         return self.bin_dir
 

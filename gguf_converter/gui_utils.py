@@ -34,7 +34,7 @@ def get_default_config():
         "imatrix_ctx_size": 512,
         "imatrix_chunks": 150,  # 100-200 recommended, 0 = all chunks
         "imatrix_collect_output_weight": False,
-        "imatrix_calibration_file": "_default.txt",  # Selected calibration file from the directory
+        "imatrix_calibration_file": "wiki.train.raw",  # Selected calibration file from the directory
         "imatrix_calibration_dir": "",  # Directory to scan for calibration files (empty = use default)
         "imatrix_from_chunk": 0,  # Skip first N chunks
         "imatrix_no_ppl": False,  # Disable perplexity
@@ -52,6 +52,8 @@ def get_default_config():
         "leave_output_tensor": False,
         "pure_quantization": False,
         "keep_split": False,
+        "output_tensor_type": "Same as quantization type",
+        "token_embedding_type": "Same as quantization type",
 
         # Quantization types - all stored in other_quants dict
         "other_quants": {

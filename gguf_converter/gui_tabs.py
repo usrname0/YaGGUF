@@ -187,6 +187,39 @@ def render_convert_tab(converter, config, verbose, nthreads, ignore_incompatibil
                 on_change=make_config_saver(config, "keep_split", "keep_split_checkbox")
             )
 
+            st.markdown("---")
+            st.markdown("**Selective Tensor Quantization:** Override quantization type for specific tensors. Use these to keep certain layers at higher precision.")
+
+            # Output tensor type
+            tensor_type_options = ["Same as quantization type", "Q8_0", "Q6_K", "Q5_K_M", "F16", "F32"]
+
+            def save_output_tensor_type():
+                config["output_tensor_type"] = st.session_state.output_tensor_type_select
+                save_config(config)
+
+            output_tensor_type = st.selectbox(
+                "Output tensor type",
+                options=tensor_type_options,
+                index=tensor_type_options.index(config.get("output_tensor_type", "Same as quantization type")),
+                help="Quantization type for output.weight tensor. Keeping this at higher precision (Q8_0 or F16) can improve quality at the cost of slightly larger file size.",
+                key="output_tensor_type_select",
+                on_change=save_output_tensor_type
+            )
+
+            # Token embedding type
+            def save_token_embedding_type():
+                config["token_embedding_type"] = st.session_state.token_embedding_type_select
+                save_config(config)
+
+            token_embedding_type = st.selectbox(
+                "Token embedding type",
+                options=tensor_type_options,
+                index=tensor_type_options.index(config.get("token_embedding_type", "Same as quantization type")),
+                help="Quantization type for token embeddings. Keeping this at higher precision can improve accuracy for certain tasks.",
+                key="token_embedding_type_select",
+                on_change=save_token_embedding_type
+            )
+
         # Save/restore quant selections when incompatibility status changes
         if 'previous_incompatible_quants' not in st.session_state:
             st.session_state.previous_incompatible_quants = []
@@ -737,7 +770,7 @@ def render_convert_tab(converter, config, verbose, nthreads, ignore_incompatibil
 
                         # Build calibration file path for generation
                         cal_dir = config.get("imatrix_calibration_dir", "")
-                        cal_file = config.get("imatrix_calibration_file", "_default.txt")
+                        cal_file = config.get("imatrix_calibration_file", "wiki.train.raw")
 
                         if cal_dir:
                             calibration_file_path = Path(cal_dir) / cal_file
@@ -745,6 +778,11 @@ def render_convert_tab(converter, config, verbose, nthreads, ignore_incompatibil
                             # Use default calibration_data directory (one level up from gguf_converter module)
                             default_cal_dir = Path(__file__).parent.parent / "calibration_data"
                             calibration_file_path = default_cal_dir / cal_file
+
+                        # Validate calibration file exists
+                        if not calibration_file_path.exists():
+                            st.error("**Calibration file not available:** Add a file to the calibration_data folder, use an existing imatrix or turn off imatrix.")
+                            return  # Stop processing but keep UI working
                     elif imatrix_mode == "GENERATE (custom name)":
                         # Generate with custom name
                         generate_imatrix_flag = True
@@ -762,7 +800,7 @@ def render_convert_tab(converter, config, verbose, nthreads, ignore_incompatibil
 
                         # Build calibration file path for generation
                         cal_dir = config.get("imatrix_calibration_dir", "")
-                        cal_file = config.get("imatrix_calibration_file", "_default.txt")
+                        cal_file = config.get("imatrix_calibration_file", "wiki.train.raw")
 
                         if cal_dir:
                             calibration_file_path = Path(cal_dir) / cal_file
@@ -770,6 +808,11 @@ def render_convert_tab(converter, config, verbose, nthreads, ignore_incompatibil
                             # Use default calibration_data directory (one level up from gguf_converter module)
                             default_cal_dir = Path(__file__).parent.parent / "calibration_data"
                             calibration_file_path = default_cal_dir / cal_file
+
+                        # Validate calibration file exists
+                        if not calibration_file_path.exists():
+                            st.error("**Calibration file not available:** Add a file to the calibration_data folder, use an existing imatrix or turn off imatrix.")
+                            return  # Stop processing but keep UI working
 
                     save_config(config)
 
@@ -801,7 +844,9 @@ def render_convert_tab(converter, config, verbose, nthreads, ignore_incompatibil
                         allow_requantize=allow_requantize,
                         leave_output_tensor=leave_output_tensor,
                         pure_quantization=pure_quantization,
-                        keep_split=keep_split
+                        keep_split=keep_split,
+                        output_tensor_type=output_tensor_type if output_tensor_type != "Same as quantization type" else None,
+                        token_embedding_type=token_embedding_type if token_embedding_type != "Same as quantization type" else None
                     )
 
                 st.success(f"Successfully processed {len(output_files)} files!")
@@ -935,11 +980,16 @@ def render_imatrix_settings_tab(converter, config):
             st.warning(f"No .txt or .raw files found in: {calibration_data_dir}")
             calibration_files = ["(no files found)"]
 
-        # Determine default selection
-        saved_calibration = config.get("imatrix_calibration_file", "_default.txt")
+        # Determine default selection - prefer saved selection, fallback to wiki.train.raw
+        saved_calibration = config.get("imatrix_calibration_file", "wiki.train.raw")
         default_index = 0
+
+        # Use saved selection if it exists in the file list
         if saved_calibration in calibration_files:
             default_index = calibration_files.index(saved_calibration)
+        # Otherwise try wiki.train.raw as fallback
+        elif "wiki.train.raw" in calibration_files:
+            default_index = calibration_files.index("wiki.train.raw")
 
         # Calibration file selection with Update Files button
         col_cal, col_cal_btn = st.columns([5, 1])
@@ -1553,16 +1603,17 @@ def render_info_tab(converter, config):
     st.markdown(f"""
     ### YaGUFF - Yet Another GGUF Converter
 
-    A user-friendly GGUF converter that shields you from llama.cpp complexity.
-    No manual compilation or terminal commands required!
+    A user-friendly GGUF converter that sits on top of llama.cpp.
+    Intended for anyone who prefers a GUI or wants a quant without going down the whole rabbithole.
 
     **Features:**
     - **Convert & Quantize** - HuggingFace models to GGUF with multiple quantization formats at once
     - **Importance Matrix** - Generate or reuse imatrix files for better low-bit quantization (IQ2, IQ3)
     - **Imatrix Statistics** - Analyze importance matrix files to view statistics
     - **HuggingFace Downloader** - Download models without converting
-    - **Auto-downloads binaries** - Pre-compiled llama.cpp binaries (no compilation needed!)
+    - **Auto-downloads binaries** - Pre-compiled llama.cpp binaries (CPU)
     - **Cross-platform** - Windows, Mac, Linux support
+    - **Customization** - You can use your own llama.cpp binaries if you want to
     - **Persistent settings** - Automatically saves your preferences
     - **All quantization types** - Full support for llama.cpp quantization types
 
@@ -1616,28 +1667,11 @@ def render_info_tab(converter, config):
     **Quick Guide:**
     - Just starting? Use **Q4_K_M**
     - Want better quality? Use **Q5_K_M** or **Q6_K**
-    - Need original quality? Use **Q8_0** or **F16**
+    - Need omega deluxe quality? Use **Q8_0** or **F16**
     - Want smallest size? Use IQ3_M or IQ2_M with importance matrix
 
-    Quantization is powered by llama.cpp - battle-tested and fully compatible!
+    Quantization is done by llama.cpp.
 
-    **Requirements:**
-    - Python 3.8+
-    - huggingface-hub (for downloading models)
-    - streamlit (for GUI)
-    - llama.cpp binaries (auto-downloaded)
-
-    **Command Line Usage:**
-    ```bash
-    # Convert and quantize
-    python -m gguf_converter /path/to/model output/ -q Q4_K_M Q5_K_M
-
-    # Download from HuggingFace
-    python -m gguf_converter username/model-name output/ -q Q4_K_M
-
-    # List available types
-    python -m gguf_converter --list-types
-    ```
     """)
 
 
@@ -1901,16 +1935,40 @@ def render_update_tab(converter, config):
     col_bin1, col_bin2 = st.columns(2)
     with col_bin1:
         st.subheader("Update YaGUFF Binaries")
-        st.markdown("Force a re-download of the `llama.cpp` binaries that come with YaGUFF. This is useful if the binaries are corrupted or to ensure you have the version matching the application.")
+        st.markdown("Force a re-download of the `llama.cpp` binaries. Choose **Recommended** for the tested version bundled with YaGUFF, or **Latest** for the newest llama.cpp release.")
         st.markdown("[View llama.cpp on GitHub](https://github.com/ggml-org/llama.cpp)")
-        if st.button("Force Binary Update"):
+
+        if st.button("Force Binary Update - Recommended"):
             output_container = st.empty()
-            output_container.code("Starting binary update...\nThis may take a moment.", language='bash')
+            output_container.code("Starting binary update (Recommended version)...\nThis may take a moment.", language='bash')
 
             f = io.StringIO()
             with redirect_stdout(f):
                 try:
                     st.session_state.converter.binary_manager.download_binaries(force=True)
+                    st.toast("Binaries updated successfully!")
+                    success = True
+                except Exception as e:
+                    print(f"\n--- An error occurred ---\n{str(e)}")
+                    st.toast(f"An error occurred during binary update: {e}")
+                    success = False
+
+            output = f.getvalue()
+            output_container.code(output, language='bash')
+
+            if success:
+                st.rerun()
+
+        if st.button("Force Binary Update - Latest"):
+            output_container = st.empty()
+            output_container.code("Fetching latest llama.cpp version...\nThis may take a moment.", language='bash')
+
+            f = io.StringIO()
+            with redirect_stdout(f):
+                try:
+                    latest_version = st.session_state.converter.binary_manager.get_latest_version()
+                    print(f"Latest version: {latest_version}")
+                    st.session_state.converter.binary_manager.download_binaries(force=True, version=latest_version)
                     st.toast("Binaries updated successfully!")
                     success = True
                 except Exception as e:
@@ -1941,7 +1999,7 @@ def render_update_tab(converter, config):
     col3, col4 = st.columns(2)
     with col3:
         st.markdown("Update PyTorch and Python dependencies from `requirements.txt`.")
-        st.info("The GUI will close and restart automatically. All updates will run in the terminal.")
+        st.markdown("The GUI will close and restart automatically. All updates will run in the terminal.")
 
         if st.button("Update Dependencies & Restart"):
             # Get the current Streamlit port from the running URL
@@ -1960,7 +2018,11 @@ def render_update_tab(converter, config):
                 restart_script = Path(__file__).parent.parent / "scripts" / "update_and_restart.sh"
 
             if restart_script.exists():
-                st.info("Closing GUI and starting update process...")
+                st.info("See terminal for update progress... Please wait.")
+
+                # Give Streamlit time to send the message to browser before exiting
+                import time
+                time.sleep(0.5)
 
                 # Start the update script with port parameter - output will show in original terminal
                 if platform.system() == "Windows":
