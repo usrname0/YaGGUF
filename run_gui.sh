@@ -34,7 +34,8 @@ echo ""
 
 echo "Starting GGUF Converter GUI..."
 echo ""
-echo "Opening browser to http://localhost:8501"
+echo "Streamlit will open in your browser automatically."
+echo "The URL will be displayed below."
 echo "Press Ctrl+C to stop the server"
 echo ""
 

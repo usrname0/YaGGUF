@@ -4,20 +4,30 @@
 # Change to project root
 cd "$(dirname "$0")/.."
 
+# Get port from argument or default to 8501
+PORT=${1:-8501}
+
 echo ""
 echo "========================================"
 echo "Updating Dependencies and Restarting"
 echo "========================================"
 echo ""
 
-# Wait for port 8501 to be released
-printf "Waiting for port 8501 to be free"
-while lsof -Pi :8501 -sTCP:LISTEN -t >/dev/null 2>&1 ; do
-    printf "."
-    sleep 1
-done
-echo ""
-echo "Port 8501 is free"
+# Kill any process using the specified port
+echo "Checking for port $PORT..."
+PID=$(lsof -ti:$PORT)
+if [ ! -z "$PID" ]; then
+    echo "Killing process using port $PORT (PID: $PID)"
+    kill -9 $PID 2>/dev/null
+    sleep 2
+fi
+
+# Verify port is free
+if lsof -Pi :$PORT -sTCP:LISTEN -t >/dev/null 2>&1; then
+    echo "WARNING: Port $PORT still in use. Proceeding anyway..."
+else
+    echo "Port $PORT is now free"
+fi
 
 # Activate venv
 source venv/bin/activate

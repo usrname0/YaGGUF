@@ -797,6 +797,7 @@ def render_convert_tab(converter, config, verbose, nthreads, ignore_incompatibil
                         imatrix_output_name=imatrix_output_filename,
                         imatrix_ngl=use_ngl,
                         ignore_incompatibilities=ignore_incompatibilities,
+                        ignore_imatrix_warnings=ignore_imatrix_warnings,
                         allow_requantize=allow_requantize,
                         leave_output_tensor=leave_output_tensor,
                         pure_quantization=pure_quantization,
@@ -1943,6 +1944,15 @@ def render_update_tab(converter, config):
         st.info("The GUI will close and restart automatically. All updates will run in the terminal.")
 
         if st.button("Update Dependencies & Restart"):
+            # Get the current Streamlit port from the running URL
+            try:
+                from urllib.parse import urlparse
+                parsed_url = urlparse(st.context.url)
+                port = str(parsed_url.port) if parsed_url.port else "8501"
+            except Exception:
+                # Fallback to default port if we can't detect it
+                port = "8501"
+
             # Determine platform-specific restart script
             if platform.system() == "Windows":
                 restart_script = Path(__file__).parent.parent / "scripts" / "update_and_restart.bat"
@@ -1952,15 +1962,15 @@ def render_update_tab(converter, config):
             if restart_script.exists():
                 st.info("Closing GUI and starting update process...")
 
-                # Start the update script - output will show in original terminal
+                # Start the update script with port parameter - output will show in original terminal
                 if platform.system() == "Windows":
                     subprocess.Popen(
-                        ["cmd", "/c", str(restart_script)],
+                        ["cmd", "/c", str(restart_script), port],
                         cwd=str(restart_script.parent)
                     )
                 else:
                     subprocess.Popen(
-                        [str(restart_script)],
+                        [str(restart_script), port],
                         cwd=str(restart_script.parent)
                     )
 

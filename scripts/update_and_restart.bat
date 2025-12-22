@@ -4,23 +4,33 @@ REM Update dependencies and restart Streamlit
 REM Change to project root
 cd /d "%~dp0.."
 
+REM Get port from argument or default to 8501
+set PORT=%1
+if "%PORT%"=="" set PORT=8501
+
 echo.
 echo ========================================
 echo Updating Dependencies and Restarting
 echo ========================================
 echo.
 
-REM Wait for port 8501 to be released
-echo|set /p="Waiting for port 8501 to be free"
-:CHECK_PORT
-netstat -ano | findstr ":8501" >nul 2>&1
-if %errorlevel% equ 0 (
-    echo|set /p="."
-    timeout /t 1 /nobreak >nul
-    goto CHECK_PORT
+REM Kill any process using the specified port
+echo Checking for port %PORT%...
+for /f "tokens=5" %%a in ('netstat -ano ^| findstr ":%PORT% "') do (
+    echo Killing process using port %PORT% (PID: %%a^)
+    taskkill /F /PID %%a >nul 2>&1
 )
-echo.
-echo Port 8501 is free
+
+REM Give the OS a moment to release the port
+timeout /t 2 /nobreak >nul
+
+REM Verify port is free
+netstat -ano | findstr ":%PORT% " >nul 2>&1
+if %errorlevel% equ 0 (
+    echo WARNING: Port %PORT% still in use. Proceeding anyway...
+) else (
+    echo Port %PORT% is now free
+)
 
 REM Activate venv
 call venv\Scripts\activate.bat

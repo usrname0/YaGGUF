@@ -730,6 +730,7 @@ class GGUFConverter:
         imatrix_output_name: Optional[str] = None,
         imatrix_ngl: Optional[int] = None,
         ignore_incompatibilities: bool = False,
+        ignore_imatrix_warnings: bool = False,
         allow_requantize: bool = False,
         leave_output_tensor: bool = False,
         pure_quantization: bool = False,
@@ -755,6 +756,7 @@ class GGUFConverter:
             imatrix_collect_output: Collect output.weight tensor in imatrix (required for IQ quantizations)
             imatrix_calibration_file: Path to calibration file for imatrix generation (None = use default)
             ignore_incompatibilities: Skip incompatibility checks (advanced users, may cause failures)
+            ignore_imatrix_warnings: Allow IQ quants without imatrix (advanced users, may cause degraded quality)
             allow_requantize: Allow quantizing already-quantized models (may reduce quality)
             leave_output_tensor: Keep output.weight unquantized for better quality (increases model size)
             pure_quantization: Disable k-quant mixtures, quantize all tensors uniformly
@@ -830,6 +832,23 @@ class GGUFConverter:
                 print(f"\n{theme['warning']}Proceeding anyway as requested (ignore_incompatibilities=True){Style.RESET_ALL}")
                 print(f"{theme['highlight']}If conversion fails, use: {', '.join(incompat_info['alternatives'])}{Style.RESET_ALL}")
 
+        # Check for imatrix warnings
+        IMATRIX_REQUIRED_TYPES = [
+            "IQ1_S", "IQ1_M",
+            "IQ2_XXS", "IQ2_XS", "IQ2_S", "IQ2_M",
+            "IQ3_XXS", "IQ3_XS"
+        ]
+
+        using_imatrix = generate_imatrix or imatrix_path is not None
+        requested_iq_quants = [q for q in quantization_types if q in IMATRIX_REQUIRED_TYPES]
+
+        if requested_iq_quants and not using_imatrix and ignore_imatrix_warnings:
+            print(f"\n{theme['warning']}WARNING: Imatrix warnings override enabled!{Style.RESET_ALL}")
+            print(f"\n{theme['error']}These quantizations require an importance matrix for best quality:{Style.RESET_ALL}")
+            print(f"  {', '.join(requested_iq_quants)}")
+            print(f"\n{theme['warning']}Proceeding without imatrix as requested (ignore_imatrix_warnings=True){Style.RESET_ALL}")
+            print(f"{theme['highlight']}Results may have significantly degraded quality. Consider enabling imatrix generation.{Style.RESET_ALL}")
+
         is_already_gguf = False
         model_name = model_path.name
 
@@ -838,7 +857,7 @@ class GGUFConverter:
 
         # Check if intermediate file already exists
         if intermediate_file.exists():
-            print(f"{theme['info']}Intermediate file already exists: {intermediate_file.name}{Style.RESET_ALL}")
+            print(f"{theme['info']}\nIntermediate file already exists: {intermediate_file.name}{Style.RESET_ALL}")
             print(f"{theme['info']}Skipping conversion, using existing file...{Style.RESET_ALL}")
         else:
             print(f"{theme['info']}Converting {model_name} to GGUF...{Style.RESET_ALL}")
@@ -908,7 +927,7 @@ class GGUFConverter:
             if quant_type.upper() in ["F16", "F32", "BF16"]:
                 # Check if this is the intermediate format
                 if quant_type.upper() == intermediate_type.upper():
-                    print(f"{theme['info']}{quant_type} is the intermediate format (already created above){Style.RESET_ALL}")
+                    print(f"{theme['info']}{quant_type} is the intermediate format{Style.RESET_ALL}")
                     quantized_files.append(intermediate_file)
                 # Check if output already exists
                 elif output_file.exists():
