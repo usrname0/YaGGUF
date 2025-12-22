@@ -83,7 +83,6 @@ The GUI will automatically open in your browser at `http://localhost:8501`
 ## Requirements
 
 - Python 3.8 or higher
-- 8GB+ RAM (more for larger models)
 
 ## Troubleshooting
 
