@@ -22,6 +22,7 @@ from .gui_utils import (
     get_current_version, check_git_updates_available,
     get_binary_version, display_binary_version_status,
     get_binary_version_from_path,
+    get_conversion_scripts_info, display_conversion_scripts_version_status,
     get_default_config,
     CONFIG_FILE
 )
@@ -1912,9 +1913,21 @@ def render_update_tab(converter, config):
         st.subheader("Update YaGUFF")
         st.markdown("Check for the latest version of YaGUFF from GitHub.")
         st.markdown("[View YaGUFF on GitHub](https://github.com/usrname0/YaGUFF)")
-        if st.button("Pull YaGUFF Updates (`git pull`)"):
-            run_and_stream_command(["git", "pull"])
-            st.rerun()
+        if st.button("Pull Latest YaGUFF Version"):
+            # Check what version is available
+            update_status = check_git_updates_available()
+
+            if update_status["status"] == "updates_available" and update_status.get("latest_version"):
+                # Pull and checkout the latest tag
+                st.code("Fetching latest version...", language='bash')
+                run_and_stream_command(["git", "fetch", "--tags"])
+                run_and_stream_command(["git", "checkout", update_status["latest_version"]])
+                st.toast(f"Updated to version {update_status['latest_version']}")
+                st.rerun()
+            elif update_status["status"] == "up_to_date":
+                st.info("Already on the latest version")
+            else:
+                st.error("Could not check for updates. Please check your internet connection and git configuration.")
     with col2:
         st.subheader("YaGUFF Version Information")
         current_version = get_current_version()
@@ -1992,6 +2005,80 @@ def render_update_tab(converter, config):
             st.error(binary_info['message'])
 
         display_binary_version_status(st.session_state.converter)
+
+    st.markdown("---")
+
+    # Update Conversion Scripts Section
+    col_scripts1, col_scripts2 = st.columns(2)
+    with col_scripts1:
+        st.subheader("Update Conversion Scripts")
+        st.markdown("Update the `llama.cpp` repository that contains the `convert_hf_to_gguf.py` script. Choose **Recommended** for the tested version matching YaGUFF binaries, or **Latest** for the newest conversion scripts.")
+        st.markdown("[View llama.cpp on GitHub](https://github.com/ggml-org/llama.cpp)")
+
+        if st.button("Update Conversion Scripts - Recommended"):
+            output_container = st.empty()
+            output_container.code("Updating conversion scripts (Recommended version)...\nThis may take a moment.", language='bash')
+
+            f = io.StringIO()
+            with redirect_stdout(f):
+                try:
+                    result = st.session_state.converter.binary_manager.update_conversion_scripts(use_recommended=True)
+                    if result['status'] in ['success', 'already_updated']:
+                        st.toast("Conversion scripts updated successfully!")
+                        success = True
+                    else:
+                        print(f"\n--- An error occurred ---\n{result['message']}")
+                        st.toast(f"An error occurred: {result['message']}")
+                        success = False
+                except Exception as e:
+                    print(f"\n--- An error occurred ---\n{str(e)}")
+                    st.toast(f"An error occurred during update: {e}")
+                    success = False
+
+            output = f.getvalue()
+            output_container.code(output, language='bash')
+
+            if success:
+                st.rerun()
+
+        if st.button("Update Conversion Scripts - Latest"):
+            output_container = st.empty()
+            output_container.code("Updating conversion scripts to latest version...\nThis may take a moment.", language='bash')
+
+            f = io.StringIO()
+            with redirect_stdout(f):
+                try:
+                    result = st.session_state.converter.binary_manager.update_conversion_scripts(use_recommended=False)
+                    if result['status'] in ['success', 'already_updated']:
+                        st.toast("Conversion scripts updated successfully!")
+                        success = True
+                    else:
+                        print(f"\n--- An error occurred ---\n{result['message']}")
+                        st.toast(f"An error occurred: {result['message']}")
+                        success = False
+                except Exception as e:
+                    print(f"\n--- An error occurred ---\n{str(e)}")
+                    st.toast(f"An error occurred during update: {e}")
+                    success = False
+
+            output = f.getvalue()
+            output_container.code(output, language='bash')
+
+            if success:
+                st.rerun()
+
+    with col_scripts2:
+        st.subheader("Conversion Scripts Information")
+        scripts_info = get_conversion_scripts_info(st.session_state.converter)
+
+        if scripts_info["status"] == "ok":
+            st.success(scripts_info['message'])
+        elif scripts_info["status"] == "missing":
+            st.warning(scripts_info['message'])
+        else:
+            st.error(scripts_info['message'])
+
+        display_conversion_scripts_version_status(st.session_state.converter)
 
     st.markdown("---")
 

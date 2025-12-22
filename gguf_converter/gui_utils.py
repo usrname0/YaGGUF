@@ -189,53 +189,69 @@ def get_current_version():
 
 def check_git_updates_available():
     """
-    Check if git updates are available from remote
+    Check if git updates are available from remote based on version tags
 
     Returns:
-        dict: Status info with keys 'status', 'message', 'behind_count'
+        dict: Status info with keys 'status', 'message', 'latest_version'
     """
     try:
-        # Fetch remote refs without updating local branches
+        # Fetch tags from remote
+        subprocess.run(
+            ["git", "fetch", "--tags"],
+            capture_output=True,
+            text=True,
+            timeout=10
+        )
+
+        # Get current version
+        current_version = get_current_version()
+
+        # Get all tags sorted by version
         result = subprocess.run(
-            ["git", "fetch", "--dry-run"],
+            ["git", "tag", "-l", "--sort=-version:refname"],
             capture_output=True,
             text=True,
             timeout=5
         )
 
-        # Check how many commits behind
-        result = subprocess.run(
-            ["git", "rev-list", "--count", "HEAD..origin/main"],
-            capture_output=True,
-            text=True,
-            timeout=5
-        )
+        if result.returncode == 0 and result.stdout.strip():
+            tags = result.stdout.strip().split('\n')
+            if tags:
+                latest_tag = tags[0]  # First tag is the latest
 
-        if result.returncode == 0:
-            behind_count = int(result.stdout.strip()) if result.stdout.strip() else 0
-            if behind_count > 0:
-                return {
-                    "status": "updates_available",
-                    "message": f"Updates available ({behind_count} commit{'s' if behind_count > 1 else ''} behind)",
-                    "behind_count": behind_count
-                }
+                # Compare versions (remove 'v' prefix if present)
+                current = current_version.lstrip('v')
+                latest = latest_tag.lstrip('v')
+
+                if latest != current:
+                    return {
+                        "status": "updates_available",
+                        "message": f"New version available: **{latest_tag}** (current: {current_version})",
+                        "latest_version": latest_tag
+                    }
+                else:
+                    return {
+                        "status": "up_to_date",
+                        "message": "You are on the latest version of YaGUFF",
+                        "latest_version": current_version
+                    }
             else:
                 return {
-                    "status": "up_to_date",
-                    "message": "You are on the latest version of YaGUFF",
-                    "behind_count": 0
+                    "status": "unknown",
+                    "message": "No version tags found in repository",
+                    "latest_version": None
                 }
         else:
             return {
                 "status": "unknown",
-                "message": "Use 'Check for Updates' to pull the latest version from GitHub",
-                "behind_count": 0
+                "message": "Could not fetch version tags",
+                "latest_version": None
             }
     except Exception:
         return {
             "status": "unknown",
-            "message": "Use 'Check for Updates' to pull the latest version from GitHub",
-            "behind_count": 0
+            "message": "Could not check for updates",
+            "latest_version": None
         }
 
 
@@ -399,6 +415,111 @@ def display_binary_version_status(converter):
             st.info("You are on the latest YaGUFF-tested llama.cpp binary")
     elif binary_info["status"] == "missing":
         st.info(f"Expected binary version: **{expected_version}**")
+
+
+def get_conversion_scripts_info(converter):
+    """
+    Get version info for conversion scripts
+
+    Args:
+        converter: GGUFConverter instance
+
+    Returns:
+        dict: Conversion scripts info with status and message
+    """
+    from pathlib import Path
+    import subprocess
+
+    project_root = Path(__file__).parent.parent
+    llama_cpp_dir = project_root / "llama.cpp"
+
+    if not llama_cpp_dir.exists() or not (llama_cpp_dir / ".git").exists():
+        return {
+            "status": "missing",
+            "version": None,
+            "message": "Conversion scripts repository not found"
+        }
+
+    try:
+        # Get current commit info
+        result = subprocess.run(
+            ["git", "log", "-1", "--format=%h - %s (%cr)"],
+            cwd=llama_cpp_dir,
+            capture_output=True,
+            text=True,
+            timeout=5
+        )
+
+        if result.returncode == 0 and result.stdout.strip():
+            return {
+                "status": "ok",
+                "version": result.stdout.strip(),
+                "message": "Conversion scripts repository found"
+            }
+        else:
+            return {
+                "status": "error",
+                "version": None,
+                "message": "Could not read conversion scripts version"
+            }
+    except Exception as e:
+        return {
+            "status": "error",
+            "version": None,
+            "message": f"Error checking conversion scripts: {e}"
+        }
+
+
+def display_conversion_scripts_version_status(converter):
+    """
+    Display conversion scripts version information with status message
+
+    Shows version code block and status message comparing installed vs expected version
+
+    Args:
+        converter: GGUFConverter instance
+
+    Returns:
+        None (displays directly using Streamlit)
+    """
+    from pathlib import Path
+    import subprocess
+
+    scripts_info = get_conversion_scripts_info(converter)
+    expected_version = converter.binary_manager.LLAMA_CPP_VERSION
+
+    if scripts_info["status"] == "ok":
+        # Check and display current tag/version
+        try:
+            project_root = Path(__file__).parent.parent
+            llama_cpp_dir = project_root / "llama.cpp"
+
+            result = subprocess.run(
+                ["git", "describe", "--tags", "--always"],
+                cwd=llama_cpp_dir,
+                capture_output=True,
+                text=True,
+                timeout=5
+            )
+
+            if result.returncode == 0:
+                current_version = result.stdout.strip()
+                expected_numeric = expected_version.lstrip('b')
+
+                # Show version tag in code block
+                st.code(f"version: {current_version}", language=None)
+
+                # Show status message
+                if expected_numeric in current_version:
+                    st.info("You are on the latest YaGUFF-tested conversion scripts")
+                else:
+                    st.warning(f"Expected conversion scripts version: **{expected_version}**")
+            else:
+                st.info(f"Expected conversion scripts version: **{expected_version}**")
+        except Exception:
+            st.info(f"Expected conversion scripts version: **{expected_version}**")
+    elif scripts_info["status"] == "missing":
+        st.info(f"Expected conversion scripts version: **{expected_version}**")
 
 
 def run_and_stream_command(command):

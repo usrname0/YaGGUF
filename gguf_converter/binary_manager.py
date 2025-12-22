@@ -377,3 +377,169 @@ class BinaryManager:
                 return Path(system_path)
 
         return path
+
+    def update_conversion_scripts(self, use_recommended: bool = True) -> Dict[str, str]:
+        """
+        Update llama.cpp conversion scripts to recommended or latest version
+
+        Args:
+            use_recommended: If True, checkout the recommended version (LLAMA_CPP_VERSION).
+                           If False, pull latest from master branch.
+
+        Returns:
+            Dict with 'status' ('success', 'already_updated', 'not_found', 'error')
+            and 'message' keys
+        """
+        import subprocess
+
+        project_root = Path(__file__).parent.parent
+        llama_cpp_dir = project_root / "llama.cpp"
+
+        if not llama_cpp_dir.exists():
+            return {
+                'status': 'not_found',
+                'message': 'llama.cpp directory not found'
+            }
+
+        if not (llama_cpp_dir / ".git").exists():
+            return {
+                'status': 'error',
+                'message': 'llama.cpp directory is not a git repository'
+            }
+
+        try:
+            if use_recommended:
+                # Checkout the recommended version
+                target_version = self.LLAMA_CPP_VERSION
+                print(f"Updating conversion scripts to recommended version: {target_version}")
+
+                # Fetch latest tags
+                fetch_result = subprocess.run(
+                    ["git", "fetch", "--tags", "origin"],
+                    cwd=llama_cpp_dir,
+                    capture_output=True,
+                    text=True,
+                    timeout=60
+                )
+
+                if fetch_result.returncode != 0:
+                    return {
+                        'status': 'error',
+                        'message': f"Failed to fetch tags: {fetch_result.stderr}"
+                    }
+
+                # Check current version
+                current_result = subprocess.run(
+                    ["git", "describe", "--tags", "--always"],
+                    cwd=llama_cpp_dir,
+                    capture_output=True,
+                    text=True,
+                    timeout=5
+                )
+
+                current_version = current_result.stdout.strip() if current_result.returncode == 0 else "unknown"
+
+                if target_version in current_version:
+                    print(f"Conversion scripts already at version {target_version}")
+                    return {
+                        'status': 'already_updated',
+                        'message': f'Conversion scripts already at recommended version: {target_version}'
+                    }
+
+                # Checkout the target version
+                checkout_result = subprocess.run(
+                    ["git", "checkout", target_version],
+                    cwd=llama_cpp_dir,
+                    capture_output=True,
+                    text=True,
+                    timeout=30
+                )
+
+                if checkout_result.returncode == 0:
+                    print(f"Conversion scripts updated to version {target_version}")
+                    return {
+                        'status': 'success',
+                        'message': f'Conversion scripts updated to recommended version: {target_version}'
+                    }
+                else:
+                    return {
+                        'status': 'error',
+                        'message': f"Failed to checkout version {target_version}: {checkout_result.stderr}"
+                    }
+            else:
+                # Pull latest from master
+                print("Updating conversion scripts to latest version...")
+
+                # First, fetch the latest changes
+                fetch_result = subprocess.run(
+                    ["git", "fetch", "origin", "master"],
+                    cwd=llama_cpp_dir,
+                    capture_output=True,
+                    text=True,
+                    timeout=60
+                )
+
+                if fetch_result.returncode != 0:
+                    return {
+                        'status': 'error',
+                        'message': f"Failed to fetch updates: {fetch_result.stderr}"
+                    }
+
+                # Checkout master and pull
+                checkout_result = subprocess.run(
+                    ["git", "checkout", "master"],
+                    cwd=llama_cpp_dir,
+                    capture_output=True,
+                    text=True,
+                    timeout=10
+                )
+
+                if checkout_result.returncode != 0:
+                    return {
+                        'status': 'error',
+                        'message': f"Failed to checkout master: {checkout_result.stderr}"
+                    }
+
+                pull_result = subprocess.run(
+                    ["git", "pull", "origin", "master"],
+                    cwd=llama_cpp_dir,
+                    capture_output=True,
+                    text=True,
+                    timeout=60
+                )
+
+                if pull_result.returncode == 0:
+                    if "Already up to date" in pull_result.stdout or "Already up-to-date" in pull_result.stdout:
+                        print("Conversion scripts already up to date")
+                        return {
+                            'status': 'already_updated',
+                            'message': 'Conversion scripts are already up to date'
+                        }
+                    else:
+                        print("Conversion scripts updated successfully")
+                        print(pull_result.stdout)
+                        return {
+                            'status': 'success',
+                            'message': 'Conversion scripts updated to latest version'
+                        }
+                else:
+                    error_msg = f"Failed to pull updates: {pull_result.stderr}"
+                    print(error_msg)
+                    return {
+                        'status': 'error',
+                        'message': error_msg
+                    }
+        except subprocess.TimeoutExpired:
+            error_msg = "Update timed out"
+            print(error_msg)
+            return {
+                'status': 'error',
+                'message': error_msg
+            }
+        except Exception as e:
+            error_msg = f"Could not update conversion scripts: {e}"
+            print(error_msg)
+            return {
+                'status': 'error',
+                'message': error_msg
+            }
