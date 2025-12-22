@@ -6,7 +6,7 @@ There are simultaneously too many and not enough GGUF converters in the world.
  
 ## Features
 
-- **llama.cpp under the hood** - so that part should work well
+- **llama.cpp under the hood** - so that part works
 - **Convert** - safetensors and PyTorch models to GGUF format
 - **Quantize** - to multiple formats at once
 - **Cross-platform** - scripts install on Windows and Linux (and probably Mac but I'm not testing that)
@@ -78,7 +78,7 @@ All quantization types from llama.cpp are supported. Choose based on your size/q
 ./run_gui.sh
 ```
 
-The GUI will automatically open in your browser at `http://localhost:8501`
+The GUI will automatically open in your browser on a free port like: `http://localhost:8501`
 
 ## Requirements
 
@@ -89,17 +89,26 @@ The GUI will automatically open in your browser at `http://localhost:8501`
 ### Out of Memory
 
 For large models, ensure you have enough RAM. You can also:
-- Use swap space
+- Use swap space (if you like pain)
 - Close other applications
-- Try a smaller model first
+- Try a smaller model
+- Spend a fortune on better hardware
 
 ### Conversion is slow
 
 This is normal for large models. The process is CPU-intensive.
-- Enable `--verbose` to see progress
-- Adjust parallel quantization settings
+- Enable "Verbose output" in settings to see progress
+- Adjust "Thread count" in settings (sets the number of CPU cores for the task)
 - Be patient - it will finish!
 
+### Other Errors
+
+I tried to prevent wandering into errors without making it too neutered.
+- "Incomapatibility warnings" will disable some quants for some models but you can disable this in the settings.
+- "Imatrix warnings" will disable smaller quants if you don't select an imatrix option.   You can disable this in the settings (good luck).
+- You can "Reset to defaults" in the settings
+- If something gets ugly or confusing just delete the folder and re-install!
+  
 ## License
 
 MIT License - see LICENSE file for details
