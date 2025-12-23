@@ -154,6 +154,10 @@ class BinaryManager:
         print(f"Downloading llama.cpp {tag} for {os_name}-{arch}...")
         print(f"URL: {url}")
 
+        # Clean up old binaries BEFORE downloading
+        print(f"Cleaning up old binaries...")
+        self._cleanup_old_binaries()
+
         # Download to temporary file
         download_path = self.bin_dir / filename
 
@@ -184,9 +188,25 @@ class BinaryManager:
         print(f"Binaries ready in {self.bin_dir}")
         return self.bin_dir
 
+    def _cleanup_old_binaries(self):
+        """
+        Remove all old files and directories from bin_dir before installing new binaries
+        """
+        if not self.bin_dir.exists():
+            return
+
+        # Remove everything in bin_dir (files and directories)
+        for item in self.bin_dir.iterdir():
+            if item.is_dir():
+                print(f"Removing old directory: {item.name}")
+                shutil.rmtree(item)
+            else:
+                print(f"Removing old file: {item.name}")
+                item.unlink()
+
     def _extract_archive(self, archive_path: Path):
         """
-        Extract zip or tar archive
+        Extract archive and flatten to bin_dir root (consistent across platforms)
         """
         if archive_path.suffix == '.zip':
             with zipfile.ZipFile(archive_path, 'r') as zf:
@@ -194,6 +214,27 @@ class BinaryManager:
         else:
             with tarfile.open(archive_path, 'r:*') as tf:
                 tf.extractall(self.bin_dir)
+
+        # Flatten: if extracted to a subdirectory, move all files to bin root
+        subdirs = [d for d in self.bin_dir.iterdir() if d.is_dir()]
+        if len(subdirs) == 1:
+            # Single subdirectory - likely the llama-* folder
+            subdir = subdirs[0]
+            print(f"Flattening extracted directory: {subdir.name}")
+
+            # Move all files from subdirectory to bin root
+            for item in subdir.iterdir():
+                dest = self.bin_dir / item.name
+                # Remove destination if it exists
+                if dest.exists():
+                    if dest.is_dir():
+                        shutil.rmtree(dest)
+                    else:
+                        dest.unlink()
+                shutil.move(str(item), str(dest))
+
+            # Remove empty subdirectory
+            subdir.rmdir()
 
         # On Unix systems, set execute permissions on binaries
         if self.platform_info['os'] != 'win':
@@ -205,8 +246,8 @@ class BinaryManager:
         """
         import stat
 
-        # Search for llama-* binaries and set execute permissions
-        for path in self.bin_dir.rglob('llama-*'):
+        # Set execute permissions on llama-* binaries (not .so files)
+        for path in self.bin_dir.glob('llama-*'):
             if path.is_file() and not path.suffix:  # No extension (not .so files)
                 try:
                     # Add execute permission for owner, group, and others
@@ -248,21 +289,7 @@ class BinaryManager:
         if self.platform_info['os'] == 'win':
             name = f"{name}.exe"
 
-        # Binaries might be in a subdirectory after extraction
-        # Try both bin_dir root and common subdirectories
-        possible_locations = [
-            self.bin_dir / name,
-            self.bin_dir / 'bin' / name,
-            self.bin_dir / 'build' / 'bin' / name,  # Ubuntu/Linux releases
-            self.bin_dir / f"llama-{self.LLAMA_CPP_VERSION}-bin" / name,
-            self.bin_dir / f"llama-{self.LLAMA_CPP_VERSION}" / name,  # Actual extracted directory name
-        ]
-
-        for location in possible_locations:
-            if location.exists():
-                return location
-
-        # Return default location even if doesn't exist (for error messages)
+        # Binaries are now extracted flat to bin_dir root
         return self.bin_dir / name
 
     def ensure_binaries(self, fallback_to_system: bool = True) -> bool:

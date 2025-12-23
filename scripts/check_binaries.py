@@ -38,10 +38,12 @@ def ensure_llama_cpp_repo(binary_manager):
         print()
 
         try:
+            # Clone at the specific recommended version
             subprocess.run([
                 "git", "clone",
                 "https://github.com/ggml-org/llama.cpp.git",
                 "--depth=1",
+                "--branch", expected_version,
                 str(llama_cpp_dir)
             ], check=True, capture_output=True, text=True)
 

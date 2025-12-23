@@ -129,6 +129,7 @@ def render_downloader_tab(converter, config):
                 # Store in session state and mark as just completed
                 st.session_state.downloaded_model_path = str(model_path)
                 st.session_state.download_just_completed = True
+                st.rerun()
 
             except Exception as e:
                 # Show in Streamlit UI
@@ -139,9 +140,10 @@ def render_downloader_tab(converter, config):
                 import traceback
                 traceback.print_exc()
 
-    # Show success message and path only if download just completed
-    if st.session_state.get("download_just_completed", False):
-        st.success(f"Downloaded to: {st.session_state.downloaded_model_path}")
+    # Show downloaded model path if one exists (persistent)
+    if st.session_state.get("downloaded_model_path"):
+        st.markdown("---")
+        st.subheader("Downloaded Model")
 
         col_path, col_set_path = st.columns([5, 1])
         with col_path:
@@ -153,4 +155,15 @@ def render_downloader_tab(converter, config):
                 save_config(config)
                 # Set pending flag - will be applied before widget creation on next run
                 st.session_state.pending_model_path = path_to_set
+                # Set success flag for this action
+                st.session_state.model_path_set = True
                 st.rerun()
+
+    # Show temporary success messages
+    if st.session_state.get("download_just_completed", False):
+        st.success(f"✓ Model downloaded successfully!")
+        st.session_state.download_just_completed = False
+
+    if st.session_state.get("model_path_set", False):
+        st.success("✓ Model path set in Convert & Quantize tab")
+        st.session_state.model_path_set = False
