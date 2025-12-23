@@ -27,17 +27,50 @@ def render_update_tab(converter, config):
         st.subheader("Update YaGUFF")
         st.markdown("Check for the latest version of YaGUFF from GitHub.")
         st.markdown("[View YaGUFF on GitHub](https://github.com/usrname0/YaGUFF)")
-        if st.button("Pull Latest YaGUFF Version"):
+        if st.button("Pull Latest YaGUFF Version & Restart"):
             # Check what version is available
             update_status = check_git_updates_available()
 
             if update_status["status"] == "updates_available" and update_status.get("latest_version"):
-                # Pull and checkout the latest tag
-                st.code("Fetching latest version...", language='bash')
-                run_and_stream_command(["git", "fetch", "--tags"])
-                run_and_stream_command(["git", "checkout", update_status["latest_version"]])
-                st.toast(f"Updated to version {update_status['latest_version']}")
-                st.rerun()
+                # Get the current Streamlit port from the running URL
+                try:
+                    from urllib.parse import urlparse
+                    parsed_url = urlparse(st.context.url)
+                    port = str(parsed_url.port) if parsed_url.port else "8501"
+                except Exception:
+                    # Fallback to default port if we can't detect it
+                    port = "8501"
+
+                # Determine platform-specific restart script
+                is_windows = platform.system() == "Windows"
+                if is_windows:
+                    restart_script = Path(__file__).parent.parent.parent / "scripts" / "update_yaguff_and_restart.bat"
+                else:
+                    restart_script = Path(__file__).parent.parent.parent / "scripts" / "update_yaguff_and_restart.sh"
+
+                if restart_script.exists():
+                    st.info(f"Updating to {update_status['latest_version']}... See terminal for progress. Please wait.")
+
+                    # Give Streamlit time to send the message to browser before exiting
+                    import time
+                    time.sleep(0.5)
+
+                    # Start the update script with port and version parameters
+                    if is_windows:
+                        subprocess.Popen(
+                            ["cmd", "/c", str(restart_script), port, update_status["latest_version"]],
+                            cwd=str(restart_script.parent)
+                        )
+                    else:
+                        subprocess.Popen(
+                            [str(restart_script), port, update_status["latest_version"]],
+                            cwd=str(restart_script.parent)
+                        )
+
+                    # Exit Streamlit - this releases the port
+                    os._exit(0)
+                else:
+                    st.error(f"Restart script not found: {restart_script}")
             elif update_status["status"] == "up_to_date":
                 st.info("Already on the latest version")
             else:
