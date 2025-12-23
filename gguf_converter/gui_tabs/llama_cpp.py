@@ -8,7 +8,8 @@ from pathlib import Path
 from ..gui_utils import (
     strip_quotes, open_folder, browse_folder,
     save_config, get_binary_version,
-    display_binary_version_status, get_binary_version_from_path
+    display_binary_version_status, get_binary_version_from_path,
+    TKINTER_AVAILABLE
 )
 
 
@@ -72,7 +73,11 @@ def render_llama_cpp_tab(converter, config):
         st.markdown("**Binaries Folder Path** (leave blank for system PATH):")
 
         # Single folder path with Browse and Check Folder buttons
-        col_folder, col_browse, col_check = st.columns([4, 1, 1])
+        if TKINTER_AVAILABLE:
+            col_folder, col_browse, col_check = st.columns([4, 1, 1])
+        else:
+            col_folder, col_check = st.columns([5, 1])
+
         with col_folder:
             def save_binaries_folder():
                 new_folder = st.session_state.custom_binaries_folder_input_update
@@ -96,27 +101,30 @@ def render_llama_cpp_tab(converter, config):
                 disabled=not use_custom_binaries,
                 on_change=save_binaries_folder
             )
-        with col_browse:
-            if st.button(
-                "Browse",
-                key="browse_binaries_folder_btn",
-                use_container_width=True,
-                help="Browse for binaries folder",
-                disabled=not use_custom_binaries
-            ):
-                binaries_folder_clean = strip_quotes(binaries_folder)
-                initial_dir = binaries_folder_clean if binaries_folder_clean and Path(binaries_folder_clean).exists() else None
-                selected_folder = browse_folder(initial_dir)
-                if selected_folder:
-                    config["custom_binaries_folder"] = selected_folder
-                    save_config(config)
-                    # Clear version cache when folder changes
-                    if "custom_binary_versions" in st.session_state:
-                        del st.session_state.custom_binary_versions
-                    # Reinitialize converter
-                    from ..converter import GGUFConverter
-                    st.session_state.converter = GGUFConverter(custom_binaries_folder=selected_folder)
-                    st.rerun()
+
+        if TKINTER_AVAILABLE:
+            with col_browse:
+                if st.button(
+                    "Browse",
+                    key="browse_binaries_folder_btn",
+                    use_container_width=True,
+                    help="Browse for binaries folder",
+                    disabled=not use_custom_binaries
+                ):
+                    binaries_folder_clean = strip_quotes(binaries_folder)
+                    initial_dir = binaries_folder_clean if binaries_folder_clean and Path(binaries_folder_clean).exists() else None
+                    selected_folder = browse_folder(initial_dir)
+                    if selected_folder:
+                        config["custom_binaries_folder"] = selected_folder
+                        save_config(config)
+                        # Clear version cache when folder changes
+                        if "custom_binary_versions" in st.session_state:
+                            del st.session_state.custom_binary_versions
+                        # Reinitialize converter
+                        from ..converter import GGUFConverter
+                        st.session_state.converter = GGUFConverter(custom_binaries_folder=selected_folder)
+                        st.rerun()
+
         with col_check:
             binaries_folder_clean = strip_quotes(binaries_folder)
             binaries_folder_exists = bool(binaries_folder_clean and Path(binaries_folder_clean).exists())

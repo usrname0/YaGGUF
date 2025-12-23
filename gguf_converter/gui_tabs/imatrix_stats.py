@@ -7,7 +7,7 @@ from pathlib import Path
 
 from ..gui_utils import (
     strip_quotes, open_folder, browse_folder,
-    save_config
+    save_config, TKINTER_AVAILABLE
 )
 
 
@@ -22,7 +22,11 @@ def render_imatrix_stats_tab(converter, config):
     st.subheader("Settings")
 
     # Output directory to analyze with Browse and Check Folder buttons
-    col_stats_dir, col_stats_dir_browse, col_stats_dir_check = st.columns([4, 1, 1])
+    if TKINTER_AVAILABLE:
+        col_stats_dir, col_stats_dir_browse, col_stats_dir_check = st.columns([4, 1, 1])
+    else:
+        col_stats_dir, col_stats_dir_check = st.columns([5, 1])
+
     with col_stats_dir:
         stats_output_dir = st.text_input(
             "Output directory to analyze",
@@ -30,21 +34,24 @@ def render_imatrix_stats_tab(converter, config):
             placeholder="E:/Models/output",
             help="Directory containing imatrix and GGUF files to analyze (uses output directory from Convert & Quantize tab)"
         )
-    with col_stats_dir_browse:
-        st.markdown("<br>", unsafe_allow_html=True)  # Spacer to align with input + help icon
-        if st.button(
-            "Browse",
-            key="browse_imatrix_output_dir_btn",
-            use_container_width=True,
-            help="Browse for output directory"
-        ):
-            stats_dir_clean = strip_quotes(stats_output_dir)
-            initial_dir = stats_dir_clean if stats_dir_clean and Path(stats_dir_clean).exists() else None
-            selected_folder = browse_folder(initial_dir)
-            if selected_folder:
-                config["output_dir"] = selected_folder
-                save_config(config)
-                st.rerun()
+
+    if TKINTER_AVAILABLE:
+        with col_stats_dir_browse:
+            st.markdown("<br>", unsafe_allow_html=True)  # Spacer to align with input + help icon
+            if st.button(
+                "Browse",
+                key="browse_imatrix_output_dir_btn",
+                use_container_width=True,
+                help="Browse for output directory"
+            ):
+                stats_dir_clean = strip_quotes(stats_output_dir)
+                initial_dir = stats_dir_clean if stats_dir_clean and Path(stats_dir_clean).exists() else None
+                selected_folder = browse_folder(initial_dir)
+                if selected_folder:
+                    config["output_dir"] = selected_folder
+                    save_config(config)
+                    st.rerun()
+
     with col_stats_dir_check:
         st.markdown("<br>", unsafe_allow_html=True)  # Spacer to align with input + help icon
         stats_dir_clean = strip_quotes(stats_output_dir)

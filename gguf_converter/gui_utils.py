@@ -18,6 +18,10 @@ except ImportError:
     tk = None
     filedialog = None
 
+# Export TKINTER_AVAILABLE for use in other modules
+__all__ = ['TKINTER_AVAILABLE', 'browse_folder', 'open_folder', 'strip_quotes',
+           'save_config', 'load_config', 'make_config_saver', 'path_input_columns']
+
 
 # Config file location
 CONFIG_FILE = Path.home() / ".gguf_converter_config.json"
@@ -261,6 +265,33 @@ def check_git_updates_available():
             "message": "Could not check for updates",
             "latest_version": None
         }
+
+
+def path_input_columns():
+    """
+    Create column layout for path inputs with conditional browse button.
+
+    Returns:
+        tuple: (columns, has_browse_column)
+            - columns: tuple of Streamlit column objects
+            - has_browse_column: bool indicating if browse column exists
+
+    Example:
+        cols, has_browse = path_input_columns()
+        with cols[0]:
+            path = st.text_input("Path", ...)
+        if has_browse:
+            with cols[1]:
+                if st.button("Browse", ...):
+                    # browse logic
+        with cols[-1]:  # Last column is always check button
+            if st.button("Check Folder", ...):
+                # check logic
+    """
+    if TKINTER_AVAILABLE:
+        return st.columns([4, 1, 1]), True
+    else:
+        return st.columns([5, 1]), False
 
 
 def browse_folder(initial_dir=None):

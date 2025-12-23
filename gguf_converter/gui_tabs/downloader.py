@@ -8,7 +8,7 @@ import webbrowser
 
 from ..gui_utils import (
     strip_quotes, open_folder, browse_folder,
-    save_config
+    save_config, TKINTER_AVAILABLE
 )
 
 
@@ -46,7 +46,11 @@ def render_downloader_tab(converter, config):
                 st.toast(f"Opened {url}")
 
     # Download directory with Browse and Check Folder buttons
-    col_download, col_download_browse, col_download_check = st.columns([4, 1, 1])
+    if TKINTER_AVAILABLE:
+        col_download, col_download_browse, col_download_check = st.columns([4, 1, 1])
+    else:
+        col_download, col_download_check = st.columns([5, 1])
+
     with col_download:
         # Create dynamic label based on repository ID
         download_dir_label = "Download directory"
@@ -67,21 +71,24 @@ def render_downloader_tab(converter, config):
             value=config.get("download_dir", ""),
             placeholder="E:/Models"
         )
-    with col_download_browse:
-        st.markdown("<br>", unsafe_allow_html=True)  # Spacer to align with input
-        if st.button(
-            "Browse",
-            key="browse_download_folder_btn",
-            use_container_width=True,
-            help="Browse for download directory"
-        ):
-            download_dir_check = strip_quotes(download_dir)
-            initial_dir = download_dir_check if download_dir_check and Path(download_dir_check).exists() else None
-            selected_folder = browse_folder(initial_dir)
-            if selected_folder:
-                config["download_dir"] = selected_folder
-                save_config(config)
-                st.rerun()
+
+    if TKINTER_AVAILABLE:
+        with col_download_browse:
+            st.markdown("<br>", unsafe_allow_html=True)  # Spacer to align with input
+            if st.button(
+                "Browse",
+                key="browse_download_folder_btn",
+                use_container_width=True,
+                help="Browse for download directory"
+            ):
+                download_dir_check = strip_quotes(download_dir)
+                initial_dir = download_dir_check if download_dir_check and Path(download_dir_check).exists() else None
+                selected_folder = browse_folder(initial_dir)
+                if selected_folder:
+                    config["download_dir"] = selected_folder
+                    save_config(config)
+                    st.rerun()
+
     with col_download_check:
         st.markdown("<br>", unsafe_allow_html=True)  # Spacer to align with input
         download_dir_check = strip_quotes(download_dir)

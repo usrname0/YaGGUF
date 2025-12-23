@@ -7,7 +7,7 @@ from pathlib import Path
 
 from ..gui_utils import (
     strip_quotes, open_folder, browse_folder,
-    save_config, make_config_saver, get_default_config
+    save_config, make_config_saver, get_default_config, TKINTER_AVAILABLE
 )
 
 
@@ -32,7 +32,11 @@ def render_imatrix_settings_tab(converter, config):
             calibration_data_dir = default_calibration_dir
 
         # Directory input field with Browse and Check Folder buttons
-        col_dir, col_dir_browse, col_dir_check = st.columns([4, 1, 1])
+        if TKINTER_AVAILABLE:
+            col_dir, col_dir_browse, col_dir_check = st.columns([4, 1, 1])
+        else:
+            col_dir, col_dir_check = st.columns([5, 1])
+
         with col_dir:
             calibration_dir_input = st.text_input(
                 "Calibration files directory",
@@ -42,20 +46,23 @@ def render_imatrix_settings_tab(converter, config):
                 key=f"imatrix_cal_dir_input_{st.session_state.reset_count}",
                 on_change=lambda: None  # Trigger to update when user changes the path
             )
-        with col_dir_browse:
-            st.markdown("<br>", unsafe_allow_html=True)  # Align with input
-            if st.button(
-                "Browse",
-                key="browse_cal_dir_btn",
-                use_container_width=True,
-                help="Browse for calibration directory"
-            ):
-                initial_dir = str(calibration_data_dir) if calibration_data_dir.exists() else None
-                selected_folder = browse_folder(initial_dir)
-                if selected_folder:
-                    config["imatrix_calibration_dir"] = selected_folder
-                    save_config(config)
-                    st.rerun()
+
+        if TKINTER_AVAILABLE:
+            with col_dir_browse:
+                st.markdown("<br>", unsafe_allow_html=True)  # Align with input
+                if st.button(
+                    "Browse",
+                    key="browse_cal_dir_btn",
+                    use_container_width=True,
+                    help="Browse for calibration directory"
+                ):
+                    initial_dir = str(calibration_data_dir) if calibration_data_dir.exists() else None
+                    selected_folder = browse_folder(initial_dir)
+                    if selected_folder:
+                        config["imatrix_calibration_dir"] = selected_folder
+                        save_config(config)
+                        st.rerun()
+
         with col_dir_check:
             st.markdown("<br>", unsafe_allow_html=True)  # Align with input
             cal_dir_exists = calibration_data_dir.exists() and calibration_data_dir.is_dir()

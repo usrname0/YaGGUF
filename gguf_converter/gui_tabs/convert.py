@@ -7,7 +7,7 @@ from pathlib import Path
 
 from ..gui_utils import (
     strip_quotes, open_folder, browse_folder,
-    save_config, make_config_saver
+    save_config, make_config_saver, path_input_columns
 )
 
 
@@ -21,8 +21,9 @@ def render_convert_tab(converter, config, verbose, nthreads, ignore_incompatibil
         st.subheader("Input")
 
         # Model path with Browse and Check Folder buttons
-        col_model, col_model_browse, col_model_check = st.columns([4, 1, 1])
-        with col_model:
+        cols, has_browse = path_input_columns()
+
+        with cols[0]:
             # Only set value if key not in session state (prevents warning)
             model_path_kwargs = {
                 "label": "Model path",
@@ -33,24 +34,27 @@ def render_convert_tab(converter, config, verbose, nthreads, ignore_incompatibil
             if "model_path_input" not in st.session_state:
                 model_path_kwargs["value"] = config.get("model_path", "")
             model_path = st.text_input(**model_path_kwargs)  # type: ignore[arg-type]
-        with col_model_browse:
-            st.markdown("<br>", unsafe_allow_html=True)  # Align with input
-            if st.button(
-                "Browse",
-                key="browse_model_folder_btn",
-                use_container_width=True,
-                help="Browse for model directory"
-            ):
-                model_path_clean = strip_quotes(model_path)
-                initial_dir = model_path_clean if model_path_clean and Path(model_path_clean).exists() else None
-                selected_folder = browse_folder(initial_dir)
-                if selected_folder:
-                    config["model_path"] = selected_folder
-                    save_config(config)
-                    # Update widget state to show new path
-                    st.session_state.pending_model_path = selected_folder
-                    st.rerun()
-        with col_model_check:
+
+        if has_browse:
+            with cols[1]:
+                st.markdown("<br>", unsafe_allow_html=True)  # Align with input
+                if st.button(
+                    "Browse",
+                    key="browse_model_folder_btn",
+                    use_container_width=True,
+                    help="Browse for model directory"
+                ):
+                    model_path_clean = strip_quotes(model_path)
+                    initial_dir = model_path_clean if model_path_clean and Path(model_path_clean).exists() else None
+                    selected_folder = browse_folder(initial_dir)
+                    if selected_folder:
+                        config["model_path"] = selected_folder
+                        save_config(config)
+                        # Update widget state to show new path
+                        st.session_state.pending_model_path = selected_folder
+                        st.rerun()
+
+        with cols[-1]:  # Last column is always the check button
             st.markdown("<br>", unsafe_allow_html=True)  # Align with input
             model_path_clean = strip_quotes(model_path)
             model_path_exists = bool(model_path_clean and Path(model_path_clean).exists())
@@ -69,30 +73,34 @@ def render_convert_tab(converter, config, verbose, nthreads, ignore_incompatibil
                         st.toast(f"Could not open folder: {e}")
 
         # Output directory with Browse and Check Folder buttons
-        col_output, col_output_browse, col_output_check = st.columns([4, 1, 1])
-        with col_output:
+        cols, has_browse = path_input_columns()
+
+        with cols[0]:
             output_dir = st.text_input(
                 "Output directory",
                 value=config.get("output_dir", ""),
                 placeholder="E:/Models/converted",
                 help="Where to save the converted files"
             )
-        with col_output_browse:
-            st.markdown("<br>", unsafe_allow_html=True)  # Align with input
-            if st.button(
-                "Browse",
-                key="browse_output_folder_btn",
-                use_container_width=True,
-                help="Browse for output directory"
-            ):
-                output_dir_clean = strip_quotes(output_dir)
-                initial_dir = output_dir_clean if output_dir_clean and Path(output_dir_clean).exists() else None
-                selected_folder = browse_folder(initial_dir)
-                if selected_folder:
-                    config["output_dir"] = selected_folder
-                    save_config(config)
-                    st.rerun()
-        with col_output_check:
+
+        if has_browse:
+            with cols[1]:
+                st.markdown("<br>", unsafe_allow_html=True)  # Align with input
+                if st.button(
+                    "Browse",
+                    key="browse_output_folder_btn",
+                    use_container_width=True,
+                    help="Browse for output directory"
+                ):
+                    output_dir_clean = strip_quotes(output_dir)
+                    initial_dir = output_dir_clean if output_dir_clean and Path(output_dir_clean).exists() else None
+                    selected_folder = browse_folder(initial_dir)
+                    if selected_folder:
+                        config["output_dir"] = selected_folder
+                        save_config(config)
+                        st.rerun()
+
+        with cols[-1]:
             st.markdown("<br>", unsafe_allow_html=True)  # Align with input
             output_dir_clean = strip_quotes(output_dir)
             output_dir_exists = bool(output_dir_clean and Path(output_dir_clean).exists())
