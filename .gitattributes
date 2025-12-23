@@ -1,0 +1,24 @@
+# Auto-detect text files and perform LF normalization
+* text=auto
+
+# Shell scripts should always use LF line endings
+*.sh text eol=lf
+
+# Batch files should always use CRLF line endings
+*.bat text eol=crlf
+
+# Python files should use LF line endings
+*.py text eol=lf
+
+# Markdown and documentation files
+*.md text eol=lf
+
+# Explicitly declare files that should not be modified
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.zip binary
+*.tar.gz binary
+*.gguf binary
