@@ -8,7 +8,7 @@ from pathlib import Path
 from ..gui_utils import (
     strip_quotes, open_folder, browse_folder,
     save_config, get_binary_version,
-    display_binary_version_status, get_binary_version_from_path,
+    get_binary_version_from_path,
     TKINTER_AVAILABLE
 )
 
@@ -18,34 +18,16 @@ def render_llama_cpp_tab(converter, config):
     st.header("llama.cpp Binaries")
 
     st.markdown("""
-    By default, YaGUFF automatically downloads pre-compiled llama.cpp binaries that use the CPU (good for most cases).
-    You can update binaries from the **Update** tab.
+    YaGUFF automatically downloads pre-compiled llama.cpp binaries that use the CPU (good for most cases).
+    You can opt to use other llama.cpp binaries below.
     """)
-
-    # YaGUFF Binary Information (Reference)
-    st.subheader("YaGUFF Binary Information")
-
-    col_info1, col_info2 = st.columns(2)
-    with col_info1:
-        st.markdown("[View llama.cpp on GitHub](https://github.com/ggml-org/llama.cpp)")
-
-    with col_info2:
-        binary_info = get_binary_version(st.session_state.converter)
-        if binary_info["status"] == "ok":
-            st.success(binary_info['message'])
-        elif binary_info["status"] == "missing":
-            st.warning(binary_info['message'])
-        else:
-            st.error(binary_info['message'])
-
-        display_binary_version_status(st.session_state.converter)
-
-    st.markdown("---")
 
     # Local/Custom Binary Settings Section
     col_bin1, col_bin2 = st.columns(2)
     with col_bin1:
         st.subheader("Local/Custom Binary Settings")
+        st.markdown("[View llama.cpp on GitHub](https://github.com/ggml-org/llama.cpp)")
+
         # Auto-save callback for use_custom_binaries
         def save_use_custom_binaries():
             config["use_custom_binaries"] = st.session_state.use_custom_binaries_checkbox_update
@@ -77,6 +59,7 @@ def render_llama_cpp_tab(converter, config):
             col_folder, col_browse, col_check = st.columns([4, 1, 1])
         else:
             col_folder, col_check = st.columns([5, 1])
+            col_browse = None  # Not used when tkinter unavailable
 
         with col_folder:
             def save_binaries_folder():
@@ -103,7 +86,7 @@ def render_llama_cpp_tab(converter, config):
             )
 
         if TKINTER_AVAILABLE:
-            with col_browse:
+            with col_browse:  # type: ignore[union-attr]
                 if st.button(
                     "Browse",
                     key="browse_binaries_folder_btn",
@@ -246,3 +229,17 @@ def render_llama_cpp_tab(converter, config):
                 st.markdown("- `llama-imatrix`: Not found")
         else:
             st.info("Disabled - Using YaGUFF binaries")
+
+    st.markdown("---")
+
+    # YaGUFF Binary Information (Reference)
+    col_info1, col_info2 = st.columns(2)
+    with col_info1:
+        st.subheader("YaGUFF Binary Information (for comparison)")
+
+    with col_info2:
+        binary_info = get_binary_version(st.session_state.converter)
+        if binary_info["status"] == "ok" and binary_info.get("version"):
+            st.code(binary_info["version"], language=None)
+        else:
+            st.info("Not installed")

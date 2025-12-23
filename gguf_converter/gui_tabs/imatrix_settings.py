@@ -36,6 +36,7 @@ def render_imatrix_settings_tab(converter, config):
             col_dir, col_dir_browse, col_dir_check = st.columns([4, 1, 1])
         else:
             col_dir, col_dir_check = st.columns([5, 1])
+            col_dir_browse = None  # Not used when tkinter unavailable
 
         with col_dir:
             calibration_dir_input = st.text_input(
@@ -48,7 +49,7 @@ def render_imatrix_settings_tab(converter, config):
             )
 
         if TKINTER_AVAILABLE:
-            with col_dir_browse:
+            with col_dir_browse:  # type: ignore[union-attr]
                 st.markdown("<br>", unsafe_allow_html=True)  # Align with input
                 if st.button(
                     "Browse",

@@ -26,6 +26,7 @@ def render_imatrix_stats_tab(converter, config):
         col_stats_dir, col_stats_dir_browse, col_stats_dir_check = st.columns([4, 1, 1])
     else:
         col_stats_dir, col_stats_dir_check = st.columns([5, 1])
+        col_stats_dir_browse = None  # Not used when tkinter unavailable
 
     with col_stats_dir:
         stats_output_dir = st.text_input(
@@ -36,7 +37,7 @@ def render_imatrix_stats_tab(converter, config):
         )
 
     if TKINTER_AVAILABLE:
-        with col_stats_dir_browse:
+        with col_stats_dir_browse:  # type: ignore[union-attr]
             st.markdown("<br>", unsafe_allow_html=True)  # Spacer to align with input + help icon
             if st.button(
                 "Browse",

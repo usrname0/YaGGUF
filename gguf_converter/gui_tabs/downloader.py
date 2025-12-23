@@ -50,6 +50,7 @@ def render_downloader_tab(converter, config):
         col_download, col_download_browse, col_download_check = st.columns([4, 1, 1])
     else:
         col_download, col_download_check = st.columns([5, 1])
+        col_download_browse = None  # Not used when tkinter unavailable
 
     with col_download:
         # Create dynamic label based on repository ID
@@ -73,7 +74,7 @@ def render_downloader_tab(converter, config):
         )
 
     if TKINTER_AVAILABLE:
-        with col_download_browse:
+        with col_download_browse:  # type: ignore[union-attr]
             st.markdown("<br>", unsafe_allow_html=True)  # Spacer to align with input
             if st.button(
                 "Browse",
@@ -161,9 +162,9 @@ def render_downloader_tab(converter, config):
 
     # Show temporary success messages
     if st.session_state.get("download_just_completed", False):
-        st.success(f"✓ Model downloaded successfully!")
+        st.success(f"Model downloaded successfully!")
         st.session_state.download_just_completed = False
 
     if st.session_state.get("model_path_set", False):
-        st.success("✓ Model path set in Convert & Quantize tab")
+        st.success("Model path set in Convert & Quantize tab")
         st.session_state.model_path_set = False
