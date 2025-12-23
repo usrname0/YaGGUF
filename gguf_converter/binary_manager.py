@@ -68,7 +68,7 @@ class BinaryManager:
         elif system == 'linux':
             os_name = 'ubuntu'
             variant = arch
-            ext = 'zip'
+            ext = 'tar.gz'
             filename = f"llama-{self.LLAMA_CPP_VERSION}-bin-{os_name}-{variant}.{ext}"
         elif system == 'darwin':
             os_name = 'macos'
