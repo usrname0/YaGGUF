@@ -65,7 +65,7 @@ def render_update_tab(converter, config):
         st.markdown("Force a re-download of the `llama.cpp` binaries. Choose **Recommended** for the tested version bundled with YaGUFF, or **Latest** for the newest llama.cpp release.")
         st.markdown("[View llama.cpp on GitHub](https://github.com/ggml-org/llama.cpp)")
 
-        if st.button("Force Binary Update - Recommended"):
+        if st.button("Force Binary Update - Recommended Version"):
             output_container = st.empty()
             output_container.code("Starting binary update (Recommended version)...\nThis may take a moment.", language='bash')
 
@@ -86,7 +86,7 @@ def render_update_tab(converter, config):
             if success:
                 st.rerun()
 
-        if st.button("Force Binary Update - Latest"):
+        if st.button("Force Binary Update - Latest Version"):
             output_container = st.empty()
             output_container.code("Fetching latest llama.cpp version...\nThis may take a moment.", language='bash')
 
@@ -129,7 +129,7 @@ def render_update_tab(converter, config):
         st.markdown("Update the `llama.cpp` repository that contains the `convert_hf_to_gguf.py` script. Choose **Recommended** for the tested version matching YaGUFF binaries, or **Latest** for the newest conversion scripts.")
         st.markdown("[View llama.cpp on GitHub](https://github.com/ggml-org/llama.cpp)")
 
-        if st.button("Update Conversion Scripts - Recommended"):
+        if st.button("Force Conversion Scripts Update - Recommended Version"):
             output_container = st.empty()
             output_container.code("Updating conversion scripts (Recommended version)...\nThis may take a moment.", language='bash')
 
@@ -155,7 +155,7 @@ def render_update_tab(converter, config):
             if success:
                 st.rerun()
 
-        if st.button("Update Conversion Scripts - Latest"):
+        if st.button("Force Conversion Scripts Update - Latest Version"):
             output_container = st.empty()
             output_container.code("Updating conversion scripts to latest version...\nThis may take a moment.", language='bash')
 
