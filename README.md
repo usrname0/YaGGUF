@@ -83,6 +83,10 @@ The GUI will automatically open in your browser on a free port like: `http://loc
 ## Requirements
 
 - Python 3.8 or higher
+- **Linux only**: tkinter (for folder browser)
+  - Ubuntu/Debian: `sudo apt install python3-tk`
+  - Fedora/RHEL: `sudo dnf install python3-tkinter`
+  - Arch: `sudo pacman -S tk`
 
 ## Troubleshooting
 

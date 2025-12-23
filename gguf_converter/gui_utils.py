@@ -7,8 +7,16 @@ from pathlib import Path
 import json
 import subprocess
 import platform
-import tkinter as tk
-from tkinter import filedialog
+
+# Optional tkinter import for native file dialogs
+try:
+    import tkinter as tk
+    from tkinter import filedialog
+    TKINTER_AVAILABLE = True
+except ImportError:
+    TKINTER_AVAILABLE = False
+    tk = None
+    filedialog = None
 
 
 # Config file location
@@ -265,6 +273,17 @@ def browse_folder(initial_dir=None):
     Returns:
         str: Selected folder path or None if cancelled
     """
+    if not TKINTER_AVAILABLE:
+        st.error(
+            "Folder browser requires tkinter.\n\n"
+            "**On Linux**, install it with:\n"
+            "- Ubuntu/Debian: `sudo apt install python3-tk`\n"
+            "- Fedora/RHEL: `sudo dnf install python3-tkinter`\n"
+            "- Arch: `sudo pacman -S tk`\n\n"
+            "Then restart the GUI."
+        )
+        return None
+
     try:
         # Create a root window and hide it
         root = tk.Tk()

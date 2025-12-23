@@ -15,6 +15,22 @@ if [ $? -ne 0 ]; then
     exit 1
 fi
 
+# Check if tkinter is available (required for folder browser)
+echo "Checking for tkinter..."
+python3 -c "import tkinter" 2>/dev/null
+if [ $? -ne 0 ]; then
+    echo ""
+    echo "WARNING: tkinter is not installed. The folder browser will not work."
+    echo "To install tkinter:"
+    echo "  - Ubuntu/Debian: sudo apt install python3-tk"
+    echo "  - Fedora/RHEL:   sudo dnf install python3-tkinter"
+    echo "  - Arch:          sudo pacman -S tk"
+    echo ""
+    echo "You can still use the GUI by typing paths manually."
+    echo ""
+    read -p "Press Enter to continue setup anyway..."
+fi
+
 # Create virtual environment
 echo "Creating virtual environment..."
 python3 -m venv venv
