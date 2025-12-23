@@ -255,6 +255,7 @@ class BinaryManager:
             self.bin_dir / 'bin' / name,
             self.bin_dir / 'build' / 'bin' / name,  # Ubuntu/Linux releases
             self.bin_dir / f"llama-{self.LLAMA_CPP_VERSION}-bin" / name,
+            self.bin_dir / f"llama-{self.LLAMA_CPP_VERSION}" / name,  # Actual extracted directory name
         ]
 
         for location in possible_locations:
