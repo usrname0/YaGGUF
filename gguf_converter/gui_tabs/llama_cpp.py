@@ -228,7 +228,7 @@ def render_llama_cpp_tab(converter, config):
                 st.markdown("- `llama-quantize`: Not found")
                 st.markdown("- `llama-imatrix`: Not found")
         else:
-            st.info("Disabled - Using YaGUFF binaries")
+            st.info("Disabled - Using YaGUFF's llama.cpp binaries")
 
     st.markdown("---")
 
