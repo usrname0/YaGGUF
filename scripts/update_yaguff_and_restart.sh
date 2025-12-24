@@ -17,24 +17,16 @@ echo "========================================"
 echo ""
 
 # Kill any process using the specified port
-echo "Checking for port $PORT..."
+echo "Stopping GUI on port $PORT..."
 PID=$(lsof -ti:$PORT 2>/dev/null)
 if [ ! -z "$PID" ]; then
-    echo "Killing process using port $PORT (PID: $PID)"
     kill -9 $PID 2>/dev/null
     sleep 2
 fi
 
-# Verify port is free
-if lsof -Pi :$PORT -sTCP:LISTEN -t >/dev/null 2>&1; then
-    echo "WARNING: Port $PORT still in use. Proceeding anyway..."
-else
-    echo "Port $PORT is now free"
-fi
-
 # Update YaGUFF
 echo "Fetching latest YaGUFF version..."
-git fetch --tags
+git fetch --tags 2>/dev/null
 
 if [ -z "$VERSION" ]; then
     echo "Error: Version not specified"
@@ -42,7 +34,7 @@ if [ -z "$VERSION" ]; then
 fi
 
 echo "Checking out version $VERSION..."
-git checkout $VERSION
+git -c advice.detachedHead=false checkout $VERSION 2>/dev/null
 
 if [ $? -ne 0 ]; then
     echo "Error: Failed to checkout version $VERSION"

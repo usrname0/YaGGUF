@@ -15,22 +15,15 @@ echo ========================================
 echo.
 
 REM Kill any process using the specified port
-echo Checking for port %PORT%...
-for /f "tokens=5" %%a in ('netstat -ano ^| findstr ":%PORT% "') do (
-    echo Killing process using port %PORT% (PID: %%a^)
-    taskkill /F /PID %%a >nul 2>&1
+echo Stopping GUI on port %PORT%...
+for /f "tokens=5" %%a in ('netstat -ano ^| findstr ":%PORT% " ^| findstr "LISTENING"') do (
+    if not "%%a"=="0" (
+        taskkill /F /PID %%a >nul 2>&1
+    )
 )
 
 REM Give the OS a moment to release the port
 timeout /t 2 /nobreak >nul
-
-REM Verify port is free
-netstat -ano | findstr ":%PORT% " >nul 2>&1
-if %errorlevel% equ 0 (
-    echo WARNING: Port %PORT% still in use. Proceeding anyway...
-) else (
-    echo Port %PORT% is now free
-)
 
 REM Activate venv
 call venv\Scripts\activate.bat

@@ -14,19 +14,11 @@ echo "========================================"
 echo ""
 
 # Kill any process using the specified port
-echo "Checking for port $PORT..."
-PID=$(lsof -ti:$PORT)
+echo "Stopping GUI on port $PORT..."
+PID=$(lsof -ti:$PORT 2>/dev/null)
 if [ ! -z "$PID" ]; then
-    echo "Killing process using port $PORT (PID: $PID)"
     kill -9 $PID 2>/dev/null
     sleep 2
-fi
-
-# Verify port is free
-if lsof -Pi :$PORT -sTCP:LISTEN -t >/dev/null 2>&1; then
-    echo "WARNING: Port $PORT still in use. Proceeding anyway..."
-else
-    echo "Port $PORT is now free"
 fi
 
 # Activate venv
