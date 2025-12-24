@@ -9,9 +9,23 @@ import zipfile
 import tarfile
 import shutil
 import json
+import stat
 from pathlib import Path
 from typing import Optional, Dict
 from urllib.request import urlretrieve, urlopen
+
+
+def remove_readonly(func, path, excinfo):
+    """
+    Error handler for shutil.rmtree to handle read-only files on Windows
+
+    Args:
+        func: Function that raised the exception
+        path: Path to the file
+        excinfo: Exception information
+    """
+    os.chmod(path, stat.S_IWRITE)
+    func(path)
 
 
 class BinaryManager:
@@ -155,7 +169,6 @@ class BinaryManager:
         print(f"URL: {url}")
 
         # Clean up old binaries BEFORE downloading
-        print(f"Cleaning up old binaries...")
         self._cleanup_old_binaries()
 
         # Download to temporary file
@@ -195,13 +208,12 @@ class BinaryManager:
         if not self.bin_dir.exists():
             return
 
+        print("Removing old binaries...")
         # Remove everything in bin_dir (files and directories)
         for item in self.bin_dir.iterdir():
             if item.is_dir():
-                print(f"Removing old directory: {item.name}")
-                shutil.rmtree(item)
+                shutil.rmtree(item, onerror=remove_readonly)
             else:
-                print(f"Removing old file: {item.name}")
                 item.unlink()
 
     def _extract_archive(self, archive_path: Path):
@@ -228,7 +240,7 @@ class BinaryManager:
                 # Remove destination if it exists
                 if dest.exists():
                     if dest.is_dir():
-                        shutil.rmtree(dest)
+                        shutil.rmtree(dest, onerror=remove_readonly)
                     else:
                         dest.unlink()
                 shutil.move(str(item), str(dest))
@@ -424,13 +436,14 @@ class BinaryManager:
 
         Args:
             use_recommended: If True, checkout the recommended version (LLAMA_CPP_VERSION).
-                           If False, pull latest from master branch.
+                           If False, get the latest tagged release and re-clone.
 
         Returns:
             Dict with 'status' ('success', 'already_updated', 'not_found', 'error')
             and 'message' keys
         """
         import subprocess
+        import shutil
 
         project_root = Path(__file__).parent.parent
         llama_cpp_dir = project_root / "llama.cpp"
@@ -507,67 +520,58 @@ class BinaryManager:
                         'message': f"Failed to checkout version {target_version}: {checkout_result.stderr}"
                     }
             else:
-                # Pull latest from master
-                print("Updating conversion scripts to latest version...")
+                # Get latest tagged release and re-clone
+                print("Fetching latest release version...")
+                latest_version = self.get_latest_version()
+                print(f"Latest release: {latest_version}")
 
-                # First, fetch the latest changes
-                fetch_result = subprocess.run(
-                    ["git", "fetch", "origin", "master"],
+                # Check current version
+                current_result = subprocess.run(
+                    ["git", "describe", "--tags", "--always"],
                     cwd=llama_cpp_dir,
                     capture_output=True,
                     text=True,
-                    timeout=60
+                    timeout=5
                 )
 
-                if fetch_result.returncode != 0:
+                current_version = current_result.stdout.strip() if current_result.returncode == 0 else "unknown"
+
+                if latest_version in current_version:
+                    print(f"Conversion scripts already at latest version: {latest_version}")
                     return {
-                        'status': 'error',
-                        'message': f"Failed to fetch updates: {fetch_result.stderr}"
+                        'status': 'already_updated',
+                        'message': f'Conversion scripts already at latest version: {latest_version}'
                     }
 
-                # Checkout master and pull
-                checkout_result = subprocess.run(
-                    ["git", "checkout", "master"],
-                    cwd=llama_cpp_dir,
+                # Delete and re-clone with latest version
+                print(f"Updating to latest version {latest_version}...")
+                print("Removing existing llama.cpp repository...")
+                shutil.rmtree(llama_cpp_dir, onerror=remove_readonly)
+
+                print(f"Cloning llama.cpp repository at version {latest_version}...")
+                clone_result = subprocess.run(
+                    [
+                        "git", "clone",
+                        "https://github.com/ggml-org/llama.cpp.git",
+                        "--depth=1",
+                        "--branch", latest_version,
+                        str(llama_cpp_dir)
+                    ],
                     capture_output=True,
                     text=True,
-                    timeout=10
+                    timeout=120
                 )
 
-                if checkout_result.returncode != 0:
+                if clone_result.returncode == 0:
+                    print(f"Conversion scripts updated to latest version: {latest_version}")
                     return {
-                        'status': 'error',
-                        'message': f"Failed to checkout master: {checkout_result.stderr}"
+                        'status': 'success',
+                        'message': f'Conversion scripts updated to latest version: {latest_version}'
                     }
-
-                pull_result = subprocess.run(
-                    ["git", "pull", "origin", "master"],
-                    cwd=llama_cpp_dir,
-                    capture_output=True,
-                    text=True,
-                    timeout=60
-                )
-
-                if pull_result.returncode == 0:
-                    if "Already up to date" in pull_result.stdout or "Already up-to-date" in pull_result.stdout:
-                        print("Conversion scripts already up to date")
-                        return {
-                            'status': 'already_updated',
-                            'message': 'Conversion scripts are already up to date'
-                        }
-                    else:
-                        print("Conversion scripts updated successfully")
-                        print(pull_result.stdout)
-                        return {
-                            'status': 'success',
-                            'message': 'Conversion scripts updated to latest version'
-                        }
                 else:
-                    error_msg = f"Failed to pull updates: {pull_result.stderr}"
-                    print(error_msg)
                     return {
                         'status': 'error',
-                        'message': error_msg
+                        'message': f"Failed to clone latest version: {clone_result.stderr}"
                     }
         except subprocess.TimeoutExpired:
             error_msg = "Update timed out"

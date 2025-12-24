@@ -13,7 +13,7 @@ from pathlib import Path
 project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
-from gguf_converter.binary_manager import BinaryManager
+from gguf_converter.binary_manager import BinaryManager, remove_readonly
 
 
 def ensure_llama_cpp_repo(binary_manager):
@@ -29,7 +29,7 @@ def ensure_llama_cpp_repo(binary_manager):
         # Remove old repo if it exists but is incomplete
         if llama_cpp_dir.exists():
             print("Removing incomplete llama.cpp repository...")
-            shutil.rmtree(llama_cpp_dir)
+            shutil.rmtree(llama_cpp_dir, onerror=remove_readonly)
 
         # Clone fresh copy
         expected_version = binary_manager.LLAMA_CPP_VERSION
@@ -64,43 +64,6 @@ def ensure_llama_cpp_repo(binary_manager):
     return True
 
 
-def update_llama_cpp_scripts():
-    """Update llama.cpp conversion scripts via git pull"""
-    llama_cpp_dir = project_root / "llama.cpp"
-
-    if not llama_cpp_dir.exists():
-        # Shouldn't happen if ensure_llama_cpp_repo() was called first
-        print("Warning: llama.cpp directory not found")
-        return True
-
-    if not (llama_cpp_dir / ".git").exists():
-        print("llama.cpp directory is not a git repository")
-        return True
-
-    try:
-        print("Updating llama.cpp conversion scripts...")
-        result = subprocess.run(
-            ["git", "pull", "origin", "master"],
-            cwd=llama_cpp_dir,
-            capture_output=True,
-            text=True,
-            timeout=60
-        )
-
-        if result.returncode == 0:
-            if "Already up to date" in result.stdout:
-                print("Conversion scripts already up to date")
-            else:
-                print("Conversion scripts updated successfully")
-            return True
-        else:
-            print(f"Warning: Failed to update conversion scripts: {result.stderr}")
-            return False
-    except Exception as e:
-        print(f"Warning: Could not update conversion scripts: {e}")
-        return False
-
-
 def main():
     """Check binary version and update if needed"""
     print("Checking llama.cpp binaries and conversion scripts...")
@@ -109,7 +72,6 @@ def main():
     manager = BinaryManager()
 
     # Check if binaries exist
-    binaries_updated = False
     if manager._binaries_exist():
         print(f"Binaries up to date (version {manager.LLAMA_CPP_VERSION})")
     else:
@@ -122,7 +84,6 @@ def main():
             manager.download_binaries(force=True)
             print()
             print("Binaries updated successfully!")
-            binaries_updated = True
         except Exception as e:
             print()
             print(f"ERROR: Failed to download binaries: {e}")
@@ -134,11 +95,6 @@ def main():
 
     # Ensure llama.cpp repository exists (clone if needed)
     ensure_llama_cpp_repo(manager)
-
-    # Always try to update conversion scripts if binaries were updated
-    if binaries_updated:
-        print()
-        update_llama_cpp_scripts()
 
     print()
     return 0

@@ -348,7 +348,7 @@ class GGUFConverter:
     def _ensure_llama_cpp_repo(self):
         """
         Verify llama.cpp repository exists
-        Repository should be cloned during startup by check_binaries.py
+        Repository should be cloned during startup by check_and_download_binaries.py
         """
         llama_cpp_dir = Path(__file__).parent.parent / "llama.cpp"
         convert_script = llama_cpp_dir / "convert_hf_to_gguf.py"
@@ -363,7 +363,7 @@ class GGUFConverter:
         """
         Find the convert_hf_to_gguf.py script
 
-        Note: The repo is cloned during startup by check_binaries.py, and
+        Note: The repo is cloned during startup by check_and_download_binaries.py, and
         _ensure_llama_cpp_repo() verifies it exists during init
         """
         # Primary location (managed by this tool)

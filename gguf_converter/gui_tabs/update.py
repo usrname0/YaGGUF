@@ -8,6 +8,7 @@ import subprocess
 import platform
 import io
 import os
+import sys
 from contextlib import redirect_stdout
 
 from ..gui_utils import (
@@ -16,6 +17,24 @@ from ..gui_utils import (
     display_binary_version_status, get_conversion_scripts_info,
     display_conversion_scripts_version_status
 )
+
+
+class TeeOutput(io.TextIOBase):
+    """
+    Write to both StringIO (for GUI capture) and stdout (for terminal output)
+    """
+    def __init__(self, stringio_obj):
+        self.stringio = stringio_obj
+        self.terminal = sys.stdout
+
+    def write(self, message):
+        self.stringio.write(message)
+        self.terminal.write(message)
+        return len(message)
+
+    def flush(self):
+        self.stringio.flush()
+        self.terminal.flush()
 
 
 def render_update_tab(converter, config):
@@ -94,7 +113,7 @@ def render_update_tab(converter, config):
     # Update YaGUFF Binaries Section
     col_bin1, col_bin2 = st.columns(2)
     with col_bin1:
-        st.subheader("Update YaGUFF Binaries")
+        st.subheader("Update YaGUFF: Llama.cpp Binaries")
         st.markdown("Force a re-download of the `llama.cpp` binaries. Choose **Recommended** for the tested version bundled with YaGUFF, or **Latest** for the newest llama.cpp release.")
         st.markdown("[View llama.cpp on GitHub](https://github.com/ggml-org/llama.cpp)")
 
@@ -103,7 +122,8 @@ def render_update_tab(converter, config):
             output_container.code("Starting binary update (Recommended version)...\nThis may take a moment.", language='bash')
 
             f = io.StringIO()
-            with redirect_stdout(f):
+            tee = TeeOutput(f)
+            with redirect_stdout(tee):  # type: ignore[arg-type]
                 try:
                     st.session_state.converter.binary_manager.download_binaries(force=True)
                     st.toast("Binaries updated successfully!")
@@ -124,7 +144,8 @@ def render_update_tab(converter, config):
             output_container.code("Fetching latest llama.cpp version...\nThis may take a moment.", language='bash')
 
             f = io.StringIO()
-            with redirect_stdout(f):
+            tee = TeeOutput(f)
+            with redirect_stdout(tee):  # type: ignore[arg-type]
                 try:
                     latest_version = st.session_state.converter.binary_manager.get_latest_version()
                     print(f"Latest version: {latest_version}")
@@ -142,7 +163,7 @@ def render_update_tab(converter, config):
             if success:
                 st.rerun()
     with col_bin2:
-        st.subheader("YaGUFF Binary Information")
+        st.subheader("Binary Information")
         binary_info = get_binary_version(st.session_state.converter)
         if binary_info["status"] == "ok":
             st.success(binary_info['message'])
@@ -158,7 +179,7 @@ def render_update_tab(converter, config):
     # Update Conversion Scripts Section
     col_scripts1, col_scripts2 = st.columns(2)
     with col_scripts1:
-        st.subheader("Update Conversion Scripts")
+        st.subheader("Update YaGUFF: Llama.cpp Conversion Scripts")
         st.markdown("Update the `llama.cpp` repository that contains the `convert_hf_to_gguf.py` script. Choose **Recommended** for the tested version matching YaGUFF binaries, or **Latest** for the newest conversion scripts.")
         st.markdown("[View llama.cpp on GitHub](https://github.com/ggml-org/llama.cpp)")
 
@@ -167,7 +188,8 @@ def render_update_tab(converter, config):
             output_container.code("Updating conversion scripts (Recommended version)...\nThis may take a moment.", language='bash')
 
             f = io.StringIO()
-            with redirect_stdout(f):
+            tee = TeeOutput(f)
+            with redirect_stdout(tee):  # type: ignore[arg-type]
                 try:
                     result = st.session_state.converter.binary_manager.update_conversion_scripts(use_recommended=True)
                     if result['status'] in ['success', 'already_updated']:
@@ -193,7 +215,8 @@ def render_update_tab(converter, config):
             output_container.code("Updating conversion scripts to latest version...\nThis may take a moment.", language='bash')
 
             f = io.StringIO()
-            with redirect_stdout(f):
+            tee = TeeOutput(f)
+            with redirect_stdout(tee):  # type: ignore[arg-type]
                 try:
                     result = st.session_state.converter.binary_manager.update_conversion_scripts(use_recommended=False)
                     if result['status'] in ['success', 'already_updated']:
@@ -248,9 +271,9 @@ def render_update_tab(converter, config):
             # Determine platform-specific restart script
             is_windows = platform.system() == "Windows"
             if is_windows:
-                restart_script = Path(__file__).parent.parent.parent / "scripts" / "update_and_restart.bat"
+                restart_script = Path(__file__).parent.parent.parent / "scripts" / "update_dependencies_and_restart.bat"
             else:
-                restart_script = Path(__file__).parent.parent.parent / "scripts" / "update_and_restart.sh"
+                restart_script = Path(__file__).parent.parent.parent / "scripts" / "update_dependencies_and_restart.sh"
 
             if restart_script.exists():
                 st.info("See terminal for update progress... Please wait.")

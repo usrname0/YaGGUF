@@ -29,7 +29,7 @@ fi
 
 # Check and update binaries if needed
 echo ""
-python scripts/check_binaries.py
+python scripts/check_and_download_binaries.py
 echo ""
 
 echo "Starting GGUF Converter GUI..."
