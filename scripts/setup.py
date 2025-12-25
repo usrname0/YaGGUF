@@ -38,19 +38,26 @@ setup(
     ],
     python_requires=">=3.8",
     install_requires=[
-        "huggingface-hub>=0.20.0",
-        "numpy>=1.24.0",
-        "gguf>=0.1.0",
-        "torch>=2.0.0",
-        "transformers>=4.30.0",
+        # GUI
+        "streamlit>=1.40.0",
+        # Core dependencies
+        "huggingface-hub>=0.36.0",
+        "colorama>=0.4.6",
+        # Model conversion (llama.cpp convert_hf_to_gguf.py requirements)
+        "transformers>=4.50.0",
+        "sentencepiece>=0.2.0",
+        "numpy>=2.0.0",
+        "gguf>=0.15.0",
+        "tokenizers>=0.21.0",
+        "mistral-common>=1.8.0",
+        # Note: PyTorch is installed separately by setup scripts (CPU-only version)
     ],
     extras_require={
-        "gui": ["streamlit>=1.30.0"],
-        "dev": ["pytest", "black", "flake8"],
+        "dev": ["pytest>=7.0.0", "pytest-mock>=3.10.0"],
     },
     entry_points={
         "console_scripts": [
-            "gguf-converter=gguf_converter.cli:main",
+            "yaguff=gguf_converter.gui:main",
         ],
     },
 )
