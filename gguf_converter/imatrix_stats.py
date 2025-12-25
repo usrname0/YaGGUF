@@ -342,7 +342,7 @@ def show_statistics(imatrix_path: str) -> bool:
 
         # Print header
         print(f"\nComputing statistics for {imatrix_path} ({len(tstats)} tensors)")
-        print(f"\n Layer\t{'Tensor':<20}\t{'Σ(Act²)':>10}\t{'Min':>8}\t{'Max':>11}\t{'μ':>6}\t{'σ':>6}\t{'% Active':>9}\t{'N':>6}\t{'Entropy':>10}\t{'E (norm)':>7}\t{'ZD':>11}\t{'CosSim':>8}")
+        print(f"\n{'Layer':>5}  {'Tensor':<20}  {'Σ(Act²)':>10}  {'Min':>8}  {'Max':>11}  {'μ':>6}  {'σ':>6}  {'% Active':>9}  {'N':>6}  {'Entropy':>10}  {'E (norm)':>7}  {'ZD':>11}  {'CosSim':>8}")
         print("=" * 170)
 
         # Print tensor statistics
@@ -360,7 +360,7 @@ def show_statistics(imatrix_path: str) -> bool:
             if ts.elements > 1:
                 norm_entropy = 100.0 * (ts.entropy / math.log2(ts.elements))
 
-            print(f"{layer:>5}\t{name:<20}\t{ts.total_sqract:>10.2f}\t{ts.min_sqract:>8.4f}\t{ts.max_sqract:>11.4f}\t{ts.mean_sqract:>6.2f}\t{ts.stddev:>6.2f}\t{ts.active * 100:>8.2f}%\t{ts.elements:>6}\t{ts.entropy:>10.4f}\t{norm_entropy:>6.2f}%\t{ts.zd * 100:>10.2f}%\t{ts.cossim:>8.4f}")
+            print(f"{layer:>5}  {name:<20}  {ts.total_sqract:>10.2f}  {ts.min_sqract:>8.4f}  {ts.max_sqract:>11.4f}  {ts.mean_sqract:>6.2f}  {ts.stddev:>6.2f}  {ts.active * 100:>8.2f}%  {ts.elements:>6}  {ts.entropy:>10.4f}  {norm_entropy:>6.2f}%  {ts.zd * 100:>10.2f}%  {ts.cossim:>8.4f}")
 
             # Accumulate weighted stats
             weighted_bias = ts.elements * ts.total_sqract
@@ -384,7 +384,7 @@ def show_statistics(imatrix_path: str) -> bool:
         layers = [k for k in weighted_stats.keys() if k >= 0]
         if layers:
             print(f"\nComputing weighted average statistics per layer ({len(layers)} layers)")
-            print(f"\n{'Layer':>5}\t{'μΣ(Act²)':>14}\t{'μZD':>11}\t{'μCosSim':>6}")
+            print(f"\n{'Layer':>5}  {'μΣ(Act²)':>14}  {'μZD':>11}  {'μCosSim':>8}")
             print("=" * 48)
 
             for blk in sorted(layers):
@@ -394,7 +394,7 @@ def show_statistics(imatrix_path: str) -> bool:
                     zd = stats['weighted_zd'] / stats['total_elements']
                     cossim = stats['weighted_cossim'] / stats['total_elements']
 
-                    print(f"{blk:>5}\t{bias:>14.2f}\t{zd * 100:>10.4f}%\t{cossim:>6.4f}")
+                    print(f"{blk:>5}  {bias:>14.2f}  {zd * 100:>10.4f}%  {cossim:>8.4f}")
 
         print()
         return True
