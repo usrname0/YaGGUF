@@ -672,7 +672,6 @@ class GGUFConverter:
     def show_imatrix_statistics(
         self,
         imatrix_path: Union[str, Path],
-        model_path: Union[str, Path, None] = None,
         verbose: bool = False
     ) -> str:
         """
@@ -680,7 +679,6 @@ class GGUFConverter:
 
         Args:
             imatrix_path: Path to imatrix file (.gguf format)
-            model_path: (DEPRECATED) No longer required - kept for backward compatibility
             verbose: If True, print output to terminal in real-time
 
         Returns:

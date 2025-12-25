@@ -7,6 +7,7 @@ from pathlib import Path
 import json
 import subprocess
 import platform
+from typing import Dict, Optional, Tuple, Any, Callable, List
 
 # Optional tkinter import for native file dialogs
 try:
@@ -27,7 +28,7 @@ __all__ = ['TKINTER_AVAILABLE', 'browse_folder', 'open_folder', 'strip_quotes',
 CONFIG_FILE = Path.home() / ".gguf_converter_config.json"
 
 
-def get_default_config():
+def get_default_config() -> Dict[str, Any]:
     """Get default configuration"""
     return {
         # Sidebar settings
@@ -90,7 +91,7 @@ def get_default_config():
     }
 
 
-def load_config():
+def load_config() -> Dict[str, Any]:
     """Load configuration from file"""
     if CONFIG_FILE.exists():
         try:
@@ -106,7 +107,7 @@ def load_config():
     return get_default_config()
 
 
-def save_config(config):
+def save_config(config: Dict[str, Any]) -> None:
     """Save configuration to file"""
     try:
         with open(CONFIG_FILE, 'w') as f:
@@ -115,7 +116,7 @@ def save_config(config):
         print(f"Warning: Could not save config: {e}", flush=True)
 
 
-def make_config_saver(config, config_key, session_key):
+def make_config_saver(config: Dict[str, Any], config_key: str, session_key: str) -> Callable[[], None]:
     """
     Factory function to create config save callbacks for Streamlit widgets
 
@@ -132,20 +133,20 @@ def make_config_saver(config, config_key, session_key):
                     key="my_feature_checkbox",
                     on_change=make_config_saver(config, "my_feature", "my_feature_checkbox"))
     """
-    def save():
+    def save() -> None:
         config[config_key] = st.session_state[session_key]
         save_config(config)
     return save
 
 
-def reset_config():
+def reset_config() -> Dict[str, Any]:
     """Reset configuration to defaults"""
     config = get_default_config()
     save_config(config)
     return config
 
 
-def strip_quotes(path_str):
+def strip_quotes(path_str: str) -> str:
     """
     Strip surrounding quotes from a path string (Windows "Copy as path" adds them)
 
@@ -160,7 +161,7 @@ def strip_quotes(path_str):
     return path_str.strip().strip('"').strip("'")
 
 
-def open_folder(folder_path):
+def open_folder(folder_path: str) -> None:
     """
     Open folder in file explorer (platform-specific)
 
@@ -187,7 +188,7 @@ def open_folder(folder_path):
         subprocess.run(["xdg-open", str(path.resolve())])
 
 
-def get_current_version():
+def get_current_version() -> str:
     """
     Get current version from __init__.py
 
@@ -201,7 +202,7 @@ def get_current_version():
         return "unknown"
 
 
-def check_git_updates_available():
+def check_git_updates_available() -> Dict[str, Any]:
     """
     Check if git updates are available from remote based on version tags
 
@@ -269,7 +270,7 @@ def check_git_updates_available():
         }
 
 
-def path_input_columns():
+def path_input_columns() -> Tuple[Tuple[Any, ...], bool]:
     """
     Create column layout for path inputs with conditional browse button.
 
@@ -296,7 +297,7 @@ def path_input_columns():
         return st.columns([5, 1]), False
 
 
-def browse_folder(initial_dir=None):
+def browse_folder(initial_dir: Optional[str] = None) -> Optional[str]:
     """
     Open a native folder picker dialog
 
@@ -337,7 +338,7 @@ def browse_folder(initial_dir=None):
         return None
 
 
-def get_binary_version(converter):
+def get_binary_version(converter: Any) -> Dict[str, Any]:
     """
     Get version of llama.cpp binaries
 
@@ -405,7 +406,7 @@ def get_binary_version(converter):
         }
 
 
-def get_binary_version_from_path(binary_path):
+def get_binary_version_from_path(binary_path: Path) -> Optional[str]:
     """
     Get version from a specific binary path by running it with --version
 
@@ -440,7 +441,7 @@ def get_binary_version_from_path(binary_path):
         return None
 
 
-def display_binary_version_status(converter):
+def display_binary_version_status(converter: Any) -> None:
     """
     Display binary version information with status message
 
@@ -470,7 +471,7 @@ def display_binary_version_status(converter):
         st.info(f"Expected binary version: **{expected_version}**")
 
 
-def get_conversion_scripts_info(converter):
+def get_conversion_scripts_info(converter: Any) -> Dict[str, Any]:
     """
     Get version info for conversion scripts
 
@@ -523,7 +524,7 @@ def get_conversion_scripts_info(converter):
         }
 
 
-def display_conversion_scripts_version_status(converter):
+def display_conversion_scripts_version_status(converter: Any) -> None:
     """
     Display conversion scripts version information with status message
 
@@ -575,7 +576,7 @@ def display_conversion_scripts_version_status(converter):
         st.info(f"Expected conversion scripts version: **{expected_version}**")
 
 
-def run_and_stream_command(command):
+def run_and_stream_command(command: List[str]) -> None:
     """
     Runs a command and streams its output to a Streamlit container.
 

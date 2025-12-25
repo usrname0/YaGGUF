@@ -4,6 +4,7 @@ Convert & Quantize tab for GGUF Converter GUI
 
 import streamlit as st
 from pathlib import Path
+from typing import Dict, Any, Optional
 
 from ..gui_utils import (
     strip_quotes, open_folder, browse_folder,
@@ -11,7 +12,14 @@ from ..gui_utils import (
 )
 
 
-def render_convert_tab(converter, config, verbose, nthreads, ignore_incompatibilities, ignore_imatrix_warnings):
+def render_convert_tab(
+    converter: Any,
+    config: Dict[str, Any],
+    verbose: bool,
+    nthreads: Optional[int],
+    ignore_incompatibilities: bool,
+    ignore_imatrix_warnings: bool
+) -> None:
     """Render the Convert & Quantize tab"""
     st.header("Convert and Quantize Model")
 

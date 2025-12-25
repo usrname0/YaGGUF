@@ -8,6 +8,7 @@ import sys
 import subprocess
 import shutil
 from pathlib import Path
+from typing import Any
 
 # Add project root to path
 project_root = Path(__file__).parent.parent
@@ -16,7 +17,7 @@ sys.path.insert(0, str(project_root))
 from gguf_converter.binary_manager import BinaryManager, remove_readonly
 
 
-def ensure_llama_cpp_repo(binary_manager):
+def ensure_llama_cpp_repo(binary_manager: Any) -> bool:
     """
     Ensure llama.cpp repository exists (clone if missing)
     Does NOT auto-update - use Update tab in GUI for updates
@@ -64,7 +65,7 @@ def ensure_llama_cpp_repo(binary_manager):
     return True
 
 
-def main():
+def main() -> int:
     """Check binary version and update if needed"""
     print("Checking llama.cpp binaries and conversion scripts...")
     print()

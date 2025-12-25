@@ -9,7 +9,7 @@ from pathlib import Path
 from .binary_manager import BinaryManager
 
 
-def main():
+def main() -> int:
     """
     Download llama.cpp binaries
     """

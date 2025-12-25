@@ -4,6 +4,7 @@ Imatrix Statistics tab for GGUF Converter GUI
 
 import streamlit as st
 from pathlib import Path
+from typing import Dict, Any
 
 from ..gui_utils import (
     strip_quotes, open_folder, browse_folder,
@@ -11,7 +12,7 @@ from ..gui_utils import (
 )
 
 
-def render_imatrix_stats_tab(converter, config):
+def render_imatrix_stats_tab(converter: Any, config: Dict[str, Any]) -> None:
     """Render the Imatrix Statistics tab"""
     st.header("Imatrix Statistics")
 

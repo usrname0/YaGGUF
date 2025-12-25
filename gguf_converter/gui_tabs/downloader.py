@@ -5,6 +5,7 @@ HuggingFace Downloader tab for GGUF Converter GUI
 import streamlit as st
 from pathlib import Path
 import webbrowser
+from typing import Dict, Any
 
 from ..gui_utils import (
     strip_quotes, open_folder, browse_folder,
@@ -12,7 +13,7 @@ from ..gui_utils import (
 )
 
 
-def render_downloader_tab(converter, config):
+def render_downloader_tab(converter: Any, config: Dict[str, Any]) -> None:
     """Render the HuggingFace Downloader tab"""
     st.header("HuggingFace Downloader")
     st.markdown("Download models from HuggingFace")

@@ -10,6 +10,7 @@ import io
 import os
 import sys
 from contextlib import redirect_stdout
+from typing import Dict, Any
 
 from ..gui_utils import (
     get_current_version, check_git_updates_available,
@@ -23,21 +24,21 @@ class TeeOutput(io.TextIOBase):
     """
     Write to both StringIO (for GUI capture) and stdout (for terminal output)
     """
-    def __init__(self, stringio_obj):
+    def __init__(self, stringio_obj: io.StringIO) -> None:
         self.stringio = stringio_obj
         self.terminal = sys.stdout
 
-    def write(self, message):
+    def write(self, message: str) -> int:
         self.stringio.write(message)
         self.terminal.write(message)
         return len(message)
 
-    def flush(self):
+    def flush(self) -> None:
         self.stringio.flush()
         self.terminal.flush()
 
 
-def render_update_tab(converter, config):
+def render_update_tab(converter: Any, config: Dict[str, Any]) -> None:
     """Render the Update tab"""
     st.header("Update")
 

@@ -4,6 +4,7 @@ llama.cpp tab for GGUF Converter GUI
 
 import streamlit as st
 from pathlib import Path
+from typing import Dict, Any
 
 from ..gui_utils import (
     strip_quotes, open_folder, browse_folder,
@@ -13,7 +14,7 @@ from ..gui_utils import (
 )
 
 
-def render_llama_cpp_tab(converter, config):
+def render_llama_cpp_tab(converter: Any, config: Dict[str, Any]) -> None:
     """Render the llama.cpp tab"""
     st.header("llama.cpp Binaries")
 

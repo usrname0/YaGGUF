@@ -40,7 +40,7 @@ except ImportError:
     )
 
 
-def main():
+def main() -> None:
     """Main Streamlit app"""
     st.set_page_config(
         page_title="GGUF Converter",
