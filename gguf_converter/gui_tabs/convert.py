@@ -20,14 +20,14 @@ def render_convert_tab(converter, config, verbose, nthreads, ignore_incompatibil
     with col1:
         st.subheader("Input")
 
-        # Model path with Browse and Check Folder buttons
+        # Model path with Select Folder and Open Folder buttons
         cols, has_browse = path_input_columns()
 
         with cols[0]:
             # Only set value if key not in session state (prevents warning)
             model_path_kwargs = {
                 "label": "Model path",
-                "placeholder": "E:/Models/my-model",
+                "placeholder": "~/Models/my-model",
                 "help": "Local model directory containing config.json and model files.",
                 "key": "model_path_input"
             }
@@ -39,10 +39,10 @@ def render_convert_tab(converter, config, verbose, nthreads, ignore_incompatibil
             with cols[1]:
                 st.markdown("<br>", unsafe_allow_html=True)  # Align with input
                 if st.button(
-                    "Browse",
+                    "Select Folder",
                     key="browse_model_folder_btn",
                     use_container_width=True,
-                    help="Browse for model directory"
+                    help="Select model directory"
                 ):
                     model_path_clean = strip_quotes(model_path)
                     initial_dir = model_path_clean if model_path_clean and Path(model_path_clean).exists() else None
@@ -59,7 +59,7 @@ def render_convert_tab(converter, config, verbose, nthreads, ignore_incompatibil
             model_path_clean = strip_quotes(model_path)
             model_path_exists = bool(model_path_clean and Path(model_path_clean).exists())
             if st.button(
-                "Check Folder",
+                "Open Folder",
                 key="check_model_folder_btn",
                 use_container_width=True,
                 disabled=not model_path_exists,
@@ -72,7 +72,7 @@ def render_convert_tab(converter, config, verbose, nthreads, ignore_incompatibil
                     except Exception as e:
                         st.toast(f"Could not open folder: {e}")
 
-        # Output directory with Browse and Check Folder buttons
+        # Output directory with Select Folder and Open Folder buttons
         cols, has_browse = path_input_columns()
 
         with cols[0]:
@@ -87,10 +87,10 @@ def render_convert_tab(converter, config, verbose, nthreads, ignore_incompatibil
             with cols[1]:
                 st.markdown("<br>", unsafe_allow_html=True)  # Align with input
                 if st.button(
-                    "Browse",
+                    "Select Folder",
                     key="browse_output_folder_btn",
                     use_container_width=True,
-                    help="Browse for output directory"
+                    help="Select output directory"
                 ):
                     output_dir_clean = strip_quotes(output_dir)
                     initial_dir = output_dir_clean if output_dir_clean and Path(output_dir_clean).exists() else None
@@ -105,7 +105,7 @@ def render_convert_tab(converter, config, verbose, nthreads, ignore_incompatibil
             output_dir_clean = strip_quotes(output_dir)
             output_dir_exists = bool(output_dir_clean and Path(output_dir_clean).exists())
             if st.button(
-                "Check Folder",
+                "Open Folder",
                 key="check_output_folder_btn",
                 use_container_width=True,
                 disabled=not output_dir_exists,

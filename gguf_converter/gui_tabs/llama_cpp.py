@@ -54,7 +54,7 @@ def render_llama_cpp_tab(converter, config):
 
         st.markdown("**Binaries Folder Path** (leave blank for system PATH):")
 
-        # Single folder path with Browse and Check Folder buttons
+        # Single folder path with Select Folder and Open Folder buttons
         if TKINTER_AVAILABLE:
             col_folder, col_browse, col_check = st.columns([4, 1, 1])
         else:
@@ -88,10 +88,10 @@ def render_llama_cpp_tab(converter, config):
         if TKINTER_AVAILABLE:
             with col_browse:  # type: ignore[union-attr]
                 if st.button(
-                    "Browse",
+                    "Select Folder",
                     key="browse_binaries_folder_btn",
                     use_container_width=True,
-                    help="Browse for binaries folder",
+                    help="Select binaries folder",
                     disabled=not use_custom_binaries
                 ):
                     binaries_folder_clean = strip_quotes(binaries_folder)
@@ -112,7 +112,7 @@ def render_llama_cpp_tab(converter, config):
             binaries_folder_clean = strip_quotes(binaries_folder)
             binaries_folder_exists = bool(binaries_folder_clean and Path(binaries_folder_clean).exists())
             if st.button(
-                "Check Folder",
+                "Open Folder",
                 key="check_binaries_folder_btn",
                 use_container_width=True,
                 disabled=not use_custom_binaries or not binaries_folder_exists,

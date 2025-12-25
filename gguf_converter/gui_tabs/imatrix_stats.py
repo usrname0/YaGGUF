@@ -21,7 +21,7 @@ def render_imatrix_stats_tab(converter, config):
 
     st.subheader("Settings")
 
-    # Output directory to analyze with Browse and Check Folder buttons
+    # Output directory to analyze with Select Folder and Open Folder buttons
     if TKINTER_AVAILABLE:
         col_stats_dir, col_stats_dir_browse, col_stats_dir_check = st.columns([4, 1, 1])
     else:
@@ -40,10 +40,10 @@ def render_imatrix_stats_tab(converter, config):
         with col_stats_dir_browse:  # type: ignore[union-attr]
             st.markdown("<br>", unsafe_allow_html=True)  # Spacer to align with input + help icon
             if st.button(
-                "Browse",
+                "Select Folder",
                 key="browse_imatrix_output_dir_btn",
                 use_container_width=True,
-                help="Browse for output directory"
+                help="Select output directory"
             ):
                 stats_dir_clean = strip_quotes(stats_output_dir)
                 initial_dir = stats_dir_clean if stats_dir_clean and Path(stats_dir_clean).exists() else None
@@ -58,7 +58,7 @@ def render_imatrix_stats_tab(converter, config):
         stats_dir_clean = strip_quotes(stats_output_dir)
         stats_dir_exists = bool(stats_dir_clean and Path(stats_dir_clean).exists())
         if st.button(
-            "Check Folder",
+            "Open Folder",
             key="check_imatrix_output_dir_btn",
             use_container_width=True,
             disabled=not stats_dir_exists,

@@ -342,8 +342,8 @@ def show_statistics(imatrix_path: str) -> bool:
 
         # Print header
         print(f"\nComputing statistics for {imatrix_path} ({len(tstats)} tensors)")
-        print(f"\n{'Layer':>5}  {'Tensor':<20}  {'Σ(Act²)':>10}  {'Min':>8}  {'Max':>11}  {'μ':>6}  {'σ':>6}  {'% Active':>9}  {'N':>6}  {'Entropy':>10}  {'E (norm)':>7}  {'ZD':>11}  {'CosSim':>8}")
-        print("=" * 170)
+        print(f"\n{'Layer':>5}  {'Tensor':<20}  {'Σ(Act²)':>14}  {'Min':>10}  {'Max':>14}  {'μ':>10}  {'σ':>10}  {'% Active':>9}  {'N':>10}  {'Entropy':>12}  {'E (norm)':>7}  {'ZD':>11}  {'CosSim':>8}")
+        print("=" * 190)
 
         # Print tensor statistics
         for ts in tstats:
@@ -360,7 +360,7 @@ def show_statistics(imatrix_path: str) -> bool:
             if ts.elements > 1:
                 norm_entropy = 100.0 * (ts.entropy / math.log2(ts.elements))
 
-            print(f"{layer:>5}  {name:<20}  {ts.total_sqract:>10.2f}  {ts.min_sqract:>8.4f}  {ts.max_sqract:>11.4f}  {ts.mean_sqract:>6.2f}  {ts.stddev:>6.2f}  {ts.active * 100:>8.2f}%  {ts.elements:>6}  {ts.entropy:>10.4f}  {norm_entropy:>6.2f}%  {ts.zd * 100:>10.2f}%  {ts.cossim:>8.4f}")
+            print(f"{layer:>5}  {name:<20}  {ts.total_sqract:>14.2f}  {ts.min_sqract:>10.4f}  {ts.max_sqract:>14.4f}  {ts.mean_sqract:>10.2f}  {ts.stddev:>10.2f}  {ts.active * 100:>8.2f}%  {ts.elements:>10}  {ts.entropy:>12.4f}  {norm_entropy:>6.2f}%  {ts.zd * 100:>10.2f}%  {ts.cossim:>8.4f}")
 
             # Accumulate weighted stats
             weighted_bias = ts.elements * ts.total_sqract
@@ -385,7 +385,7 @@ def show_statistics(imatrix_path: str) -> bool:
         if layers:
             print(f"\nComputing weighted average statistics per layer ({len(layers)} layers)")
             print(f"\n{'Layer':>5}  {'μΣ(Act²)':>14}  {'μZD':>11}  {'μCosSim':>8}")
-            print("=" * 48)
+            print("=" * 50)
 
             for blk in sorted(layers):
                 stats = weighted_stats[blk]

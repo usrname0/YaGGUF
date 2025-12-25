@@ -45,7 +45,7 @@ def render_downloader_tab(converter, config):
                 webbrowser.open(url)
                 st.toast(f"Opened {url}")
 
-    # Download directory with Browse and Check Folder buttons
+    # Download directory with Select Folder and Open Folder buttons
     if TKINTER_AVAILABLE:
         col_download, col_download_browse, col_download_check = st.columns([4, 1, 1])
     else:
@@ -77,10 +77,10 @@ def render_downloader_tab(converter, config):
         with col_download_browse:  # type: ignore[union-attr]
             st.markdown("<br>", unsafe_allow_html=True)  # Spacer to align with input
             if st.button(
-                "Browse",
+                "Select Folder",
                 key="browse_download_folder_btn",
                 use_container_width=True,
-                help="Browse for download directory"
+                help="Select download directory"
             ):
                 download_dir_check = strip_quotes(download_dir)
                 initial_dir = download_dir_check if download_dir_check and Path(download_dir_check).exists() else None
@@ -95,7 +95,7 @@ def render_downloader_tab(converter, config):
         download_dir_check = strip_quotes(download_dir)
         download_dir_exists = bool(download_dir_check and Path(download_dir_check).exists())
         if st.button(
-            "Check Folder",
+            "Open Folder",
             key="check_download_folder_btn",
             use_container_width=True,
             disabled=not download_dir_exists,

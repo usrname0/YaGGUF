@@ -35,7 +35,7 @@ def render_imatrix_settings_tab(converter, config):
         st.subheader("Calibration Data")
         st.markdown("Select calibration files for importance matrix generation")
 
-        # Directory input field with Browse and Check Folder buttons
+        # Directory input field with Select Folder and Open Folder buttons
         if TKINTER_AVAILABLE:
             col_dir, col_dir_browse, col_dir_check = st.columns([4, 1, 1])
         else:
@@ -45,9 +45,9 @@ def render_imatrix_settings_tab(converter, config):
         with col_dir:
             calibration_dir_input = st.text_input(
                 "Calibration files directory",
-                value=str(calibration_data_dir.resolve()),  # Show absolute path
+                value=config.get("imatrix_calibration_dir", ""),
                 placeholder=str(default_calibration_dir.resolve()),
-                help="Full path to directory containing calibration .txt files",
+                help="Directory containing calibration .txt or .raw files. Leave blank for default.",
                 key=f"imatrix_cal_dir_input_{st.session_state.reset_count}"
             )
 
@@ -55,23 +55,26 @@ def render_imatrix_settings_tab(converter, config):
             with col_dir_browse:  # type: ignore[union-attr]
                 st.markdown("<br>", unsafe_allow_html=True)  # Align with input
                 if st.button(
-                    "Browse",
+                    "Select Folder",
                     key="browse_cal_dir_btn",
                     use_container_width=True,
-                    help="Browse for calibration directory"
+                    help="Select calibration directory"
                 ):
-                    initial_dir = str(calibration_data_dir) if calibration_data_dir.exists() else None
+                    current_path = calibration_dir_input.strip()
+                    initial_dir = current_path if current_path and Path(current_path).exists() else str(default_calibration_dir)
                     selected_folder = browse_folder(initial_dir)
                     if selected_folder:
                         config["imatrix_calibration_dir"] = selected_folder
                         save_config(config)
+                        # Increment reset_count to force widget recreation
+                        st.session_state.reset_count += 1
                         st.rerun()
 
         with col_dir_check:
             st.markdown("<br>", unsafe_allow_html=True)  # Align with input
             cal_dir_exists = calibration_data_dir.exists() and calibration_data_dir.is_dir()
             if st.button(
-                "Check Folder",
+                "Open Folder",
                 key="check_cal_dir_btn",
                 use_container_width=True,
                 disabled=not cal_dir_exists,
@@ -85,8 +88,16 @@ def render_imatrix_settings_tab(converter, config):
                         st.toast(f"Could not open folder: {e}")
 
         # Update directory path from input (strip quotes)
-        calibration_dir_input_clean = strip_quotes(calibration_dir_input)
-        if calibration_dir_input_clean != str(calibration_data_dir.resolve()):
+        calibration_dir_input_clean = strip_quotes(calibration_dir_input).strip()
+
+        # If input is empty, clear config and use default
+        if not calibration_dir_input_clean:
+            if config.get("imatrix_calibration_dir", "") != "":
+                config["imatrix_calibration_dir"] = ""
+                save_config(config)
+            calibration_data_dir = default_calibration_dir
+        # If input changed, update config
+        elif calibration_dir_input_clean != str(calibration_data_dir.resolve()):
             config["imatrix_calibration_dir"] = calibration_dir_input_clean
             save_config(config)
             calibration_data_dir = Path(calibration_dir_input_clean)
@@ -167,9 +178,6 @@ def render_imatrix_settings_tab(converter, config):
                 with open(calibration_file_path, 'r', encoding='utf-8') as f:
                     total_lines = sum(1 for _ in f)
 
-                # Basic file info - single line
-                st.markdown(f"File Information: {calibration_selection} ({file_size_mb:.2f} MB)")
-
                 # Side-by-side comparison of full file vs processed data
                 col_empty, col_full, col_processed = st.columns(3)
 
@@ -187,6 +195,11 @@ def render_imatrix_settings_tab(converter, config):
                     total_tokens_str = f"{total_tokens_est / 1_000:.1f}K"
                 else:
                     total_tokens_str = f"{int(total_tokens_est)}"
+
+                with col_empty:
+                    st.markdown(f"""**File Information:**
+- {calibration_selection}
+- {file_size_mb:.2f} MB""")
 
                 with col_full:
                     st.markdown(f"""**Full File:**
