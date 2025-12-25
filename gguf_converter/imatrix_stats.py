@@ -342,7 +342,7 @@ def show_statistics(imatrix_path: str) -> bool:
 
         # Print header
         print(f"\nComputing statistics for {imatrix_path} ({len(tstats)} tensors)")
-        print(f"\n Layer\t       Tensor\t          Σ(Act²)\t  Min\t            Max\t           μ\t   σ\t % Active\tN\t   Entropy\tE (norm)\tZD\t  CosSim")
+        print(f"\n Layer\t{'Tensor':<20}\t{'Σ(Act²)':>10}\t{'Min':>8}\t{'Max':>11}\t{'μ':>6}\t{'σ':>6}\t{'% Active':>9}\t{'N':>6}\t{'Entropy':>10}\t{'E (norm)':>7}\t{'ZD':>11}\t{'CosSim':>8}")
         print("=" * 170)
 
         # Print tensor statistics
@@ -384,7 +384,7 @@ def show_statistics(imatrix_path: str) -> bool:
         layers = [k for k in weighted_stats.keys() if k >= 0]
         if layers:
             print(f"\nComputing weighted average statistics per layer ({len(layers)} layers)")
-            print(f"\n  Layer\t     μΣ(Act²)\t      μZD\tμCosSim")
+            print(f"\n{'Layer':>5}\t{'μΣ(Act²)':>14}\t{'μZD':>11}\t{'μCosSim':>6}")
             print("=" * 48)
 
             for blk in sorted(layers):

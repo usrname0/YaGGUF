@@ -17,21 +17,23 @@ def render_imatrix_settings_tab(converter, config):
     st.header("Importance Matrix Settings")
     st.markdown("Configure how importance matrices are generated for low-bit quantization")
 
-    col1, col2 = st.columns(2)
+    # Get the default calibration_data directory (one level up from gguf_converter module)
+    default_calibration_dir = Path(__file__).parent.parent.parent / "calibration_data"
 
-    with col1:
+    # Get the configured directory or use default
+    saved_cal_dir = config.get("imatrix_calibration_dir", "")
+    if saved_cal_dir:
+        calibration_data_dir = Path(saved_cal_dir)
+    else:
+        calibration_data_dir = default_calibration_dir
+
+    # Main 2-column layout for entire tab
+    col_left, col_right = st.columns(2)
+
+    with col_left:
+        # --- Calibration Data Section ---
         st.subheader("Calibration Data")
         st.markdown("Select calibration files for importance matrix generation")
-
-        # Get the default calibration_data directory (one level up from gguf_converter module)
-        default_calibration_dir = Path(__file__).parent.parent.parent / "calibration_data"
-
-        # Get the configured directory or use default
-        saved_cal_dir = config.get("imatrix_calibration_dir", "")
-        if saved_cal_dir:
-            calibration_data_dir = Path(saved_cal_dir)
-        else:
-            calibration_data_dir = default_calibration_dir
 
         # Directory input field with Browse and Check Folder buttons
         if TKINTER_AVAILABLE:
@@ -46,8 +48,7 @@ def render_imatrix_settings_tab(converter, config):
                 value=str(calibration_data_dir.resolve()),  # Show absolute path
                 placeholder=str(default_calibration_dir.resolve()),
                 help="Full path to directory containing calibration .txt files",
-                key=f"imatrix_cal_dir_input_{st.session_state.reset_count}",
-                on_change=lambda: None  # Trigger to update when user changes the path
+                key=f"imatrix_cal_dir_input_{st.session_state.reset_count}"
             )
 
         if TKINTER_AVAILABLE:
@@ -141,38 +142,38 @@ def render_imatrix_settings_tab(converter, config):
                 st.toast("Updated calibration file list")
                 st.rerun()
 
-        # File information section
-        st.markdown("---")
+        # --- File Information Section ---
 
+        # Note: calibration_selection already set from selectbox above (line 126)
         # Get the calibration file path
-        file_info_cal_dir = config.get("imatrix_calibration_dir", "")
-        if file_info_cal_dir:
-            file_info_path = Path(file_info_cal_dir) / calibration_selection
+        cal_dir = config.get("imatrix_calibration_dir", "")
+        if cal_dir:
+            calibration_file_path = Path(cal_dir) / calibration_selection
         else:
-            default_cal_dir = Path(__file__).parent.parent.parent / "calibration_data"
-            file_info_path = default_cal_dir / calibration_selection
+            calibration_file_path = default_calibration_dir / calibration_selection
 
-        if file_info_path.exists() and calibration_selection != "(no files found)":
+        # Get chunk-related settings (used for stats calculations)
+        from_chunk = int(config.get("imatrix_from_chunk", 0))
+        chunks_to_process = int(config.get("imatrix_chunks", 100))
+        ctx_size = int(config.get("imatrix_ctx_size", 512))
+        estimated_lines_per_chunk = max(1, ctx_size // 5)
+
+        if calibration_file_path.exists() and calibration_selection != "(no files found)":
             try:
-                file_size = file_info_path.stat().st_size
+                file_size = calibration_file_path.stat().st_size
                 file_size_mb = file_size / (1024 * 1024)
 
                 # Count lines without loading entire file
-                with open(file_info_path, 'r', encoding='utf-8') as f:
+                with open(calibration_file_path, 'r', encoding='utf-8') as f:
                     total_lines = sum(1 for _ in f)
 
                 # Basic file info - single line
-                st.markdown(f"**File:** {calibration_selection} ({file_size_mb:.2f} MB)")
-                st.markdown("")  # Blank line for spacing
+                st.markdown(f"File Information: {calibration_selection} ({file_size_mb:.2f} MB)")
 
                 # Side-by-side comparison of full file vs processed data
-                col_full, col_processed = st.columns(2)
+                col_empty, col_full, col_processed = st.columns(3)
 
-                # Calculate chunk information (used by both columns)
-                from_chunk = int(config.get("imatrix_from_chunk", 0))
-                chunks_to_process = int(config.get("imatrix_chunks", 100))
-                ctx_size = int(config.get("imatrix_ctx_size", 512))
-                estimated_lines_per_chunk = max(1, ctx_size // 5)
+                # Calculate total chunks based on file lines
                 total_chunks = total_lines // estimated_lines_per_chunk
 
                 # Estimate token counts (file_size in bytes ≈ chars for text files)
@@ -236,123 +237,131 @@ def render_imatrix_settings_tab(converter, config):
 - Est. tokens: ~{processed_tokens_str}""")
 
             except Exception as e:
+                st.subheader("File Information")
                 st.info(f"Could not read file info: {e}")
         else:
+            st.subheader("File Information")
             st.info("Select a calibration file to view information")
 
-    with col2:
+        # --- Processing Settings Section ---
+        st.markdown("---")
         st.subheader("Processing Settings")
         st.markdown("Configure importance matrix generation parameters")
 
-        # Auto-save callback for chunks
-        def save_chunks():
-            config["imatrix_chunks"] = int(st.session_state[f"imatrix_chunks_input_{st.session_state.reset_count}"])
-            save_config(config)
+        # Use 3 sub-columns for processing settings
+        col_proc1, col_proc2, col_proc3 = st.columns(3)
 
-        imatrix_chunks_input = st.number_input(
-            "Chunks to process",
-            min_value=0,
-            max_value=10000,
-            value=int(config.get("imatrix_chunks", 100)),
-            step=10,
-            help="Number of chunks to process (0 = all). 100-200 recommended for good coverage.",
-            key=f"imatrix_chunks_input_{st.session_state.reset_count}",
-            on_change=save_chunks
-        )
-
-        # Auto-save callback for ctx size
-        def save_ctx():
-            config["imatrix_ctx_size"] = int(st.session_state[f"imatrix_ctx_input_{st.session_state.reset_count}"])
-            save_config(config)
-
-        imatrix_ctx_input = st.number_input(
-            "Context size",
-            min_value=128,
-            max_value=8192,
-            value=int(config.get("imatrix_ctx_size", 512)),
-            step=128,
-            help="Context window size. Larger = more context but more memory.",
-            key=f"imatrix_ctx_input_{st.session_state.reset_count}",
-            on_change=save_ctx
-        )
-
-        # Auto-save callback for from chunk
-        def save_from_chunk():
-            config["imatrix_from_chunk"] = int(st.session_state[f"imatrix_from_chunk_input_{st.session_state.reset_count}"])
-            save_config(config)
-
-        imatrix_from_chunk_input = st.number_input(
-            "Skip first N chunks",
-            min_value=0,
-            max_value=10000,
-            value=int(config.get("imatrix_from_chunk", 0)),
-            step=1,
-            help="Skip the first N chunks (useful for resuming interrupted runs)",
-            key=f"imatrix_from_chunk_input_{st.session_state.reset_count}",
-            on_change=save_from_chunk
-        )
-
-        # Auto-save callback for output frequency
-        def save_output_freq():
-            config["imatrix_output_frequency"] = int(st.session_state[f"imatrix_output_freq_input_{st.session_state.reset_count}"])
-            save_config(config)
-
-        imatrix_output_freq_input = st.number_input(
-            "Output frequency (chunks)",
-            min_value=1,
-            max_value=1000,
-            value=int(config.get("imatrix_output_frequency", 10)),
-            step=1,
-            help="Save interval in chunks (default: 10)",
-            key=f"imatrix_output_freq_input_{st.session_state.reset_count}",
-            on_change=save_output_freq
-        )
-
-        # Auto-save callback for no ppl
-        imatrix_no_ppl_input = st.checkbox(
-            "Disable perplexity calculation",
-            value=config.get("imatrix_no_ppl", False),
-            help="Skip PPL calculation to speed up processing",
-            key=f"imatrix_no_ppl_input_{st.session_state.reset_count}",
-            on_change=make_config_saver(config, "imatrix_no_ppl", f"imatrix_no_ppl_input_{st.session_state.reset_count}")
-        )
-
-        imatrix_parse_special_input = st.checkbox(
-            "Parse special tokens",
-            value=config.get("imatrix_parse_special", False),
-            help="Parse special tokens like <|im_start|>, <|im_end|>, etc. Recommended for chat models (Qwen, Llama 3, ChatML-based models). Warning: Can significantly slow down imatrix generation.",
-            key=f"imatrix_parse_special_input_{st.session_state.reset_count}",
-            on_change=make_config_saver(config, "imatrix_parse_special", f"imatrix_parse_special_input_{st.session_state.reset_count}")
-        )
-
-        imatrix_collect_output_input = st.checkbox(
-            "Collect output.weight tensor",
-            value=config.get("imatrix_collect_output_weight", False),
-            help="Collect importance matrix data for output.weight tensor. Typically better to leave disabled (default), as the importance matrix is generally not beneficial for this tensor.",
-            key=f"imatrix_collect_output_input_{st.session_state.reset_count}",
-            on_change=make_config_saver(config, "imatrix_collect_output_weight", f"imatrix_collect_output_input_{st.session_state.reset_count}")
-        )
-
-        # GPU offloading (only show if custom binaries enabled)
-        if config.get("use_custom_binaries", False):
-
-            # Auto-save callback for ngl
-            def save_ngl():
-                config["imatrix_ngl"] = int(st.session_state[f"imatrix_ngl_{st.session_state.reset_count}"])
+        with col_proc1:
+            # Auto-save callback for chunks
+            def save_chunks():
+                config["imatrix_chunks"] = int(st.session_state[f"imatrix_chunks_input_{st.session_state.reset_count}"])
                 save_config(config)
 
-            imatrix_ngl_input = st.number_input(
-                "GPU layers (-ngl)",
+            imatrix_chunks_input = st.number_input(
+                "Chunks to process",
                 min_value=0,
-                max_value=999,
-                value=int(config.get("imatrix_ngl", 0)),
-                step=1,
-                help="Number of model layers to offload to GPU. 0 = CPU only, 99 = fully offload. Requires GPU-enabled llama.cpp build.",
-                key=f"imatrix_ngl_{st.session_state.reset_count}",
-                on_change=save_ngl
+                max_value=10000,
+                value=int(config.get("imatrix_chunks", 100)),
+                step=10,
+                help="Number of chunks to process (0 = all). 100-200 recommended for good coverage.",
+                key=f"imatrix_chunks_input_{st.session_state.reset_count}",
+                on_change=save_chunks
             )
 
-        # Reset button
+            # Auto-save callback for ctx size
+            def save_ctx():
+                config["imatrix_ctx_size"] = int(st.session_state[f"imatrix_ctx_input_{st.session_state.reset_count}"])
+                save_config(config)
+
+            imatrix_ctx_input = st.number_input(
+                "Context size",
+                min_value=128,
+                max_value=8192,
+                value=int(config.get("imatrix_ctx_size", 512)),
+                step=128,
+                help="Context window size. Larger = more context but more memory.",
+                key=f"imatrix_ctx_input_{st.session_state.reset_count}",
+                on_change=save_ctx
+            )
+
+            # Auto-save callback for from chunk
+            def save_from_chunk():
+                config["imatrix_from_chunk"] = int(st.session_state[f"imatrix_from_chunk_input_{st.session_state.reset_count}"])
+                save_config(config)
+
+            imatrix_from_chunk_input = st.number_input(
+                "Skip first N chunks",
+                min_value=0,
+                max_value=10000,
+                value=int(config.get("imatrix_from_chunk", 0)),
+                step=1,
+                help="Skip the first N chunks (useful for resuming interrupted runs)",
+                key=f"imatrix_from_chunk_input_{st.session_state.reset_count}",
+                on_change=save_from_chunk
+            )
+
+            # Auto-save callback for output frequency
+            def save_output_freq():
+                config["imatrix_output_frequency"] = int(st.session_state[f"imatrix_output_freq_input_{st.session_state.reset_count}"])
+                save_config(config)
+
+            imatrix_output_freq_input = st.number_input(
+                "Output frequency (chunks)",
+                min_value=1,
+                max_value=1000,
+                value=int(config.get("imatrix_output_frequency", 10)),
+                step=1,
+                help="Save interval in chunks (default: 10)",
+                key=f"imatrix_output_freq_input_{st.session_state.reset_count}",
+                on_change=save_output_freq
+            )
+
+        with col_proc2:
+            # GPU offloading (only show if custom binaries enabled)
+            if config.get("use_custom_binaries", False):
+                # Auto-save callback for ngl
+                def save_ngl():
+                    config["imatrix_ngl"] = int(st.session_state[f"imatrix_ngl_{st.session_state.reset_count}"])
+                    save_config(config)
+
+                imatrix_ngl_input = st.number_input(
+                    "GPU layers (-ngl)",
+                    min_value=0,
+                    max_value=999,
+                    value=int(config.get("imatrix_ngl", 0)),
+                    step=1,
+                    help="Number of model layers to offload to GPU. 0 = CPU only, 99 = fully offload. Requires GPU-enabled llama.cpp build.",
+                    key=f"imatrix_ngl_{st.session_state.reset_count}",
+                    on_change=save_ngl
+                )
+
+        with col_proc3:
+            # Auto-save callback for no ppl
+            imatrix_no_ppl_input = st.checkbox(
+                "Disable perplexity calculation",
+                value=config.get("imatrix_no_ppl", False),
+                help="Skip PPL calculation to speed up processing",
+                key=f"imatrix_no_ppl_input_{st.session_state.reset_count}",
+                on_change=make_config_saver(config, "imatrix_no_ppl", f"imatrix_no_ppl_input_{st.session_state.reset_count}")
+            )
+
+            imatrix_parse_special_input = st.checkbox(
+                "Parse special tokens",
+                value=config.get("imatrix_parse_special", False),
+                help="Parse special tokens like <|im_start|>, <|im_end|>, etc. Recommended for chat models (Qwen, Llama 3, ChatML-based models). Warning: Can significantly slow down imatrix generation.",
+                key=f"imatrix_parse_special_input_{st.session_state.reset_count}",
+                on_change=make_config_saver(config, "imatrix_parse_special", f"imatrix_parse_special_input_{st.session_state.reset_count}")
+            )
+
+            imatrix_collect_output_input = st.checkbox(
+                "Collect output.weight tensor",
+                value=config.get("imatrix_collect_output_weight", False),
+                help="Collect importance matrix data for output.weight tensor. Typically better to leave disabled (default), as the importance matrix is generally not beneficial for this tensor.",
+                key=f"imatrix_collect_output_input_{st.session_state.reset_count}",
+                on_change=make_config_saver(config, "imatrix_collect_output_weight", f"imatrix_collect_output_input_{st.session_state.reset_count}")
+            )
+
+        # Reset button (full width below processing settings sub-columns)
         if st.button("Reset to Defaults", use_container_width=True, key="reset_imatrix_settings_btn"):
             # Reset imatrix settings to defaults
             defaults = get_default_config()
@@ -365,6 +374,7 @@ def render_imatrix_settings_tab(converter, config):
             config["imatrix_parse_special"] = defaults["imatrix_parse_special"]
             config["imatrix_collect_output_weight"] = defaults["imatrix_collect_output_weight"]
             config["imatrix_output_frequency"] = defaults["imatrix_output_frequency"]
+            config["imatrix_ngl"] = defaults["imatrix_ngl"]
             config["max_preview_lines"] = defaults["max_preview_lines"]
             config["preview_height"] = defaults["preview_height"]
             save_config(config)
@@ -377,24 +387,11 @@ def render_imatrix_settings_tab(converter, config):
             st.success("Reset to defaults! And Saved!")
             st.session_state.imatrix_just_reset = False
 
-    # Calibration file preview section - full width below both columns
-    st.markdown("---")
-
-    # Get the calibration file path
-    preview_cal_dir = config.get("imatrix_calibration_dir", "")
-    if preview_cal_dir:
-        preview_calibration_path = Path(preview_cal_dir) / calibration_selection
-    else:
-        default_cal_dir = Path(__file__).parent.parent.parent / "calibration_data"
-        preview_calibration_path = default_cal_dir / calibration_selection
-
-    # Header row with controls - 2 equal columns matching layout above
-    col_left, col_right = st.columns(2)
-
-    with col_left:
+    with col_right:
+        # --- Calibration File Preview Section ---
         st.subheader("Calibration File Preview")
 
-        # Preview mode selection
+        # Preview mode selection (full width, horizontal)
         preview_mode = st.radio(
             "Preview mode",
             ["No preview", "Full file", "Processed data"],
@@ -405,8 +402,7 @@ def render_imatrix_settings_tab(converter, config):
             label_visibility="collapsed"
         )
 
-    with col_right:
-        # Sub-columns for max lines and preview height
+        # Preview settings controls in one row
         col_max_lines, col_height = st.columns([1, 2])
 
         with col_max_lines:
@@ -443,107 +439,132 @@ def render_imatrix_settings_tab(converter, config):
                 on_change=save_preview_height
             )
 
+        # Note: calibration_file_path, from_chunk, chunks_to_process, ctx_size,
+        # and estimated_lines_per_chunk are already defined in File Information section above
+
         # Calculate and show truncation info based on preview mode
-        if preview_calibration_path.exists() and calibration_selection != "(no files found)" and preview_mode != "No preview":
+        # Always show info pane for visual consistency
+        if not calibration_file_path.exists() or calibration_selection == "(no files found)":
+            st.info("No calibration file selected")
+        else:
             try:
-                if preview_mode == "Full file":
+                if preview_mode == "No preview":
+                    # Show placeholder info for visual consistency
+                    st.info("Preview disabled")
+                elif preview_mode == "Full file":
                     # Count total lines to check for truncation
-                    with open(preview_calibration_path, 'r', encoding='utf-8') as f:
+                    with open(calibration_file_path, 'r', encoding='utf-8') as f:
                         total_lines = sum(1 for _ in f)
 
                     if total_lines > max_preview_lines:
                         st.info(f"Showing first {max_preview_lines:,} of {total_lines:,} lines")
+                    else:
+                        st.info(f"Showing all {total_lines:,} lines")
 
                 elif preview_mode == "Processed data":
-                    # Calculate processed range
-                    from_chunk = int(config.get("imatrix_from_chunk", 0))
-                    chunks_to_process = int(config.get("imatrix_chunks", 100))
-                    ctx_size = int(config.get("imatrix_ctx_size", 512))
-                    estimated_lines_per_chunk = max(1, ctx_size // 5)
-
+                    # Calculate if preview needs truncation notice
                     if chunks_to_process > 0:
                         lines_to_read = chunks_to_process * estimated_lines_per_chunk
                         if lines_to_read > max_preview_lines:
                             st.info(f"Showing first {max_preview_lines:,} lines of range")
+                        else:
+                            st.info(f"Showing all lines in range")
+                    else:
+                        st.info(f"Showing all remaining lines (up to {max_preview_lines:,})")
             except Exception:
-                pass
+                st.info("Error reading file information")
 
-    # Render preview based on mode
-    if preview_calibration_path.exists() and calibration_selection != "(no files found)":
-        try:
-            if preview_mode == "No preview":
-                pass  # No preview to show
+        # Render preview based on mode
+        if calibration_file_path.exists() and calibration_selection != "(no files found)":
+            try:
+                if preview_mode == "No preview":
+                    # Show empty text area for visual consistency
+                    st.text_area(
+                        "Content",
+                        value="",
+                        height=preview_height,
+                        disabled=True,
+                        label_visibility="collapsed",
+                        placeholder="Preview disabled"
+                    )
 
-            elif preview_mode == "Full file":
-                # Read only first max_preview_lines lines
-                preview_lines = []
+                elif preview_mode == "Full file":
+                    # Read only first max_preview_lines lines
+                    preview_lines = []
 
-                with open(preview_calibration_path, 'r', encoding='utf-8') as f:
-                    # Read lines up to limit
-                    for i, line in enumerate(f):
-                        if i < max_preview_lines:
-                            preview_lines.append(line.rstrip('\n\r'))
-
-                preview_content = '\n'.join(preview_lines)
-
-                # Show preview with word wrap
-                st.text_area(
-                    "Content",
-                    value=preview_content,
-                    height=preview_height,
-                    disabled=True,
-                    label_visibility="collapsed"
-                )
-
-            elif preview_mode == "Processed data":
-                # Calculate what will be processed based on settings
-                from_chunk = int(config.get("imatrix_from_chunk", 0))
-                chunks_to_process = int(config.get("imatrix_chunks", 100))
-                ctx_size = int(config.get("imatrix_ctx_size", 512))
-
-                # Estimate lines per chunk
-                estimated_lines_per_chunk = max(1, ctx_size // 5)
-
-                # Calculate line range to read
-                start_line = from_chunk * estimated_lines_per_chunk
-
-                if chunks_to_process > 0:
-                    lines_to_read = chunks_to_process * estimated_lines_per_chunk
-                else:
-                    lines_to_read = None  # Read all remaining lines
-
-                # Read only the needed lines
-                preview_lines = []
-
-                with open(preview_calibration_path, 'r', encoding='utf-8') as f:
-                    # Skip to start_line
-                    for _ in itertools.islice(f, start_line):
-                        pass
-
-                    # Read the lines we need (up to max_preview_lines)
-                    if lines_to_read is None:
-                        # Read all remaining lines (up to preview limit)
+                    with open(calibration_file_path, 'r', encoding='utf-8') as f:
+                        # Read lines up to limit
                         for i, line in enumerate(f):
                             if i < max_preview_lines:
                                 preview_lines.append(line.rstrip('\n\r'))
+
+                    preview_content = '\n'.join(preview_lines)
+
+                    # Show preview with word wrap
+                    st.text_area(
+                        "Content",
+                        value=preview_content,
+                        height=preview_height,
+                        disabled=True,
+                        label_visibility="collapsed"
+                    )
+
+                elif preview_mode == "Processed data":
+                    # Calculate line range to read
+                    start_line = from_chunk * estimated_lines_per_chunk
+
+                    if chunks_to_process > 0:
+                        lines_to_read = chunks_to_process * estimated_lines_per_chunk
                     else:
-                        # Read specific number of lines (up to preview limit)
-                        for i, line in enumerate(itertools.islice(f, lines_to_read)):
-                            if i < max_preview_lines:
-                                preview_lines.append(line.rstrip('\n\r'))
+                        lines_to_read = None  # Read all remaining lines
 
-                preview_content = '\n'.join(preview_lines)
+                    # Read only the needed lines
+                    preview_lines = []
 
-                # Show processed data with word wrap
+                    with open(calibration_file_path, 'r', encoding='utf-8') as f:
+                        # Skip to start_line
+                        for _ in itertools.islice(f, start_line):
+                            pass
+
+                        # Read the lines we need (up to max_preview_lines)
+                        if lines_to_read is None:
+                            # Read all remaining lines (up to preview limit)
+                            for i, line in enumerate(f):
+                                if i < max_preview_lines:
+                                    preview_lines.append(line.rstrip('\n\r'))
+                        else:
+                            # Read specific number of lines (up to preview limit)
+                            for i, line in enumerate(itertools.islice(f, lines_to_read)):
+                                if i < max_preview_lines:
+                                    preview_lines.append(line.rstrip('\n\r'))
+
+                    preview_content = '\n'.join(preview_lines)
+
+                    # Show processed data with word wrap
+                    st.text_area(
+                        "Content",
+                        value=preview_content,
+                        height=preview_height,
+                        disabled=True,
+                        label_visibility="collapsed"
+                    )
+
+            except Exception as e:
+                st.warning(f"Could not preview calibration file: {e}")
+                # Show empty text area even on error for consistency
                 st.text_area(
                     "Content",
-                    value=preview_content,
+                    value="",
                     height=preview_height,
                     disabled=True,
                     label_visibility="collapsed"
                 )
-
-        except Exception as e:
-            st.warning(f"Could not preview calibration file: {e}")
-    else:
-        st.info("Select a calibration file to preview")
+        else:
+            # Show empty text area for visual consistency when no file selected
+            st.text_area(
+                "Content",
+                value="",
+                height=preview_height,
+                disabled=True,
+                label_visibility="collapsed"
+            )
