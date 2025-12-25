@@ -32,7 +32,7 @@ def render_imatrix_stats_tab(converter, config):
         stats_output_dir = st.text_input(
             "Output directory to analyze",
             value=config.get("output_dir", ""),
-            placeholder="E:/Models/output",
+            placeholder="~/Models/output",
             help="Directory containing imatrix and GGUF files to analyze (uses output directory from Convert & Quantize tab)"
         )
 

@@ -77,7 +77,7 @@ def render_llama_cpp_tab(converter, config):
             binaries_folder = st.text_input(
                 "llama.cpp binaries folder",
                 value=config.get("custom_binaries_folder", ""),
-                placeholder="D:/llama.cpp/build/bin or leave blank for PATH",
+                placeholder="/path/to/llama.cpp/bin or leave blank for PATH",
                 help="Path to folder containing llama-quantize and llama-imatrix. Leave blank to use system PATH.",
                 key="custom_binaries_folder_input_update",
                 label_visibility="collapsed",

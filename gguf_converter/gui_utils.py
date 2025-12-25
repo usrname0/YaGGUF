@@ -55,6 +55,8 @@ def get_default_config():
         "imatrix_ngl": 0,  # GPU layers (0 = CPU only)
         "imatrix_stats_model": "",  # Model for statistics utility
         "imatrix_stats_path": "",  # Imatrix file for statistics
+        "max_preview_lines": 1000,  # Maximum lines to show in calibration preview
+        "preview_height": 400,  # Preview area height in pixels
 
         # Convert & Quantize tab
         "model_path": "",

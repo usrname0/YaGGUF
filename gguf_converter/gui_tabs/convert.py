@@ -79,7 +79,7 @@ def render_convert_tab(converter, config, verbose, nthreads, ignore_incompatibil
             output_dir = st.text_input(
                 "Output directory",
                 value=config.get("output_dir", ""),
-                placeholder="E:/Models/converted",
+                placeholder="~/Models/converted",
                 help="Where to save the converted files"
             )
 

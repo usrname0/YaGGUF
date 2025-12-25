@@ -70,7 +70,7 @@ def render_downloader_tab(converter, config):
         download_dir = st.text_input(
             download_dir_label,
             value=config.get("download_dir", ""),
-            placeholder="E:/Models"
+            placeholder="~/Models"
         )
 
     if TKINTER_AVAILABLE:
