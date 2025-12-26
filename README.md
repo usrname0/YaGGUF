@@ -52,12 +52,13 @@ All quantization types from llama.cpp are supported. Choose based on your size/q
 
 
 **Quick Guide:**
-- Just starting? Use **Q4_K_M**
-- Want better quality? Use **Q5_K_M** or **Q6_K**
-- Need omega deluxe quality? Use **Q8_0** or **F16**
+- Bigger is better (more precision)
+- Need omega deluxe quality? Use **F16** or **Q8_0**
+- Want decent quality? Use **Q6_K** or **Q5_K_M**
+- Just medium? Use **Q4_K_M**
 - Want smallest size? Use IQ3_M or IQ2_M with importance matrix
 
-## Installation
+## Installation - Windows
 
 ```bash
 # Clone the repository
@@ -65,10 +66,20 @@ All quantization types from llama.cpp are supported. Choose based on your size/q
     cd YaGUFF
 # Run the launcher script for your platform (runs a setup script if no venv detected):
 - Windows: `run_gui.bat`
-# Linux users: if you want to select folders via the gui install tkinter first:
+```
+
+## Installation - Linux
+
+```bash
+# Clone the repository
+    git clone https://github.com/usrname0/YaGUFF.git
+    cd YaGUFF
+
+# If you want to select folders via the gui install tkinter (optional):
 - Ubuntu/Debian: `sudo apt install python3-tk`
 - Fedora/RHEL: `sudo dnf install python3-tkinter`
 - Arch: `sudo pacman -S tk`
+
 # Then run the script:
 - Linux/Mac: `./run_gui.sh`
 ```
@@ -78,7 +89,7 @@ All quantization types from llama.cpp are supported. Choose based on your size/q
 **Windows:**
 - Double-click `run_gui.bat`
 
-**Linux/Mac:**
+**Linux:**
 
 ```bash
 ./run_gui.sh
@@ -89,10 +100,7 @@ The GUI will automatically open in your browser on a free port like: `http://loc
 ## Requirements
 
 - Python 3.8 or higher
-- **OPTIONAL Linux only**: tkinter (for folder browser)
-  - Ubuntu/Debian: `sudo apt install python3-tk`
-  - Fedora/RHEL: `sudo dnf install python3-tkinter`
-  - Arch: `sudo pacman -S tk`
+- Git 
 
 ## Troubleshooting
 
