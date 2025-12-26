@@ -210,12 +210,15 @@ def check_git_updates_available() -> Dict[str, Any]:
     """
     Check if updates are available from GitHub Releases
 
+    Supports authentication via GITHUB_TOKEN environment variable for private repos
+
     Returns:
         dict: Status info with keys 'status', 'message', 'latest_version'
     """
     try:
         import json
         import urllib.request
+        import os
 
         # Get current version
         current_version = get_current_version()
@@ -224,6 +227,11 @@ def check_git_updates_available() -> Dict[str, Any]:
         url = "https://api.github.com/repos/usrname0/YaGUFF/releases/latest"
         req = urllib.request.Request(url)
         req.add_header('Accept', 'application/vnd.github.v3+json')
+
+        # Add authentication if token is available
+        github_token = os.environ.get('GITHUB_TOKEN')
+        if github_token:
+            req.add_header('Authorization', f'token {github_token}')
 
         with urllib.request.urlopen(req, timeout=10) as response:
             release_data = json.loads(response.read().decode())
