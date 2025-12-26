@@ -9,6 +9,7 @@ Automates:
 4. Optionally push to remote
 
 Usage:
+    python scripts/bump_version.py b7600 --dry-run    # Check latest version (no changes)
     python scripts/bump_version.py b7600              # Auto-increment patch version
     python scripts/bump_version.py b7600 --version 1.0.10  # Specify version
     python scripts/bump_version.py b7600 --push       # Auto-push after tagging
@@ -18,7 +19,9 @@ import sys
 import re
 import argparse
 import subprocess
+import json
 from pathlib import Path
+from urllib.request import urlopen
 
 
 def get_project_root():
@@ -44,6 +47,43 @@ def get_current_llama_version():
     if match:
         return match.group(1)
     return None
+
+
+def get_current_branch():
+    """
+    Get current git branch name
+
+    Returns:
+        Branch name or None if not in a git repo
+    """
+    try:
+        result = subprocess.run(
+            ["git", "branch", "--show-current"],
+            capture_output=True,
+            text=True,
+            check=True,
+            cwd=get_project_root()
+        )
+        return result.stdout.strip()
+    except subprocess.CalledProcessError:
+        return None
+
+
+def get_latest_llama_version():
+    """
+    Get the latest llama.cpp release tag from GitHub
+
+    Returns:
+        Latest release tag (e.g., "b7493") or None if fetch fails
+    """
+    try:
+        api_url = "https://api.github.com/repos/ggml-org/llama.cpp/releases/latest"
+        with urlopen(api_url) as response:
+            data = json.loads(response.read().decode())
+            return data['tag_name']
+    except Exception as e:
+        print(f"Warning: Could not fetch latest llama.cpp version: {e}")
+        return None
 
 
 def increment_version(version_str):
@@ -125,16 +165,22 @@ def git_commit_and_tag(yaguff_version, llama_version):
         return None
 
 
-def git_push(tag_name):
-    """Push commits and tags to remote"""
+def git_push(tag_name, branch_name):
+    """
+    Push commits and tags to remote
+
+    Args:
+        tag_name: Git tag to push
+        branch_name: Branch name to push
+    """
     try:
-        # Push commits
+        # Push commits to current branch
         subprocess.run(
-            ["git", "push", "origin", "main"],
+            ["git", "push", "origin", branch_name],
             check=True,
             cwd=get_project_root()
         )
-        print(f"✓ Pushed commits to origin/main")
+        print(f"✓ Pushed commits to origin/{branch_name}")
 
         # Push tag
         subprocess.run(
@@ -185,12 +231,31 @@ Examples:
 
     args = parser.parse_args()
 
+    # Get current branch
+    current_branch = get_current_branch()
+    if current_branch:
+        print("=" * 50)
+        print(f"Current branch: {current_branch}")
+        print("=" * 50)
+    else:
+        print("Warning: Could not detect git branch")
+
     # Get current versions
     current_yaguff = get_current_yaguff_version()
     current_llama = get_current_llama_version()
 
-    print(f"Current YaGUFF version: {current_yaguff}")
+    print(f"\nCurrent YaGUFF version: {current_yaguff}")
     print(f"Current llama.cpp version: {current_llama}")
+
+    # Fetch latest llama.cpp version from GitHub
+    print("\nFetching latest llama.cpp version from GitHub...")
+    latest_llama = get_latest_llama_version()
+    if latest_llama:
+        print(f"Latest llama.cpp version: {latest_llama}")
+        if latest_llama == current_llama:
+            print("  (already up to date)")
+        elif latest_llama == args.llama_version:
+            print("  (matches your specified version)")
     print()
 
     # Determine new YaGUFF version
@@ -206,13 +271,18 @@ Examples:
     print()
 
     if args.dry_run:
+        print("=" * 50)
         print("DRY RUN - No changes made")
-        print(f"Would update binary_manager.py: {current_llama} -> {new_llama}")
+        print("=" * 50)
+        if latest_llama and new_llama != latest_llama:
+            print(f"\nNote: Latest llama.cpp version is {latest_llama}")
+            print(f"      You specified {new_llama}")
+        print(f"\nWould update binary_manager.py: {current_llama} -> {new_llama}")
         print(f"Would update __init__.py: {current_yaguff} -> {new_yaguff}")
         print(f"Would create commit: 'Bump to v{new_yaguff} (llama.cpp {new_llama})'")
         print(f"Would create tag: v{new_yaguff}")
         if args.push:
-            print("Would push to origin/main")
+            print(f"Would push to origin/{current_branch}")
         return
 
     # Confirm with user
@@ -230,9 +300,9 @@ Examples:
 
     if tag_name and args.push:
         print()
-        response = input("Push to remote? [y/N] ")
+        response = input(f"Push to remote (origin/{current_branch})? [y/N] ")
         if response.lower() == 'y':
-            git_push(tag_name)
+            git_push(tag_name, current_branch)
 
     print()
     print("=" * 50)
@@ -246,7 +316,7 @@ Examples:
 
     if not args.push:
         print("To push to remote, run:")
-        print(f"  git push origin main")
+        print(f"  git push origin {current_branch}")
         print(f"  git push origin v{new_yaguff}")
 
 
