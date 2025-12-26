@@ -9,7 +9,7 @@ There are simultaneously too many and not enough GGUF converters in the world.
 - **llama.cpp under the hood** - so that part works
 - **Convert** - safetensors and PyTorch models to GGUF format
 - **Quantize** - to multiple formats at once
-- **Cross-platform** - scripts install on Windows and Linux (and probably Mac but I'm not testing that)
+- **Cross-platform** - works on Windows and Linux (and probably Mac but I'm not testing that)
 - **Easy** - auto-installs an environment + llama.cpp + CPU binaries for quantizing
 - **Minimal mess** - everything but a settings.json lives in one folder/venv
 
@@ -83,7 +83,7 @@ The GUI will automatically open in your browser on a free port like: `http://loc
 ## Requirements
 
 - Python 3.8 or higher
-- **Linux only**: tkinter (for folder browser)
+- **OPTIONAL Linux only**: tkinter (for folder browser)
   - Ubuntu/Debian: `sudo apt install python3-tk`
   - Fedora/RHEL: `sudo dnf install python3-tkinter`
   - Arch: `sudo pacman -S tk`

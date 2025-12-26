@@ -59,14 +59,15 @@ def main() -> None:
 
     st.title("YaGUFF - Yet Another GGUF Converter")
 
-    # Initialize converter with custom binaries folder if specified
+    # Initialize converter with custom settings if specified
     if 'converter' not in st.session_state:
         config = st.session_state.get('config', load_config())
-        if config.get("use_custom_binaries", False):
-            custom_folder = config.get("custom_binaries_folder", "")
-            st.session_state.converter = GGUFConverter(custom_binaries_folder=custom_folder)
-        else:
-            st.session_state.converter = GGUFConverter()
+        custom_binaries = config.get("custom_binaries_folder", "") if config.get("use_custom_binaries", False) else None
+        custom_repo = config.get("custom_llama_cpp_repo", "") if config.get("use_custom_conversion_script", False) else None
+        st.session_state.converter = GGUFConverter(
+            custom_binaries_folder=custom_binaries,
+            custom_llama_cpp_repo=custom_repo
+        )
 
     # Load config on first run
     if 'config' not in st.session_state:

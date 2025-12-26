@@ -73,7 +73,7 @@ class GGUFConverter:
         },
     }
 
-    def __init__(self, custom_binaries_folder=None):
+    def __init__(self, custom_binaries_folder=None, custom_llama_cpp_repo=None):
         """
         Initialize the converter and binary manager
 
@@ -81,15 +81,19 @@ class GGUFConverter:
             custom_binaries_folder: Optional path to folder containing custom llama.cpp binaries.
                                    If empty string, will use system PATH.
                                    If None, will use auto-downloaded binaries.
+            custom_llama_cpp_repo: Optional path to custom llama.cpp repository.
+                                   If None, will use auto-cloned repository.
         """
         self.binary_manager = BinaryManager(custom_binaries_folder=custom_binaries_folder)
+        self.custom_llama_cpp_repo = custom_llama_cpp_repo
         if custom_binaries_folder is None:
             if not self.binary_manager.ensure_binaries():
                 raise RuntimeError(
                     "Failed to get llama.cpp binaries. "
                     "Please check your internet connection or install llama.cpp manually."
                 )
-        self._ensure_llama_cpp_repo()
+        if custom_llama_cpp_repo is None:
+            self._ensure_llama_cpp_repo()
 
     def download_model(
         self,
@@ -366,6 +370,14 @@ class GGUFConverter:
         Note: The repo is cloned during startup by check_and_download_binaries.py, and
         _ensure_llama_cpp_repo() verifies it exists during init
         """
+        # Check custom repo path first
+        if self.custom_llama_cpp_repo:
+            custom_script = Path(self.custom_llama_cpp_repo) / "convert_hf_to_gguf.py"
+            if custom_script.exists():
+                return custom_script
+            # If custom path specified but script not found, still return None to trigger error
+            return None
+
         # Primary location (managed by this tool)
         llama_cpp_dir = Path(__file__).parent.parent / "llama.cpp"
         convert_script = llama_cpp_dir / "convert_hf_to_gguf.py"

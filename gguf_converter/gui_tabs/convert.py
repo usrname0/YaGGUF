@@ -146,6 +146,7 @@ def render_convert_tab(
 
 {chr(10).join('- ' + reason for reason in incompat_info['reasons'])}
 
+- Disable "Incompatibility warnings" in settings to try anyway.
                         """)
                 except (ValueError, OSError, KeyError, UnicodeDecodeError):
                     # Ignore config parsing errors - compatibility check is optional metadata display
@@ -331,8 +332,10 @@ def render_convert_tab(
             st.info("""
             **Importance Matrix Disabled**
 
-            Some I Quants (IQ3_XXS, IQ2_XXS, IQ2_XS, IQ2_S, IQ1_M, IQ1_S) require an importance matrix to be generated.
+            - Some I Quants (IQ3_XXS, IQ2_XXS, IQ2_XS, IQ2_S, IQ1_M, IQ1_S) require an importance matrix to be generated.
             Enable "Use importance matrix" above to unlock these quantization types.
+
+            - Disable "Imatrix warnings" in settings to try anyway.
             """)
 
         # Show imatrix options when enabled
@@ -874,16 +877,16 @@ def render_convert_tab(
                     intermediate_path = Path(output_dir_clean) / f"{Path(model_path_clean).name}_{intermediate_type.upper()}.gguf"
 
                     if actual_imatrix_path and actual_imatrix_path.exists():
-                        config["imatrix_stats_path"] = str(actual_imatrix_path)
+                        config["imatrix_stats_path"] = actual_imatrix_path.as_posix()
                     if intermediate_path.exists():
-                        config["imatrix_stats_model"] = str(intermediate_path)
+                        config["imatrix_stats_model"] = intermediate_path.as_posix()
                     save_config(config)
 
                 st.subheader("Output Files")
                 for file_path in output_files:
                     file_size = file_path.stat().st_size / (1024**3)  # GB
                     st.write(f"`{file_path.name}` ({file_size:.2f} GB)")
-                    st.code(str(file_path), language=None)
+                    st.code(file_path.as_posix(), language=None)
 
             except Exception as e:
                 # Show in Streamlit UI

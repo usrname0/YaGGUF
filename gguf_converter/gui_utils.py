@@ -57,7 +57,7 @@ def get_default_config() -> Dict[str, Any]:
         "imatrix_stats_model": "",  # Model for statistics utility
         "imatrix_stats_path": "",  # Imatrix file for statistics
         "max_preview_lines": 1000,  # Maximum lines to show in calibration preview
-        "preview_height": 400,  # Preview area height in pixels
+        "preview_height": 700,  # Preview area height in pixels
 
         # Convert & Quantize tab
         "model_path": "",
@@ -87,7 +87,11 @@ def get_default_config() -> Dict[str, Any]:
 
         # Custom binaries
         "use_custom_binaries": False,
-        "custom_binaries_folder": ""
+        "custom_binaries_folder": "",
+
+        # Custom conversion script
+        "use_custom_conversion_script": False,
+        "custom_llama_cpp_repo": ""
     }
 
 
@@ -146,7 +150,7 @@ def reset_config() -> Dict[str, Any]:
     return config
 
 
-def strip_quotes(path_str: str) -> str:
+def strip_quotes(path_str: str | None) -> str:
     """
     Strip surrounding quotes from a path string (Windows "Copy as path" adds them)
 
@@ -157,7 +161,7 @@ def strip_quotes(path_str: str) -> str:
         Path string without surrounding quotes
     """
     if not path_str:
-        return path_str
+        return ""
     return path_str.strip().strip('"').strip("'")
 
 
@@ -270,13 +274,13 @@ def check_git_updates_available() -> Dict[str, Any]:
         }
 
 
-def path_input_columns() -> Tuple[Tuple[Any, ...], bool]:
+def path_input_columns() -> Tuple[List[Any], bool]:
     """
     Create column layout for path inputs with conditional browse button.
 
     Returns:
         tuple: (columns, has_browse_column)
-            - columns: tuple of Streamlit column objects
+            - columns: list of Streamlit column objects
             - has_browse_column: bool indicating if browse column exists
 
     Example:
@@ -406,7 +410,7 @@ def get_binary_version(converter: Any) -> Dict[str, Any]:
         }
 
 
-def get_binary_version_from_path(binary_path: Path) -> Optional[str]:
+def get_binary_version_from_path(binary_path: Optional[Path]) -> Optional[str]:
     """
     Get version from a specific binary path by running it with --version
 
@@ -416,6 +420,9 @@ def get_binary_version_from_path(binary_path: Path) -> Optional[str]:
     Returns:
         str: Version string or None if unable to get version
     """
+    if binary_path is None:
+        return None
+
     try:
         result = subprocess.run(
             [str(binary_path), "--version"],

@@ -48,8 +48,7 @@ def render_imatrix_settings_tab(converter: Any, config: Dict[str, Any]) -> None:
                 "Calibration files directory",
                 value=config.get("imatrix_calibration_dir", ""),
                 placeholder=str(default_calibration_dir.resolve()),
-                help="Directory containing calibration .txt or .raw files. Leave blank for default.",
-                key=f"imatrix_cal_dir_input_{st.session_state.reset_count}"
+                help="Directory containing calibration .txt or .raw files. Leave blank for default."
             )
 
         if TKINTER_AVAILABLE:
@@ -67,8 +66,6 @@ def render_imatrix_settings_tab(converter: Any, config: Dict[str, Any]) -> None:
                     if selected_folder:
                         config["imatrix_calibration_dir"] = selected_folder
                         save_config(config)
-                        # Increment reset_count to force widget recreation
-                        st.session_state.reset_count += 1
                         st.rerun()
 
         with col_dir_check:
@@ -446,7 +443,7 @@ def render_imatrix_settings_tab(converter: Any, config: Dict[str, Any]) -> None:
                 "Preview height",
                 min_value=200,
                 max_value=1200,
-                value=int(config.get("preview_height", 400)),
+                value=int(config.get("preview_height", 700)),
                 step=100,
                 help="Adjust preview area height in pixels",
                 key=f"preview_height_{st.session_state.reset_count}",

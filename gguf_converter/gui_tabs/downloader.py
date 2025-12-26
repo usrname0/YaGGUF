@@ -129,7 +129,7 @@ def render_downloader_tab(converter: Any, config: Dict[str, Any]) -> None:
                     model_path = converter.download_model(repo_id_clean, download_dir_clean)
 
                 # Store in session state and mark as just completed
-                st.session_state.downloaded_model_path = str(model_path)
+                st.session_state.downloaded_model_path = model_path.as_posix()
                 st.session_state.download_just_completed = True
                 st.rerun()
 

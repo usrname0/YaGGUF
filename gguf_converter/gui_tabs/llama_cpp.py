@@ -16,18 +16,28 @@ from ..gui_utils import (
 
 def render_llama_cpp_tab(converter: Any, config: Dict[str, Any]) -> None:
     """Render the llama.cpp tab"""
+    # Handle pending binaries folder update
+    if 'pending_binaries_folder' in st.session_state:
+        st.session_state.custom_binaries_folder_input_update = st.session_state.pending_binaries_folder
+        del st.session_state.pending_binaries_folder
+
+    # Handle pending repo folder update
+    if 'pending_repo_folder' in st.session_state:
+        st.session_state.custom_llama_cpp_repo_input = st.session_state.pending_repo_folder
+        del st.session_state.pending_repo_folder
+
     st.header("llama.cpp Binaries")
 
     st.markdown("""
-    YaGUFF automatically downloads pre-compiled llama.cpp binaries that use the CPU (good for most cases).
-    You can opt to use other llama.cpp binaries below.
+    YaGUFF automatically downloads pre-compiled [llama.cpp](https://github.com/ggml-org/llama.cpp) binaries that use the CPU (good for most cases).
+    YaGUFF also automatically downloads a [llama.cpp](https://github.com/ggml-org/llama.cpp) repo for model conversion.
+    You can opt to use other llama.cpp resources below.
     """)
 
     # Local/Custom Binary Settings Section
     col_bin1, col_bin2 = st.columns(2)
     with col_bin1:
         st.subheader("Local/Custom Binary Settings")
-        st.markdown("[View llama.cpp on GitHub](https://github.com/ggml-org/llama.cpp)")
 
         # Auto-save callback for use_custom_binaries
         def save_use_custom_binaries():
@@ -37,13 +47,13 @@ def render_llama_cpp_tab(converter: Any, config: Dict[str, Any]) -> None:
             if "custom_binary_versions" in st.session_state:
                 del st.session_state.custom_binary_versions
             # Reinitialize converter with new settings
-            if config.get("use_custom_binaries", False):
-                custom_folder = config.get("custom_binaries_folder", "")
-                from ..converter import GGUFConverter
-                st.session_state.converter = GGUFConverter(custom_binaries_folder=custom_folder)
-            else:
-                from ..converter import GGUFConverter
-                st.session_state.converter = GGUFConverter()
+            custom_binaries = config.get("custom_binaries_folder", "") if config.get("use_custom_binaries", False) else None
+            custom_repo = config.get("custom_llama_cpp_repo", "") if config.get("use_custom_conversion_script", False) else None
+            from ..converter import GGUFConverter
+            st.session_state.converter = GGUFConverter(
+                custom_binaries_folder=custom_binaries,
+                custom_llama_cpp_repo=custom_repo
+            )
 
         use_custom_binaries = st.checkbox(
             "Use local/custom binaries",
@@ -75,16 +85,19 @@ def render_llama_cpp_tab(converter: Any, config: Dict[str, Any]) -> None:
                     from ..converter import GGUFConverter
                     st.session_state.converter = GGUFConverter(custom_binaries_folder=new_folder)
 
-            binaries_folder = st.text_input(
-                "llama.cpp binaries folder",
-                value=config.get("custom_binaries_folder", ""),
-                placeholder="/path/to/llama.cpp/bin or leave blank for PATH",
-                help="Path to folder containing llama-quantize and llama-imatrix. Leave blank to use system PATH.",
-                key="custom_binaries_folder_input_update",
-                label_visibility="collapsed",
-                disabled=not use_custom_binaries,
-                on_change=save_binaries_folder
-            )
+            # Only set value if key not in session state (prevents warning)
+            binaries_folder_kwargs = {
+                "label": "llama.cpp binaries folder",
+                "placeholder": "/path/to/llama.cpp/bin or leave blank for PATH",
+                "help": "Path to folder containing llama-quantize and llama-imatrix. Leave blank to use system PATH.",
+                "key": "custom_binaries_folder_input_update",
+                "label_visibility": "collapsed",
+                "disabled": not use_custom_binaries,
+                "on_change": save_binaries_folder
+            }
+            if "custom_binaries_folder_input_update" not in st.session_state:
+                binaries_folder_kwargs["value"] = config.get("custom_binaries_folder", "")
+            binaries_folder = st.text_input(**binaries_folder_kwargs)  # type: ignore[arg-type]
 
         if TKINTER_AVAILABLE:
             with col_browse:  # type: ignore[union-attr]
@@ -104,6 +117,8 @@ def render_llama_cpp_tab(converter: Any, config: Dict[str, Any]) -> None:
                         # Clear version cache when folder changes
                         if "custom_binary_versions" in st.session_state:
                             del st.session_state.custom_binary_versions
+                        # Set pending flag - will be applied before widget creation on next run
+                        st.session_state.pending_binaries_folder = selected_folder
                         # Reinitialize converter
                         from ..converter import GGUFConverter
                         st.session_state.converter = GGUFConverter(custom_binaries_folder=selected_folder)
@@ -130,10 +145,10 @@ def render_llama_cpp_tab(converter: Any, config: Dict[str, Any]) -> None:
         st.markdown("""
         Enable local/custom binaries if you want to:
         - Use a custom-compiled llama.cpp with GPU support (CUDA/ROCm/Metal/Vulkan)
-        - Use binaries from your system PATH
         - Use a specific llama.cpp version
 
         **Note:** Custom binaries with GPU support are required for GPU offloading in imatrix generation (see Imatrix Settings tab).
+        Quantization only uses the CPU in either case.
         """)
 
     with col_bin2:
@@ -201,17 +216,17 @@ def render_llama_cpp_tab(converter: Any, config: Dict[str, Any]) -> None:
                     st.info("Version: Unable to detect")
 
                 # Show binary paths
-                st.markdown(f"- `llama-quantize`: {quantize_path}")
-                st.markdown(f"- `llama-imatrix`: {imatrix_path}")
+                st.markdown(f"- `llama-quantize`: {quantize_path.as_posix()}")
+                st.markdown(f"- `llama-imatrix`: {imatrix_path.as_posix()}")
             elif quantize_found or imatrix_found:
                 st.warning("Some binaries missing")
                 if quantize_found:
-                    st.markdown(f"- `llama-quantize`: {quantize_path}")
+                    st.markdown(f"- `llama-quantize`: {quantize_path.as_posix()}")
                 else:
                     st.markdown("- `llama-quantize`: Not found")
 
                 if imatrix_found:
-                    st.markdown(f"- `llama-imatrix`: {imatrix_path}")
+                    st.markdown(f"- `llama-imatrix`: {imatrix_path.as_posix()}")
 
                     # Get version from cache or fetch it
                     if cache_key not in st.session_state.custom_binary_versions:
@@ -230,6 +245,197 @@ def render_llama_cpp_tab(converter: Any, config: Dict[str, Any]) -> None:
                 st.markdown("- `llama-imatrix`: Not found")
         else:
             st.info("Disabled - Using YaGUFF's llama.cpp binaries")
+
+    st.markdown("---")
+
+    # Conversion Script Settings Section
+    col_script1, col_script2 = st.columns(2)
+    with col_script1:
+        st.subheader("Conversion Script Settings")
+
+        # Auto-save callback for use_custom_conversion_script
+        def save_use_custom_conversion_script():
+            config["use_custom_conversion_script"] = st.session_state.use_custom_conversion_script_checkbox
+            save_config(config)
+            # Reinitialize converter with new settings
+            custom_binaries = config.get("custom_binaries_folder", "") if config.get("use_custom_binaries", False) else None
+            custom_repo = config.get("custom_llama_cpp_repo", "") if config.get("use_custom_conversion_script", False) else None
+            from ..converter import GGUFConverter
+            st.session_state.converter = GGUFConverter(
+                custom_binaries_folder=custom_binaries,
+                custom_llama_cpp_repo=custom_repo
+            )
+
+        use_custom_conversion_script = st.checkbox(
+            "Use custom llama.cpp repository",
+            value=config.get("use_custom_conversion_script", False),
+            help="Use a custom llama.cpp repository for model conversion. Leave path blank to use YaGUFF's auto-cloned repository.",
+            key="use_custom_conversion_script_checkbox",
+            on_change=save_use_custom_conversion_script
+        )
+
+        st.markdown("**Repository Path** (blank defaults back to YaGUFF's auto-cloned repo):")
+
+        # Repository path input with Select Folder and Open Folder buttons
+        if TKINTER_AVAILABLE:
+            col_repo, col_repo_browse, col_repo_check = st.columns([4, 1, 1])
+        else:
+            col_repo, col_repo_check = st.columns([5, 1])
+            col_repo_browse = None  # Not used when tkinter unavailable
+
+        with col_repo:
+            def save_repo_path():
+                new_path = st.session_state.custom_llama_cpp_repo_input
+                if new_path != config.get("custom_llama_cpp_repo", ""):
+                    config["custom_llama_cpp_repo"] = new_path
+                    save_config(config)
+                    # Reinitialize converter with new repo
+                    custom_binaries = config.get("custom_binaries_folder", "") if config.get("use_custom_binaries", False) else None
+                    from ..converter import GGUFConverter
+                    st.session_state.converter = GGUFConverter(
+                        custom_binaries_folder=custom_binaries,
+                        custom_llama_cpp_repo=new_path
+                    )
+
+            # Only set value if key not in session state (prevents warning)
+            repo_path_kwargs = {
+                "label": "llama.cpp repository path",
+                "placeholder": "/path/to/llama.cpp or leave blank for auto-cloned repo",
+                "help": "Path to llama.cpp repository containing convert_hf_to_gguf.py. Leave blank to use YaGUFF's auto-cloned repository.",
+                "key": "custom_llama_cpp_repo_input",
+                "label_visibility": "collapsed",
+                "disabled": not use_custom_conversion_script,
+                "on_change": save_repo_path
+            }
+            if "custom_llama_cpp_repo_input" not in st.session_state:
+                repo_path_kwargs["value"] = config.get("custom_llama_cpp_repo", "")
+            repo_path = st.text_input(**repo_path_kwargs)  # type: ignore[arg-type]
+
+        if TKINTER_AVAILABLE:
+            with col_repo_browse:  # type: ignore[union-attr]
+                if st.button(
+                    "Select Folder",
+                    key="browse_repo_folder_btn",
+                    use_container_width=True,
+                    help="Select llama.cpp repository folder",
+                    disabled=not use_custom_conversion_script
+                ):
+                    repo_path_clean = strip_quotes(repo_path)
+                    initial_dir = repo_path_clean if repo_path_clean and Path(repo_path_clean).exists() else None
+                    selected_folder = browse_folder(initial_dir)
+                    if selected_folder:
+                        config["custom_llama_cpp_repo"] = selected_folder
+                        save_config(config)
+                        # Set pending flag - will be applied before widget creation on next run
+                        st.session_state.pending_repo_folder = selected_folder
+                        # Reinitialize converter
+                        custom_binaries = config.get("custom_binaries_folder", "") if config.get("use_custom_binaries", False) else None
+                        from ..converter import GGUFConverter
+                        st.session_state.converter = GGUFConverter(
+                            custom_binaries_folder=custom_binaries,
+                            custom_llama_cpp_repo=selected_folder
+                        )
+                        st.rerun()
+
+        with col_repo_check:
+            repo_path_clean = strip_quotes(repo_path)
+            repo_path_exists = bool(repo_path_clean and Path(repo_path_clean).exists())
+            if st.button(
+                "Open Folder",
+                key="check_repo_folder_btn",
+                use_container_width=True,
+                disabled=not use_custom_conversion_script or not repo_path_exists,
+                help="Open folder in file explorer" if repo_path_exists else "Path doesn't exist yet"
+            ):
+                if repo_path_exists:
+                    try:
+                        open_folder(repo_path_clean)
+                        st.toast("Opened folder")
+                    except Exception as e:
+                        st.toast(f"Could not open folder: {e}")
+
+        # Show help text below folder path
+        st.markdown("""
+        Enable custom repository if you want to:
+        - Use a modified or forked llama.cpp with custom conversion scripts
+        - Use a specific llama.cpp version for conversion
+        """)
+
+    with col_script2:
+        st.subheader("Conversion Script Detection")
+
+        # If custom repo enabled, check for script
+        if config.get("use_custom_conversion_script", False):
+            custom_repo = config.get("custom_llama_cpp_repo", "")
+
+            if custom_repo:
+                st.info(f"Looking in: `{custom_repo}`")
+
+                # Check if script exists
+                script_path = Path(custom_repo) / "convert_hf_to_gguf.py"
+                script_found = script_path.exists()
+
+                if script_found:
+                    st.success("Conversion script found")
+
+                    # Try to get version info from git
+                    try:
+                        import subprocess
+                        result = subprocess.run(
+                            ["git", "describe", "--tags", "--always"],
+                            cwd=custom_repo,
+                            capture_output=True,
+                            text=True,
+                            timeout=5
+                        )
+                        if result.returncode == 0 and result.stdout.strip():
+                            version = result.stdout.strip()
+                            st.code(f"version: {version}", language=None)
+                        else:
+                            st.info("Version: Unable to detect (not a git repository)")
+                    except Exception:
+                        st.info("Version: Unable to detect")
+
+                    st.markdown(f"- `convert_hf_to_gguf.py`: {script_path.as_posix()}")
+                else:
+                    st.error("Conversion script not found")
+                    st.markdown("- `convert_hf_to_gguf.py`: Not found")
+                    st.warning(f"Expected location: `{(Path(custom_repo) / 'convert_hf_to_gguf.py').as_posix()}`")
+            else:
+                # No custom path specified, using YaGUFF's repo
+                st.info("Using YaGUFF's auto-cloned llama.cpp repository")
+
+                # Check if script exists
+                project_root = Path(__file__).parent.parent.parent
+                script_path = project_root / "llama.cpp" / "convert_hf_to_gguf.py"
+
+                if script_path.exists():
+                    st.success("Conversion script found")
+
+                    # Try to get version info from git
+                    try:
+                        import subprocess
+                        llama_cpp_dir = project_root / "llama.cpp"
+                        result = subprocess.run(
+                            ["git", "describe", "--tags", "--always"],
+                            cwd=llama_cpp_dir,
+                            capture_output=True,
+                            text=True,
+                            timeout=5
+                        )
+                        if result.returncode == 0 and result.stdout.strip():
+                            version = result.stdout.strip()
+                            st.code(f"version: {version}", language=None)
+                        else:
+                            st.info("Version: Unable to detect (not a git repository)")
+                    except Exception:
+                        st.info("Version: Unable to detect")
+
+                    st.markdown(f"- `convert_hf_to_gguf.py`: {script_path.as_posix()}")
+                else:
+                    st.warning("Conversion script not found in YaGUFF's llama.cpp repository")
+        else:
+            st.info("Disabled - Using YaGUFF's auto-cloned llama.cpp repository")
 
     st.markdown("---")
 

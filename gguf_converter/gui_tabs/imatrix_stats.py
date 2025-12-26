@@ -78,7 +78,7 @@ def render_imatrix_stats_tab(converter: Any, config: Dict[str, Any]) -> None:
     # Scan directory for imatrix files
     imatrix_files = []
     if stats_dir_clean and Path(stats_dir_clean).exists() and Path(stats_dir_clean).is_dir():
-        imatrix_files = sorted([str(f) for f in Path(stats_dir_clean).glob("*.imatrix")])
+        imatrix_files = sorted([f.as_posix() for f in Path(stats_dir_clean).glob("*.imatrix")])
 
     if not imatrix_files:
         imatrix_files = ["(no .imatrix files found)"]
@@ -113,7 +113,7 @@ def render_imatrix_stats_tab(converter: Any, config: Dict[str, Any]) -> None:
     # Scan directory for GGUF model files
     gguf_files = []
     if stats_dir_clean and Path(stats_dir_clean).exists() and Path(stats_dir_clean).is_dir():
-        gguf_files = sorted([str(f) for f in Path(stats_dir_clean).glob("*.gguf")])
+        gguf_files = sorted([f.as_posix() for f in Path(stats_dir_clean).glob("*.gguf")])
 
     if not gguf_files:
         gguf_files = ["(no .gguf files found)"]
