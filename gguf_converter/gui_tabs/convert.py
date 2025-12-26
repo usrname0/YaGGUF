@@ -398,6 +398,11 @@ def render_convert_tab(
             if imatrix_selection == generate_custom_option:
                 config["imatrix_mode"] = "generate_custom"
                 save_config(config)
+
+                def save_custom_imatrix_name():
+                    config["imatrix_generate_name"] = st.session_state[f"imatrix_custom_name_{st.session_state.reset_count}"]
+                    save_config(config)
+
                 col_imatrix_name, col_imatrix_default = st.columns([5, 1])
                 with col_imatrix_name:
                     imatrix_generate_name = st.text_input(
@@ -405,7 +410,8 @@ def render_convert_tab(
                         value=config.get("imatrix_generate_name", ""),
                         placeholder="model.imatrix",
                         help="Filename for the generated imatrix file (saved in output directory). Leave empty to use default naming (model_name.imatrix).",
-                        key=f"imatrix_custom_name_{st.session_state.reset_count}"
+                        key=f"imatrix_custom_name_{st.session_state.reset_count}",
+                        on_change=save_custom_imatrix_name
                     )
                 with col_imatrix_default:
                     st.markdown("<br>", unsafe_allow_html=True)  # Align with input
