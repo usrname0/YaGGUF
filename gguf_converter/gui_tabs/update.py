@@ -83,7 +83,7 @@ def render_update_tab(converter: Any, config: Dict[str, Any]) -> None:
                         )
                     else:
                         subprocess.Popen(
-                            [str(restart_script), port, update_status["latest_version"]],
+                            ["/bin/bash", str(restart_script), port, update_status["latest_version"]],
                             cwd=str(restart_script.parent)
                         )
 
@@ -287,7 +287,7 @@ def render_update_tab(converter: Any, config: Dict[str, Any]) -> None:
                     )
                 else:
                     subprocess.Popen(
-                        [str(restart_script), port],
+                        ["/bin/bash", str(restart_script), port],
                         cwd=str(restart_script.parent)
                     )
 
