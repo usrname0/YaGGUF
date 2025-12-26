@@ -6,7 +6,7 @@ There are simultaneously too many and not enough GGUF converters in the world.
  
 ## Features
 
-- **llama.cpp under the hood** - so that part works
+- **[llama.cpp](https://github.com/ggerganov/llama.cpp) under the hood** - so that part works
 - **Convert** - safetensors and PyTorch models to GGUF format
 - **Quantize** - to multiple formats at once
 - **Cross-platform** - works on Windows and Linux (and probably Mac but I'm not testing that)
@@ -65,6 +65,11 @@ All quantization types from llama.cpp are supported. Choose based on your size/q
     cd YaGUFF
 # Run the launcher script for your platform (runs a setup script if no venv detected):
 - Windows: `run_gui.bat`
+# Linux users: if you want to select folders via the gui install tkinter first:
+- Ubuntu/Debian: `sudo apt install python3-tk`
+- Fedora/RHEL: `sudo dnf install python3-tkinter`
+- Arch: `sudo pacman -S tk`
+# Then run the script:
 - Linux/Mac: `./run_gui.sh`
 ```
 
@@ -74,6 +79,7 @@ All quantization types from llama.cpp are supported. Choose based on your size/q
 - Double-click `run_gui.bat`
 
 **Linux/Mac:**
+
 ```bash
 ./run_gui.sh
 ```
