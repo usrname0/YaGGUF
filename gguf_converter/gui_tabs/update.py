@@ -42,6 +42,10 @@ def render_update_tab(converter: Any, config: Dict[str, Any]) -> None:
     """Render the Update tab"""
     st.header("Update")
 
+    # Initialize update message in session state if not present
+    if 'yaguff_update_message' not in st.session_state:
+        st.session_state.yaguff_update_message = None
+
     col1, col2 = st.columns(2)
     with col1:
         st.subheader("Update YaGUFF")
@@ -69,7 +73,8 @@ def render_update_tab(converter: Any, config: Dict[str, Any]) -> None:
                     restart_script = Path(__file__).parent.parent.parent / "scripts" / "update_yaguff_and_restart.sh"
 
                 if restart_script.exists():
-                    st.info(f"Updating to {update_status['latest_version']}... See terminal for progress. Please wait.")
+                    # Store the update message in session state to display in right column
+                    st.session_state.yaguff_update_message = f"Updating to {update_status['latest_version']}... See terminal for progress. Please wait."
 
                     # Give Streamlit time to send the message to browser before exiting
                     import time
@@ -96,14 +101,18 @@ def render_update_tab(converter: Any, config: Dict[str, Any]) -> None:
         current_version = get_current_version()
         st.code(f"version: {current_version}", language=None)
 
-        # Check if updates are available
-        update_status = check_git_updates_available()
-        if update_status["status"] == "updates_available":
-            st.warning(update_status["message"])
-        elif update_status["status"] == "up_to_date":
-            st.info(update_status["message"])
+        # Display update message if present, otherwise show version comparison
+        if st.session_state.yaguff_update_message:
+            st.info(st.session_state.yaguff_update_message)
         else:
-            st.info(update_status["message"])
+            # Check if updates are available
+            update_status = check_git_updates_available()
+            if update_status["status"] == "updates_available":
+                st.warning(update_status["message"])
+            elif update_status["status"] == "up_to_date":
+                st.info(update_status["message"])
+            else:
+                st.info(update_status["message"])
 
     st.markdown("---")
 

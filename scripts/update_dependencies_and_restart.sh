@@ -26,7 +26,7 @@ source venv/bin/activate
 
 # Update PyTorch (CPU)
 echo "Updating PyTorch (CPU)..."
-python -m pip install --upgrade torch --index-url https://download.pytorch.org/whl/cpu
+python -m pip install --upgrade torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu
 
 # Update dependencies from requirements.txt
 echo "Updating dependencies from requirements.txt..."

@@ -52,7 +52,7 @@ echo "Upgrading pip..."
 python -m pip install --upgrade pip
 
 echo "Installing PyTorch..."
-pip install "torch>=2.0.0" --index-url https://download.pytorch.org/whl/cpu
+pip install "torch>=2.0.0" "torchvision>=0.15.0" "torchaudio>=2.0.0" --index-url https://download.pytorch.org/whl/cpu
 if [ $? -ne 0 ]; then
     echo "ERROR: Failed to install PyTorch."
     exit 1
