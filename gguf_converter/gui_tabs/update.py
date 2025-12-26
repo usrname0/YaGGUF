@@ -47,6 +47,7 @@ def render_update_tab(converter: Any, config: Dict[str, Any]) -> None:
         st.session_state.yaguff_update_message = None
 
     col1, col2 = st.columns(2)
+
     with col1:
         st.subheader("Update YaGUFF")
         st.markdown("Check for the latest version of YaGUFF from GitHub.")
@@ -73,29 +74,19 @@ def render_update_tab(converter: Any, config: Dict[str, Any]) -> None:
                     restart_script = Path(__file__).parent.parent.parent / "scripts" / "update_yaguff_and_restart.sh"
 
                 if restart_script.exists():
-                    # Store the update message in session state to display in right column
-                    st.session_state.yaguff_update_message = f"Updating to {update_status['latest_version']}... See terminal for progress. Please wait."
-
-                    # Give Streamlit time to send the message to browser before exiting
-                    import time
-                    time.sleep(0.5)
-
-                    # Start the update script with port and version parameters
-                    if is_windows:
-                        subprocess.Popen(
-                            ["cmd", "/c", str(restart_script), port, update_status["latest_version"]],
-                            cwd=str(restart_script.parent)
-                        )
-                    else:
-                        subprocess.Popen(
-                            ["/bin/bash", str(restart_script), port, update_status["latest_version"]],
-                            cwd=str(restart_script.parent)
-                        )
-
-                    # Exit Streamlit - this releases the port
-                    os._exit(0)
+                    # Store the update message in session state and force a rerun to display it
+                    update_msg = f"Updating to {update_status['latest_version']}... See terminal for progress. Please wait."
+                    st.session_state.yaguff_update_message = update_msg
+                    st.session_state.pending_update = {
+                        'script': str(restart_script),
+                        'port': port,
+                        'version': update_status["latest_version"],
+                        'is_windows': is_windows
+                    }
+                    st.rerun()
                 else:
                     st.error(f"Restart script not found: {restart_script}")
+
     with col2:
         st.subheader("YaGUFF Version Information")
         current_version = get_current_version()
@@ -104,6 +95,32 @@ def render_update_tab(converter: Any, config: Dict[str, Any]) -> None:
         # Display update message if present, otherwise show version comparison
         if st.session_state.yaguff_update_message:
             st.info(st.session_state.yaguff_update_message)
+
+            # If there's a pending update, execute it after displaying the message
+            if 'pending_update' in st.session_state:
+                pending = st.session_state.pending_update
+
+                # Give Streamlit time to send the message to browser before exiting
+                import time
+                time.sleep(1.0)
+
+                # Start the update script with port and version parameters
+                if pending['is_windows']:
+                    subprocess.Popen(
+                        ["cmd", "/c", pending['script'], pending['port'], pending['version']],
+                        cwd=str(Path(pending['script']).parent)
+                    )
+                else:
+                    subprocess.Popen(
+                        ["/bin/bash", pending['script'], pending['port'], pending['version']],
+                        cwd=str(Path(pending['script']).parent)
+                    )
+
+                # Clear the pending update
+                del st.session_state.pending_update
+
+                # Exit Streamlit - this releases the port
+                os._exit(0)
         else:
             # Check if updates are available
             update_status = check_git_updates_available()
