@@ -468,8 +468,8 @@ def render_convert_tab(
         ]
         st.markdown("**Intermediate Formats:**")
 
-        # 6 columns: [checkbox:1, button:2, checkbox:1, button:2, checkbox:1, button:2]
-        all_cols = st.columns([1, 2, 1, 2, 1, 2])
+        # 3 columns for the 3 formats
+        format_cols = st.columns(3)
         full_quants = {
             "F32": "32-bit float (full precision)",
             "F16": "16-bit float (half precision)",
@@ -478,8 +478,22 @@ def render_convert_tab(
         full_checkboxes = {}
         selected_format = None
 
+        # First row: buttons to select intermediate format
         for idx, (qtype, tooltip) in enumerate(full_quants.items()):
-            with all_cols[idx * 2]:
+            with format_cols[idx]:
+                is_selected = qtype == intermediate_type
+                button_type = "primary" if is_selected else "secondary"
+                button_label = f"{qtype} Intermediate"
+                if st.button(
+                    button_label,
+                    key=f"intermediate_btn_{qtype}",
+                    type=button_type
+                ):
+                    selected_format = qtype
+
+        # Second row: checkboxes to enable output
+        for idx, (qtype, tooltip) in enumerate(full_quants.items()):
+            with format_cols[idx]:
                 is_intermediate = qtype == intermediate_type
 
                 if is_intermediate:
@@ -504,17 +518,6 @@ def render_convert_tab(
                     disabled=checkbox_disabled,
                     on_change=save_full_selection(qtype, intermediate_type) if not checkbox_disabled else None
                 )
-
-            with all_cols[idx * 2 + 1]:
-                is_selected = qtype == intermediate_type
-                button_type = "primary" if is_selected else "secondary"
-                button_label = f"{qtype} Intermediate"
-                if st.button(
-                    button_label,
-                    key=f"intermediate_btn_{qtype}",
-                    type=button_type
-                ):
-                    selected_format = qtype
 
         # Handle intermediate format change
         if selected_format and selected_format != intermediate_type:
