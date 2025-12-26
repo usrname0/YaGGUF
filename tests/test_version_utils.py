@@ -9,7 +9,8 @@ This is critical because:
 """
 
 import pytest
-from unittest.mock import Mock, patch
+from unittest.mock import Mock, patch, MagicMock
+import json
 import subprocess
 from gguf_converter.gui_utils import (
     get_current_version,
@@ -49,38 +50,36 @@ def test_get_current_version_format():
         assert parts[1].isdigit()
 
 
-@patch('subprocess.run')
-def test_check_git_updates_no_tags(mock_run):
+@patch('urllib.request.urlopen')
+def test_check_git_updates_no_releases(mock_urlopen):
     """
-    Test handling when no git tags are found
+    Test handling when no releases are found on GitHub
     """
-    # Mock git fetch (succeeds)
-    # Mock git tag (returns empty)
-    mock_run.side_effect = [
-        Mock(returncode=0, stdout="", stderr=""),  # git fetch
-        Mock(returncode=0, stdout="", stderr="")   # git tag (empty)
-    ]
+    # Mock API response with no tag_name
+    mock_response = MagicMock()
+    mock_response.read.return_value = json.dumps({}).encode()
+    mock_response.__enter__.return_value = mock_response
+    mock_urlopen.return_value = mock_response
 
     result = check_git_updates_available()
 
     assert result["status"] == "unknown"
-    assert "Could not fetch" in result["message"] or "No version tags" in result["message"]
+    assert "No releases" in result["message"]
     assert result["latest_version"] is None
 
 
-@patch('subprocess.run')
-def test_check_git_updates_up_to_date(mock_run):
+@patch('urllib.request.urlopen')
+def test_check_git_updates_up_to_date(mock_urlopen):
     """
-    Test when current version matches latest tag
+    Test when current version matches latest release
     """
     current = get_current_version()
 
-    # Mock git fetch (succeeds)
-    # Mock git tag (returns current version)
-    mock_run.side_effect = [
-        Mock(returncode=0, stdout="", stderr=""),  # git fetch
-        Mock(returncode=0, stdout=f"{current}\n", stderr="")  # git tag
-    ]
+    # Mock API response with current version as latest release
+    mock_response = MagicMock()
+    mock_response.read.return_value = json.dumps({"tag_name": current}).encode()
+    mock_response.__enter__.return_value = mock_response
+    mock_urlopen.return_value = mock_response
 
     result = check_git_updates_available()
 
@@ -89,17 +88,16 @@ def test_check_git_updates_up_to_date(mock_run):
     assert "latest version" in result["message"].lower()
 
 
-@patch('subprocess.run')
-def test_check_git_updates_available(mock_run):
+@patch('urllib.request.urlopen')
+def test_check_git_updates_available(mock_urlopen):
     """
     Test when newer version is available
     """
-    # Mock git fetch (succeeds)
-    # Mock git tag (returns newer version)
-    mock_run.side_effect = [
-        Mock(returncode=0, stdout="", stderr=""),  # git fetch
-        Mock(returncode=0, stdout="v999.999.999\nv1.0.0\n", stderr="")  # git tag (newer first)
-    ]
+    # Mock API response with newer version
+    mock_response = MagicMock()
+    mock_response.read.return_value = json.dumps({"tag_name": "v999.999.999"}).encode()
+    mock_response.__enter__.return_value = mock_response
+    mock_urlopen.return_value = mock_response
 
     result = check_git_updates_available()
 
@@ -109,13 +107,13 @@ def test_check_git_updates_available(mock_run):
     assert result["latest_version"] == "v999.999.999"
 
 
-@patch('subprocess.run')
-def test_check_git_updates_git_fetch_fails(mock_run):
+@patch('urllib.request.urlopen')
+def test_check_git_updates_api_fails(mock_urlopen):
     """
-    Test handling when git fetch fails
+    Test handling when GitHub API request fails
     """
-    # Mock git fetch failing
-    mock_run.side_effect = subprocess.TimeoutExpired("git", 10)
+    # Mock API request failing
+    mock_urlopen.side_effect = Exception("Network error")
 
     result = check_git_updates_available()
 
@@ -124,38 +122,36 @@ def test_check_git_updates_git_fetch_fails(mock_run):
     assert result["latest_version"] is None
 
 
-@patch('subprocess.run')
-def test_check_git_updates_git_tag_fails(mock_run):
+@patch('urllib.request.urlopen')
+def test_check_git_updates_timeout(mock_urlopen):
     """
-    Test handling when git tag command fails
+    Test handling when GitHub API times out
     """
-    # Mock git fetch (succeeds)
-    # Mock git tag (fails)
-    mock_run.side_effect = [
-        Mock(returncode=0, stdout="", stderr=""),  # git fetch
-        Mock(returncode=1, stdout="", stderr="error")  # git tag fails
-    ]
+    # Mock API timeout
+    import urllib.error
+    mock_urlopen.side_effect = urllib.error.URLError("timeout")
 
     result = check_git_updates_available()
 
     # Should handle gracefully
     assert result["status"] == "unknown"
-    assert "Could not fetch" in result["message"]
+    assert "Could not check" in result["message"]
 
 
-@patch('subprocess.run')
-def test_version_comparison_strips_v_prefix(mock_run):
+@patch('urllib.request.urlopen')
+def test_version_comparison_strips_v_prefix(mock_urlopen):
     """
     Test that version comparison correctly strips 'v' prefix
     """
     # Current version is 1.0.6 (without v)
-    # Latest tag is v1.0.6 (with v)
+    # Latest release tag is v1.0.6 (with v)
     # These should be considered equal
 
-    mock_run.side_effect = [
-        Mock(returncode=0, stdout="", stderr=""),  # git fetch
-        Mock(returncode=0, stdout="v1.0.6\n", stderr="")  # git tag
-    ]
+    # Mock API response with v prefix
+    mock_response = MagicMock()
+    mock_response.read.return_value = json.dumps({"tag_name": "v1.0.6"}).encode()
+    mock_response.__enter__.return_value = mock_response
+    mock_urlopen.return_value = mock_response
 
     # Mock get_current_version to return version without v
     with patch('gguf_converter.gui_utils.get_current_version', return_value='1.0.6'):
@@ -163,24 +159,6 @@ def test_version_comparison_strips_v_prefix(mock_run):
 
         # Should consider them equal
         assert result["status"] == "up_to_date"
-
-
-@patch('subprocess.run')
-def test_version_tags_sorted_correctly(mock_run):
-    """
-    Test that latest tag is correctly identified from sorted list
-    """
-    # Mock git fetch (succeeds)
-    # Mock git tag returning multiple versions (sorted)
-    mock_run.side_effect = [
-        Mock(returncode=0, stdout="", stderr=""),  # git fetch
-        Mock(returncode=0, stdout="v2.0.0\nv1.5.0\nv1.0.0\n", stderr="")  # Sorted descending
-    ]
-
-    result = check_git_updates_available()
-
-    # Should pick first (latest) tag
-    assert result["latest_version"] == "v2.0.0"
 
 
 def test_check_git_updates_returns_dict():
@@ -205,25 +183,10 @@ def test_check_git_updates_returns_dict():
     assert len(result["message"]) > 0
 
 
-@patch('subprocess.run')
-def test_git_fetch_timeout_handling(mock_run):
+@patch('urllib.request.urlopen')
+def test_multiple_version_formats(mock_urlopen):
     """
-    Test that timeouts are handled gracefully
-    """
-    # Mock git fetch timing out
-    mock_run.side_effect = subprocess.TimeoutExpired("git fetch --tags", 10)
-
-    result = check_git_updates_available()
-
-    # Should not crash
-    assert result["status"] == "unknown"
-    assert result["latest_version"] is None
-
-
-@patch('subprocess.run')
-def test_multiple_version_formats(mock_run):
-    """
-    Test handling of different version tag formats
+    Test handling of different version tag formats from GitHub releases
     """
     # Test with tags that have different formats
     test_cases = [
@@ -234,31 +197,16 @@ def test_multiple_version_formats(mock_run):
     ]
 
     for tag in test_cases:
-        mock_run.side_effect = [
-            Mock(returncode=0, stdout="", stderr=""),  # git fetch
-            Mock(returncode=0, stdout=f"{tag}\n", stderr="")  # git tag
-        ]
+        # Mock API response with this tag format
+        mock_response = MagicMock()
+        mock_response.read.return_value = json.dumps({"tag_name": tag}).encode()
+        mock_response.__enter__.return_value = mock_response
+        mock_urlopen.return_value = mock_response
 
         result = check_git_updates_available()
 
         # Should not crash and should return latest_version
         assert result["latest_version"] == tag
-
-
-@patch('subprocess.run')
-def test_network_error_handling(mock_run):
-    """
-    Test handling of network errors during git fetch
-    """
-    # Simulate network error
-    mock_run.side_effect = Exception("Network error: Could not resolve host")
-
-    result = check_git_updates_available()
-
-    # Should handle gracefully
-    assert result["status"] == "unknown"
-    assert result["latest_version"] is None
-    assert isinstance(result["message"], str)
 
 
 def test_version_string_not_empty():
