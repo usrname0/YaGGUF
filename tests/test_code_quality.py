@@ -29,6 +29,7 @@ def test_no_emojis_in_code():
 
     project_root = Path(__file__).parent.parent
     python_files = list(project_root.glob("gguf_converter/**/*.py"))
+    python_files.extend(project_root.glob("scripts/**/*.py"))
 
     violations = []
 

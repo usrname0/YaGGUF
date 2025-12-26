@@ -24,6 +24,36 @@ from pathlib import Path
 from urllib.request import urlopen
 
 
+class Colors:
+    """ANSI color codes for terminal output"""
+    BLUE = '\033[94m'
+    GREEN = '\033[92m'
+    YELLOW = '\033[93m'
+    RED = '\033[91m'
+    BOLD = '\033[1m'
+    RESET = '\033[0m'
+
+    @staticmethod
+    def blue(text):
+        return f"{Colors.BLUE}{text}{Colors.RESET}"
+
+    @staticmethod
+    def green(text):
+        return f"{Colors.GREEN}{text}{Colors.RESET}"
+
+    @staticmethod
+    def yellow(text):
+        return f"{Colors.YELLOW}{text}{Colors.RESET}"
+
+    @staticmethod
+    def red(text):
+        return f"{Colors.RED}{text}{Colors.RESET}"
+
+    @staticmethod
+    def bold(text):
+        return f"{Colors.BOLD}{text}{Colors.RESET}"
+
+
 def get_project_root():
     """Get project root directory"""
     return Path(__file__).parent.parent
@@ -82,8 +112,60 @@ def get_latest_llama_version():
             data = json.loads(response.read().decode())
             return data['tag_name']
     except Exception as e:
-        print(f"Warning: Could not fetch latest llama.cpp version: {e}")
+        print(Colors.yellow(f"Warning: Could not fetch latest llama.cpp version: {e}"))
         return None
+
+
+def verify_llama_version_exists(version_tag):
+    """
+    Verify that a specific llama.cpp version tag exists on GitHub
+
+    Args:
+        version_tag: Version tag to check (e.g., "b7600")
+
+    Returns:
+        True if the tag exists, False otherwise
+    """
+    try:
+        # Try to fetch the specific tag from GitHub API
+        api_url = f"https://api.github.com/repos/ggml-org/llama.cpp/git/refs/tags/{version_tag}"
+        with urlopen(api_url) as response:
+            if response.status == 200:
+                return True
+            return False
+    except Exception:
+        # If we get a 404 or any other error, the tag doesn't exist
+        return False
+
+
+def compare_llama_versions(version1, version2):
+    """
+    Compare two llama.cpp version strings (e.g., "b7600" vs "b7500")
+
+    Args:
+        version1: First version string
+        version2: Second version string
+
+    Returns:
+        -1 if version1 < version2 (going backwards)
+        0 if version1 == version2
+        1 if version1 > version2 (going forward)
+        None if versions can't be compared
+    """
+    try:
+        # Extract numeric part after 'b' prefix
+        if version1.startswith('b') and version2.startswith('b'):
+            num1 = int(version1[1:])
+            num2 = int(version2[1:])
+            if num1 < num2:
+                return -1
+            elif num1 == num2:
+                return 0
+            else:
+                return 1
+    except (ValueError, AttributeError):
+        pass
+    return None
 
 
 def increment_version(version_str):
@@ -111,7 +193,7 @@ def update_llama_version(new_llama_version):
     )
 
     binary_manager.write_text(new_content)
-    print(f"✓ Updated LLAMA_CPP_VERSION to {new_llama_version}")
+    print(Colors.green(f"Updated LLAMA_CPP_VERSION to {new_llama_version}"))
 
 
 def update_yaguff_version(new_version):
@@ -127,7 +209,7 @@ def update_yaguff_version(new_version):
     )
 
     init_file.write_text(new_content)
-    print(f"✓ Updated YaGUFF version to {new_version}")
+    print(Colors.green(f"Updated YaGUFF version to {new_version}"))
 
 
 def git_commit_and_tag(yaguff_version, llama_version):
@@ -147,7 +229,7 @@ def git_commit_and_tag(yaguff_version, llama_version):
             check=True,
             cwd=get_project_root()
         )
-        print(f"✓ Created commit: {commit_msg}")
+        print(Colors.green(f"Created commit: {commit_msg}"))
 
         # Create tag
         tag_name = f"v{yaguff_version}"
@@ -156,12 +238,12 @@ def git_commit_and_tag(yaguff_version, llama_version):
             check=True,
             cwd=get_project_root()
         )
-        print(f"✓ Created tag: {tag_name}")
+        print(Colors.green(f"Created tag: {tag_name}"))
 
         return tag_name
 
     except subprocess.CalledProcessError as e:
-        print(f"✗ Git operation failed: {e}")
+        print(Colors.red(f"Git operation failed: {e}"))
         return None
 
 
@@ -180,7 +262,7 @@ def git_push(tag_name, branch_name):
             check=True,
             cwd=get_project_root()
         )
-        print(f"✓ Pushed commits to origin/{branch_name}")
+        print(Colors.green(f"Pushed commits to origin/{branch_name}"))
 
         # Push tag
         subprocess.run(
@@ -188,10 +270,10 @@ def git_push(tag_name, branch_name):
             check=True,
             cwd=get_project_root()
         )
-        print(f"✓ Pushed tag {tag_name}")
+        print(Colors.green(f"Pushed tag {tag_name}"))
 
     except subprocess.CalledProcessError as e:
-        print(f"✗ Push failed: {e}")
+        print(Colors.red(f"Push failed: {e}"))
 
 
 def main():
@@ -235,10 +317,10 @@ Examples:
     current_branch = get_current_branch()
     if current_branch:
         print("=" * 50)
-        print(f"Current branch: {current_branch}")
+        print(f"Current branch: {Colors.blue(current_branch)}")
         print("=" * 50)
     else:
-        print("Warning: Could not detect git branch")
+        print(Colors.yellow("Warning: Could not detect git branch"))
 
     # Get current versions
     current_yaguff = get_current_yaguff_version()
@@ -270,13 +352,39 @@ Examples:
     print(f"New llama.cpp version: {new_llama}")
     print()
 
+    # Verify the llama.cpp version exists on GitHub
+    print("Verifying llama.cpp version exists on GitHub...")
+    version_exists = verify_llama_version_exists(new_llama)
+    if not version_exists:
+        print(Colors.red(f"ERROR: llama.cpp version '{new_llama}' does not exist on GitHub!"))
+        print(Colors.red(f"       Please check https://github.com/ggml-org/llama.cpp/tags"))
+        print(Colors.red(f"       or run without arguments to see the latest version."))
+        sys.exit(1)
+    else:
+        print(Colors.green(f"Version {new_llama} verified on GitHub"))
+
+    # Check if going backwards in llama.cpp version
+    version_comparison = compare_llama_versions(new_llama, current_llama)
+    if version_comparison == -1:
+        print()
+        print(Colors.red("=" * 50))
+        print(Colors.red("WARNING: Going backwards in llama.cpp version!"))
+        print(Colors.red(f"         Current: {current_llama}"))
+        print(Colors.red(f"         New:     {new_llama}"))
+        print(Colors.red("=" * 50))
+        print()
+    elif version_comparison == 0:
+        print(Colors.yellow(f"Note: Keeping llama.cpp version at {new_llama}"))
+
+    print()
+
     if args.dry_run:
-        print("=" * 50)
-        print("DRY RUN - No changes made")
-        print("=" * 50)
+        print(Colors.yellow("=" * 50))
+        print(Colors.yellow("DRY RUN - No changes made"))
+        print(Colors.yellow("=" * 50))
         if latest_llama and new_llama != latest_llama:
-            print(f"\nNote: Latest llama.cpp version is {latest_llama}")
-            print(f"      You specified {new_llama}")
+            print(Colors.yellow(f"\nNote: Latest llama.cpp version is {latest_llama}"))
+            print(Colors.yellow(f"      You specified {new_llama}"))
         print(f"\nWould update binary_manager.py: {current_llama} -> {new_llama}")
         print(f"Would update __init__.py: {current_yaguff} -> {new_yaguff}")
         print(f"Would create commit: 'Bump to v{new_yaguff} (llama.cpp {new_llama})'")
@@ -305,17 +413,17 @@ Examples:
             git_push(tag_name, current_branch)
 
     print()
-    print("=" * 50)
-    print("Version bump complete!")
-    print("=" * 50)
+    print(Colors.green("=" * 50))
+    print(Colors.green("Version bump complete!"))
+    print(Colors.green("=" * 50))
     print()
-    print(f"YaGUFF version: {current_yaguff} -> {new_yaguff}")
-    print(f"llama.cpp version: {current_llama} -> {new_llama}")
-    print(f"Git tag: v{new_yaguff}")
+    print(f"YaGUFF version: {current_yaguff} -> {Colors.bold(new_yaguff)}")
+    print(f"llama.cpp version: {current_llama} -> {Colors.bold(new_llama)}")
+    print(f"Git tag: {Colors.bold(f'v{new_yaguff}')}")
     print()
 
     if not args.push:
-        print("To push to remote, run:")
+        print(Colors.yellow("To push to remote, run:"))
         print(f"  git push origin {current_branch}")
         print(f"  git push origin v{new_yaguff}")
 
