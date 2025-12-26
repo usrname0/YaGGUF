@@ -2,6 +2,11 @@
 # Minimal setup script for Linux/macOS
 # This script is called by run_gui.sh and should not be run directly.
 
+# Ensure all shell scripts have executable permissions
+# This handles cases where executable bit was lost (ZIP download, git config, etc.)
+chmod +x run_gui.sh 2>/dev/null || true
+chmod +x scripts/*.sh 2>/dev/null || true
+
 # Check if Python is installed
 if ! command -v python3 &> /dev/null; then
     echo "ERROR: Python 3 is not installed or not in PATH. Please install Python 3.8 or higher."
