@@ -26,7 +26,7 @@ def render_llama_cpp_tab(converter: Any, config: Dict[str, Any]) -> None:
         st.session_state.custom_llama_cpp_repo_input = st.session_state.pending_repo_folder
         del st.session_state.pending_repo_folder
 
-    st.header("llama.cpp Binaries")
+    st.header("llama.cpp Custom Install")
 
     st.markdown("""
     YaGUFF automatically downloads pre-compiled [llama.cpp](https://github.com/ggml-org/llama.cpp) binaries that use the CPU (good for most cases).
@@ -251,7 +251,7 @@ def render_llama_cpp_tab(converter: Any, config: Dict[str, Any]) -> None:
     # Conversion Script Settings Section
     col_script1, col_script2 = st.columns(2)
     with col_script1:
-        st.subheader("Conversion Script Settings")
+        st.subheader("Local/Custom Conversion Script Settings")
 
         # Auto-save callback for use_custom_conversion_script
         def save_use_custom_conversion_script():

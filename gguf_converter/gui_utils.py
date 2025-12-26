@@ -208,36 +208,28 @@ def get_current_version() -> str:
 
 def check_git_updates_available() -> Dict[str, Any]:
     """
-    Check if git updates are available from remote based on version tags
+    Check if updates are available from GitHub Releases
 
     Returns:
         dict: Status info with keys 'status', 'message', 'latest_version'
     """
     try:
-        # Fetch tags from remote
-        subprocess.run(
-            ["git", "fetch", "--tags"],
-            capture_output=True,
-            text=True,
-            timeout=10
-        )
+        import json
+        import urllib.request
 
         # Get current version
         current_version = get_current_version()
 
-        # Get all tags sorted by version
-        result = subprocess.run(
-            ["git", "tag", "-l", "--sort=-version:refname"],
-            capture_output=True,
-            text=True,
-            timeout=5
-        )
+        # Check GitHub Releases API for latest release
+        url = "https://api.github.com/repos/usrname0/YaGUFF/releases/latest"
+        req = urllib.request.Request(url)
+        req.add_header('Accept', 'application/vnd.github.v3+json')
 
-        if result.returncode == 0 and result.stdout.strip():
-            tags = result.stdout.strip().split('\n')
-            if tags:
-                latest_tag = tags[0]  # First tag is the latest
+        with urllib.request.urlopen(req, timeout=10) as response:
+            release_data = json.loads(response.read().decode())
+            latest_tag = release_data.get('tag_name', '')
 
+            if latest_tag:
                 # Compare versions (remove 'v' prefix if present)
                 current = current_version.lstrip('v')
                 latest = latest_tag.lstrip('v')
@@ -257,15 +249,9 @@ def check_git_updates_available() -> Dict[str, Any]:
             else:
                 return {
                     "status": "unknown",
-                    "message": "No version tags found in repository",
+                    "message": "No releases found",
                     "latest_version": None
                 }
-        else:
-            return {
-                "status": "unknown",
-                "message": "Could not fetch version tags",
-                "latest_version": None
-            }
     except Exception:
         return {
             "status": "unknown",

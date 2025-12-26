@@ -99,8 +99,8 @@ The GUI will automatically open in your browser on a free port like: `http://loc
 
 ## Requirements
 
-- Python 3.8 or higher
-- Git 
+- [Python](https://www.python.org/downloads/) 3.8 or higher
+- [Git](https://git-scm.com/downloads) 2.20 or higher 
 
 ## Troubleshooting
 

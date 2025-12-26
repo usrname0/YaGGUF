@@ -91,10 +91,6 @@ def render_update_tab(converter: Any, config: Dict[str, Any]) -> None:
                     os._exit(0)
                 else:
                     st.error(f"Restart script not found: {restart_script}")
-            elif update_status["status"] == "up_to_date":
-                st.info("Already on the latest version")
-            else:
-                st.error("Could not check for updates. Please check your internet connection and git configuration.")
     with col2:
         st.subheader("YaGUFF Version Information")
         current_version = get_current_version()
