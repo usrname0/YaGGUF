@@ -64,8 +64,8 @@ All quantization types from llama.cpp are supported. Choose based on your size/q
 # Clone the repository
     git clone https://github.com/usrname0/YaGUFF.git
     cd YaGUFF
-# Run the launcher script for your platform (runs a setup script if no venv detected):
-    `run_gui.bat`
+# Run the launcher script for Windows (runs a setup script if no venv detected):
+    run_gui.bat
 ```
 
 ## Installation - Linux
@@ -76,12 +76,12 @@ All quantization types from llama.cpp are supported. Choose based on your size/q
     cd YaGUFF
 
 # If you want to select folders via the gui install tkinter (optional):
-- Ubuntu/Debian: `sudo apt install python3-tk`
-- Fedora/RHEL: `sudo dnf install python3-tkinter`
-- Arch: `sudo pacman -S tk`
+    sudo apt install python3-tk      # Ubuntu/Debian
+    sudo dnf install python3-tkinter # Fedora/RHEL
+    sudo pacman -S tk                # Arch
 
-# Then run the script:
-    `./run_gui.sh`
+# Run the launcher script for Linux (runs a setup script if no venv detected):
+    ./run_gui.sh
 ```
 
 ## Usage
@@ -90,10 +90,7 @@ All quantization types from llama.cpp are supported. Choose based on your size/q
 - Double-click `run_gui.bat`
 
 **Linux:**
-
-```bash
-./run_gui.sh
-```
+- Use terminal `./run_gui.sh`
 
 The GUI will automatically open in your browser on a free port like: `http://localhost:8501`
 
