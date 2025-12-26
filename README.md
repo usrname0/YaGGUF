@@ -65,7 +65,7 @@ All quantization types from llama.cpp are supported. Choose based on your size/q
     git clone https://github.com/usrname0/YaGUFF.git
     cd YaGUFF
 # Run the launcher script for your platform (runs a setup script if no venv detected):
-- Windows: `run_gui.bat`
+    `run_gui.bat`
 ```
 
 ## Installation - Linux
@@ -81,7 +81,7 @@ All quantization types from llama.cpp are supported. Choose based on your size/q
 - Arch: `sudo pacman -S tk`
 
 # Then run the script:
-- Linux/Mac: `./run_gui.sh`
+    `./run_gui.sh`
 ```
 
 ## Usage
