@@ -269,7 +269,7 @@ def render_llama_cpp_tab(converter: Any, config: Dict[str, Any]) -> None:
         use_custom_conversion_script = st.checkbox(
             "Use custom llama.cpp repository",
             value=config.get("use_custom_conversion_script", False),
-            help="Use a custom llama.cpp repository for model conversion. Leave path blank to use YaGUFF's auto-cloned repository.",
+            help="Use a custom llama.cpp repository for model conversion. Leave path blank to use YaGUFF's repository.",
             key="use_custom_conversion_script_checkbox",
             on_change=save_use_custom_conversion_script
         )
@@ -300,7 +300,7 @@ def render_llama_cpp_tab(converter: Any, config: Dict[str, Any]) -> None:
             # Only set value if key not in session state (prevents warning)
             repo_path_kwargs = {
                 "label": "llama.cpp repository path",
-                "placeholder": "/path/to/llama.cpp or leave blank for auto-cloned repo",
+                "placeholder": "/path/to/llama.cpp or leave blank for default repo",
                 "help": "Path to llama.cpp repository containing convert_hf_to_gguf.py. Leave blank to use YaGUFF's auto-cloned repository.",
                 "key": "custom_llama_cpp_repo_input",
                 "label_visibility": "collapsed",

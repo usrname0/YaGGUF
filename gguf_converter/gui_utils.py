@@ -35,7 +35,7 @@ def get_default_config() -> Dict[str, Any]:
         "verbose": True,
         "use_imatrix": True,
         "nthreads": None,  # None = auto-detect
-        "ignore_imatrix_warnings": False,  # Allow IQ quants without imatrix (advanced users only)
+        "ignore_imatrix_warnings": False,  # Allow IQ quants without imatrix
 
         # Imatrix mode (on Convert & Quantize tab)
         "imatrix_mode": "generate",  # "generate", "generate_custom", or "reuse"

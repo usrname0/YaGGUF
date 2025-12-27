@@ -142,7 +142,7 @@ def main() -> None:
             max_value=max_workers,
             value=int(config.get("nthreads") or default_threads),
             step=1,
-            help=f"Number of threads for llama.cpp (CPU cores: {max_workers}, default: {default_threads} to keep system responsive)",
+            help=f"Number of threads for llama.cpp (logical processors: {max_workers}, default: {default_threads} to keep system responsive)",
             key="nthreads_input",
             on_change=save_nthreads
         )

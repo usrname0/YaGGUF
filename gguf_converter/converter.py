@@ -433,7 +433,7 @@ class GGUFConverter:
             error_msg = self._clean_llama_error(raw_error)
 
             # Check if imatrix was provided but llama.cpp still complains about missing imatrix
-            # This indicates model incompatibility, not user error
+            # This indicates likely model incompatibility
             if "without an importance matrix" in raw_error and imatrix_path:
                 raise RuntimeError(
                     f"Quantization failed: Model incompatibility detected.\n\n"
@@ -686,7 +686,7 @@ class GGUFConverter:
             imatrix_chunks: Number of chunks to process for imatrix (None = all)
             imatrix_collect_output: Collect output.weight tensor in imatrix (required for IQ quantizations)
             imatrix_calibration_file: Path to calibration file for imatrix generation (None = use default)
-            ignore_imatrix_warnings: Allow IQ quants without imatrix (advanced users, may cause degraded quality)
+            ignore_imatrix_warnings: Allow IQ quants without imatrix (may cause degraded quality or failure)
             allow_requantize: Allow quantizing already-quantized models (may reduce quality)
             leave_output_tensor: Keep output.weight unquantized for better quality (increases model size)
             pure_quantization: Disable k-quant mixtures, quantize all tensors uniformly
