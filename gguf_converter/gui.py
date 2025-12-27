@@ -171,8 +171,8 @@ def main() -> None:
         "Imatrix Settings",
         "Imatrix Statistics",
         "HuggingFace Downloader",
-        "llama.cpp",
         "Info",
+        "llama.cpp",
         "Update"
     ])
 
@@ -189,10 +189,10 @@ def main() -> None:
         render_downloader_tab(converter, config)
 
     with tab5:
-        render_llama_cpp_tab(converter, config)
+        render_info_tab(converter, config)
 
     with tab6:
-        render_info_tab(converter, config)
+        render_llama_cpp_tab(converter, config)
 
     with tab7:
         render_update_tab(converter, config)

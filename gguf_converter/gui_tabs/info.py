@@ -81,6 +81,6 @@ def render_info_tab(converter: Any, config: Dict[str, Any]) -> None:
     - Need omega deluxe quality? Use **Q8_0** or **F16**
     - Want smallest size? Use IQ3_M or IQ2_M with importance matrix
 
-    Quantization is done by llama.cpp.
+    Quantization is done by [llama.cpp](https://github.com/ggml-org/llama.cpp).
 
     """)

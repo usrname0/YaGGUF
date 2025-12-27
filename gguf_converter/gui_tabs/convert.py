@@ -278,7 +278,7 @@ def render_convert_tab(
             - Some I Quants (IQ3_XXS, IQ2_XXS, IQ2_XS, IQ2_S, IQ1_M, IQ1_S) require an importance matrix to be generated.
             Enable "Use importance matrix" above to unlock these quantization types.
 
-            - Disable "Imatrix warnings" in settings to try anyway.
+            - Disable "Imatrix warnings" in settings to try without an imatrix anyway.
             """)
 
         # Show imatrix options when enabled

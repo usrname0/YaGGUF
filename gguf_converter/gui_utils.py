@@ -418,7 +418,7 @@ def get_binary_version_from_path(binary_path: Optional[Path]) -> Optional[str]:
             [str(binary_path), "--version"],
             capture_output=True,
             text=True,
-            timeout=5
+            timeout=10
         )
 
         if result.returncode == 0:

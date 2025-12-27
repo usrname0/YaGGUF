@@ -29,9 +29,9 @@ def render_llama_cpp_tab(converter: Any, config: Dict[str, Any]) -> None:
     st.header("llama.cpp Custom Install")
 
     st.markdown("""
-    YaGUFF automatically downloads pre-compiled [llama.cpp](https://github.com/ggml-org/llama.cpp) binaries that use the CPU (good for most cases).
-    YaGUFF also automatically downloads a [llama.cpp](https://github.com/ggml-org/llama.cpp) repo for model conversion.
-    You can opt to use other llama.cpp resources below.
+    YaGUFF automatically downloads a repo for model conversion scripts and CPU binaries (good for most cases).  
+    You can opt to use specific [llama.cpp](https://github.com/ggml-org/llama.cpp) resources below.  
+    You can easily update to the newest versions (or roll back) on the Update tab.  
     """)
 
     # Local/Custom Binary Settings Section
@@ -154,7 +154,7 @@ def render_llama_cpp_tab(converter: Any, config: Dict[str, Any]) -> None:
     with col_bin2:
         col_header, col_refresh = st.columns([4, 1])
         with col_header:
-            st.subheader("Local/Custom Binary Detection")
+            st.subheader("Binary Detection")
         with col_refresh:
             st.markdown("<br>", unsafe_allow_html=True)  # Align with header
             if st.button("Refresh", key="refresh_custom_binary_detection", use_container_width=True, disabled=not config.get("use_custom_binaries", False)):
@@ -205,15 +205,18 @@ def render_llama_cpp_tab(converter: Any, config: Dict[str, Any]) -> None:
 
                 # Get version from cache or fetch it
                 if cache_key not in st.session_state.custom_binary_versions:
-                    system_version = get_binary_version_from_path(imatrix_path)
-                    st.session_state.custom_binary_versions[cache_key] = system_version
+                    with st.spinner("Detecting version..."):
+                        system_version = get_binary_version_from_path(imatrix_path)
+                    # Only cache successful detections (not None)
+                    if system_version:
+                        st.session_state.custom_binary_versions[cache_key] = system_version
                 else:
                     system_version = st.session_state.custom_binary_versions[cache_key]
 
                 if system_version:
                     st.code(system_version, language=None)
                 else:
-                    st.info("Version: Unable to detect")
+                    st.info("Version: Unable to detect (click Refresh to retry)")
 
                 # Show binary paths
                 st.markdown(f"- `llama-quantize`: {quantize_path.as_posix()}")
@@ -230,13 +233,18 @@ def render_llama_cpp_tab(converter: Any, config: Dict[str, Any]) -> None:
 
                     # Get version from cache or fetch it
                     if cache_key not in st.session_state.custom_binary_versions:
-                        imatrix_version = get_binary_version_from_path(imatrix_path)
-                        st.session_state.custom_binary_versions[cache_key] = imatrix_version
+                        with st.spinner("Detecting version..."):
+                            imatrix_version = get_binary_version_from_path(imatrix_path)
+                        # Only cache successful detections (not None)
+                        if imatrix_version:
+                            st.session_state.custom_binary_versions[cache_key] = imatrix_version
                     else:
                         imatrix_version = st.session_state.custom_binary_versions[cache_key]
 
                     if imatrix_version:
                         st.code(imatrix_version, language=None)
+                    else:
+                        st.info("Version: Unable to detect (click Refresh to retry)")
                 else:
                     st.markdown("- `llama-imatrix`: Not found")
             else:
