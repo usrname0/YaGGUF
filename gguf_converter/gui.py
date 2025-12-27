@@ -85,7 +85,6 @@ def main() -> None:
     if 'pending_reset_defaults' in st.session_state:
         defaults = get_default_config()
         st.session_state.verbose_checkbox = defaults["verbose"]
-        st.session_state.incompatibility_warnings_checkbox = not defaults["ignore_incompatibilities"]
         st.session_state.imatrix_warnings_checkbox = not defaults["ignore_imatrix_warnings"]
         del st.session_state.pending_reset_defaults
 
@@ -110,23 +109,6 @@ def main() -> None:
         if "verbose_checkbox" not in st.session_state:
             verbose_kwargs["value"] = config.get("verbose", False)
         verbose = st.checkbox(**verbose_kwargs)  # type: ignore[arg-type]
-
-        def save_incompatibility_warnings():
-            config["ignore_incompatibilities"] = not st.session_state.incompatibility_warnings_checkbox
-            save_config(config)
-
-        # Only set value if not already in session state (prevents warning)
-        incomp_kwargs = {
-            "label": "Incompatibility warnings",
-            "help": "Detect and prevent incompatible quantizations (e.g., IQ quants on Qwen models). Uncheck to override warnings (advanced users only).",
-            "key": "incompatibility_warnings_checkbox",
-            "on_change": save_incompatibility_warnings
-        }
-        if "incompatibility_warnings_checkbox" not in st.session_state:
-            incomp_kwargs["value"] = not config.get("ignore_incompatibilities", False)
-        incompatibility_warnings_enabled = st.checkbox(**incomp_kwargs)  # type: ignore[arg-type]
-
-        ignore_incompatibilities = not incompatibility_warnings_enabled
 
         def save_imatrix_warnings():
             config["ignore_imatrix_warnings"] = not st.session_state.imatrix_warnings_checkbox
@@ -194,7 +176,7 @@ def main() -> None:
     ])
 
     with tab1:
-        render_convert_tab(converter, config, verbose, nthreads, ignore_incompatibilities, ignore_imatrix_warnings)
+        render_convert_tab(converter, config, verbose, nthreads, ignore_imatrix_warnings)
 
     with tab2:
         render_imatrix_settings_tab(converter, config)

@@ -35,7 +35,6 @@ def get_default_config() -> Dict[str, Any]:
         "verbose": True,
         "use_imatrix": True,
         "nthreads": None,  # None = auto-detect
-        "ignore_incompatibilities": False,  # Allow incompatible quantizations (advanced users only)
         "ignore_imatrix_warnings": False,  # Allow IQ quants without imatrix (advanced users only)
 
         # Imatrix mode (on Convert & Quantize tab)
@@ -77,9 +76,6 @@ def get_default_config() -> Dict[str, Any]:
 
         # Saved states for unquantized format checkboxes (before they get disabled as intermediate)
         "unquantized_saved_states": {},
-
-        # Saved states for quantizations disabled due to incompatibility
-        "incompatible_saved_states": {},
 
         # Download tab
         "repo_id": "",

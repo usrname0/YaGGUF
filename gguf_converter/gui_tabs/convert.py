@@ -17,7 +17,6 @@ def render_convert_tab(
     config: Dict[str, Any],
     verbose: bool,
     nthreads: Optional[int],
-    ignore_incompatibilities: bool,
     ignore_imatrix_warnings: bool
 ) -> None:
     """Render the Convert & Quantize tab"""
@@ -134,28 +133,6 @@ def render_convert_tab(
         model_path_clean = strip_quotes(model_path)
         output_dir_clean = strip_quotes(output_dir)
 
-        # Check for model incompatibilities
-        incompatible_quants = []
-        if model_path_clean and Path(model_path_clean).exists() and Path(model_path_clean).is_dir():
-            config_json = Path(model_path_clean) / "config.json"
-            if config_json.exists() and not ignore_incompatibilities:
-                try:
-                    incompat_info = converter.get_incompatibility_info(model_path_clean)
-                    if incompat_info["has_incompatibilities"]:
-                        incompatible_quants = incompat_info["incompatible_quants"]
-
-                        # Display warning banner
-                        st.info(f"""
-**Some quants are disabled due to:** {', '.join(incompat_info['types'])}
-
-{chr(10).join('- ' + reason for reason in incompat_info['reasons'])}
-
-- Disable "Incompatibility warnings" in settings to try anyway.
-                        """)
-                except (ValueError, OSError, KeyError, UnicodeDecodeError):
-                    # Ignore config parsing errors - compatibility check is optional metadata display
-                    pass
-
         # Advanced quantization options
         with st.expander("Advanced Quantization Options"):
             st.markdown("These options affect how llama.cpp quantizes your model. Most users won't need these.")
@@ -225,46 +202,8 @@ def render_convert_tab(
                 on_change=save_token_embedding_type
             )
 
-        # Save/restore quant selections when incompatibility status changes
-        if 'previous_incompatible_quants' not in st.session_state:
-            st.session_state.previous_incompatible_quants = []
-
-        if "incompatible_saved_states" not in config:
-            config["incompatible_saved_states"] = {}
         if "other_quants" not in config:
             config["other_quants"] = {}
-
-        # Initialize IQ checkbox states
-        if "iq_checkbox_states" not in st.session_state:
-            st.session_state.iq_checkbox_states = config.get("other_quants", {}).copy()
-
-        current_incompatible = set(incompatible_quants)
-        previous_incompatible = set(st.session_state.previous_incompatible_quants)
-
-        if current_incompatible != previous_incompatible:
-            newly_incompatible = current_incompatible - previous_incompatible
-            newly_compatible = previous_incompatible - current_incompatible
-
-            # Save state before disabling newly incompatible quants
-            for qtype in newly_incompatible:
-                current_state = config["other_quants"].get(qtype, False)
-                config["incompatible_saved_states"][qtype] = current_state
-                config["other_quants"][qtype] = False
-                if qtype in st.session_state.iq_checkbox_states:
-                    st.session_state.iq_checkbox_states[qtype] = False
-
-            # Restore state for newly compatible quants
-            for qtype in newly_compatible:
-                if qtype in config["incompatible_saved_states"]:
-                    restored_value = config["incompatible_saved_states"][qtype]
-                    config["other_quants"][qtype] = restored_value
-                    st.session_state.iq_checkbox_states[qtype] = restored_value
-                    del config["incompatible_saved_states"][qtype]
-
-            st.session_state.previous_incompatible_quants = incompatible_quants.copy()
-
-            if newly_incompatible or newly_compatible:
-                save_config(config)
 
         intermediate_type = config.get("intermediate_type", "F16").upper()
 
@@ -575,25 +514,15 @@ def render_convert_tab(
         trad_checkboxes = {}
         for idx, (qtype, tooltip) in enumerate(trad_quants.items()):
             with trad_cols[idx % 3]:
-                is_incompatible = qtype in incompatible_quants
-
-                if is_incompatible:
-                    checkbox_value = False
-                else:
-                    checkbox_value = config.get("other_quants", {}).get(qtype, qtype == "Q8_0" if qtype == "Q8_0" else False)
-                help_text = tooltip
-                if is_incompatible:
-                    help_text += " (Incompatible with this model - see info banner above)"
-
-                widget_key = f"trad_{qtype}_{is_incompatible}"
+                checkbox_value = config.get("other_quants", {}).get(qtype, qtype == "Q8_0" if qtype == "Q8_0" else False)
+                widget_key = f"trad_{qtype}"
 
                 trad_checkboxes[qtype] = st.checkbox(
                     qtype,
                     value=checkbox_value,
-                    help=help_text,
+                    help=tooltip,
                     key=widget_key,
-                    disabled=is_incompatible,
-                    on_change=save_trad_selection(qtype, widget_key) if not is_incompatible else None
+                    on_change=save_trad_selection(qtype, widget_key)
                 )
 
         def save_quant_selection(qtype, widget_key):
@@ -619,25 +548,15 @@ def render_convert_tab(
         k_cols = st.columns(3)
         for idx, (qtype, tooltip) in enumerate(k_quants.items()):
             with k_cols[idx % 3]:
-                is_incompatible = qtype in incompatible_quants
-
-                if is_incompatible:
-                    checkbox_value = False
-                else:
-                    checkbox_value = config.get("other_quants", {}).get(qtype, qtype == "Q4_K_M")
-                help_text = tooltip
-                if is_incompatible:
-                    help_text += " (Incompatible with this model - see info banner above)"
-
-                widget_key = f"k_{qtype}_{is_incompatible}"
+                checkbox_value = config.get("other_quants", {}).get(qtype, qtype == "Q4_K_M")
+                widget_key = f"k_{qtype}"
 
                 k_checkboxes[qtype] = st.checkbox(
                     qtype,
                     value=checkbox_value,
-                    help=help_text,
+                    help=tooltip,
                     key=widget_key,
-                    disabled=is_incompatible,
-                    on_change=save_quant_selection(qtype, widget_key) if not is_incompatible else None
+                    on_change=save_quant_selection(qtype, widget_key)
                 )
 
         # I Quants
@@ -661,33 +580,16 @@ def render_convert_tab(
         i_cols = st.columns(3)
         for idx, (qtype, tooltip) in enumerate(i_quants.items()):
             with i_cols[idx % 3]:
-                imatrix_disabled = (qtype in IMATRIX_REQUIRED_TYPES) and not use_imatrix and not ignore_imatrix_warnings
-                incompatible_disabled = qtype in incompatible_quants
-                is_disabled = imatrix_disabled or incompatible_disabled
-                widget_key = f"i_{qtype}_{use_imatrix}_{incompatible_disabled}_{ignore_imatrix_warnings}"
-                prev_key = f"i_{qtype}_{not use_imatrix}_{incompatible_disabled}_{not ignore_imatrix_warnings}"
+                is_disabled = (qtype in IMATRIX_REQUIRED_TYPES) and not use_imatrix and not ignore_imatrix_warnings
+                widget_key = f"i_{qtype}_{use_imatrix}_{ignore_imatrix_warnings}"
 
-                # Save previous state when transitioning enabled→disabled
-                prev_was_enabled = (qtype not in IMATRIX_REQUIRED_TYPES) or (not use_imatrix) or ignore_imatrix_warnings
-                if prev_key in st.session_state and prev_was_enabled:
-                    st.session_state.iq_checkbox_states[qtype] = st.session_state[prev_key]
                 if is_disabled:
                     checkbox_value = False
                 else:
-                    checkbox_value = st.session_state.iq_checkbox_states.get(qtype, False)
-
-                def save_iq_selection(qt, key):
-                    def callback():
-                        val = st.session_state[key]
-                        st.session_state.iq_checkbox_states[qt] = val
-                        config["other_quants"][qt] = val
-                        save_config(config)
-                    return callback
+                    checkbox_value = config.get("other_quants", {}).get(qtype, False)
 
                 help_text = tooltip
-                if incompatible_disabled:
-                    help_text += " (Incompatible with this model - see info banner above)"
-                elif imatrix_disabled:
+                if is_disabled:
                     help_text += " (Requires importance matrix)"
 
                 i_checkboxes[qtype] = st.checkbox(
@@ -696,7 +598,7 @@ def render_convert_tab(
                     help=help_text,
                     key=widget_key,
                     disabled=is_disabled,
-                    on_change=save_iq_selection(qtype, widget_key) if not is_disabled else None
+                    on_change=save_quant_selection(qtype, widget_key) if not is_disabled else None
                 )
 
     # Collect selected quantization types
@@ -855,7 +757,6 @@ def render_convert_tab(
                         imatrix_calibration_file=calibration_file_path,
                         imatrix_output_name=imatrix_output_filename,
                         imatrix_ngl=use_ngl,
-                        ignore_incompatibilities=ignore_incompatibilities,
                         ignore_imatrix_warnings=ignore_imatrix_warnings,
                         allow_requantize=allow_requantize,
                         leave_output_tensor=leave_output_tensor,
@@ -905,6 +806,7 @@ def render_convert_tab(
                 # Show in Streamlit UI
                 st.error(f"Error: {e}")
                 if verbose:
+                    st.markdown("**Verbose output:**")
                     st.exception(e)
 
                 # ALSO print to terminal so user sees it

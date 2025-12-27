@@ -48,30 +48,62 @@ class GGUFConverter:
         "F16", "BF16", "F32",
     ]
 
-    # Model incompatibility registry
-    MODEL_INCOMPATIBILITIES = {
-        "tied_embeddings": {
-            "description": "Models with tied embeddings (shared input/output embeddings)",
-            "detection": {
-                "config_flag": "tie_word_embeddings",
-                "model_families": ["Qwen", "QWen", "qwen"],
-            },
-            "incompatible_quants": [
-                # IQ quantizations require separate output.weight tensor
-                "IQ1_S", "IQ1_M",
-                "IQ2_XXS", "IQ2_XS", "IQ2_S", "IQ2_M",
-                "IQ3_XXS", "IQ3_XS", "IQ3_S", "IQ3_M",
-                "IQ4_XS", "IQ4_NL",
-                "Q2_K_S",  # Also requires output.weight
-            ],
-            "alternatives": [
-                "Q3_K_M or Q3_K_S (similar quality to IQ3)",
-                "Q2_K (not Q2_K_S) for smaller files",
-                "Q4_K_M (best quality/size balance)",
-            ],
-            "reason": "These quantizations require a separate output.weight tensor. Models with tied embeddings share the same tensor for input and output, making these quantizations incompatible.",
-        },
-    }
+    @staticmethod
+    def _clean_llama_error(error_output: str) -> str:
+        """
+        Extract relevant error information from llama.cpp output
+
+        Args:
+            error_output: Raw stderr from llama.cpp command
+
+        Returns:
+            Cleaned error message with only relevant information
+        """
+        lines = error_output.split('\n')
+        relevant_lines = []
+        in_error_banner = False
+
+        for line in lines:
+            # Skip metadata loader lines
+            if 'llama_model_loader: - kv' in line or 'llama_model_loader: - type' in line:
+                continue
+
+            # Keep error banners (lines with ===)
+            if '===' in line:
+                in_error_banner = True
+                continue
+
+            # Keep lines in error banners
+            if in_error_banner:
+                if line.strip():
+                    relevant_lines.append(line)
+                else:
+                    in_error_banner = False
+                continue
+
+            # Keep important error lines
+            if any(keyword in line for keyword in [
+                'failed to',
+                'error:',
+                'Error:',
+                'ERROR:',
+                'Missing importance matrix',
+                'Please do not use',
+                'bailing out',
+                'CUDA error',
+                'out of memory',
+                'cannot',
+                'unsupported',
+                'invalid'
+            ]):
+                relevant_lines.append(line.strip())
+
+        if relevant_lines:
+            # Join with double newlines for better readability in error messages
+            return '\n\n'.join(relevant_lines)
+
+        # Fallback to original if we couldn't extract anything useful
+        return error_output
 
     def __init__(self, custom_binaries_folder=None, custom_llama_cpp_repo=None):
         """
@@ -191,8 +223,9 @@ class GGUFConverter:
         if result.returncode != 0:
             # Combine stdout and stderr since errors can be in either
             error_output = (result.stderr or '') + (result.stdout or '')
-            error_msg = error_output.strip() if error_output.strip() else 'Unknown error'
-            raise RuntimeError(f"Conversion failed:\n{error_msg}")
+            raw_error = error_output.strip() if error_output.strip() else 'Unknown error'
+            error_msg = self._clean_llama_error(raw_error)
+            raise RuntimeError(f"Conversion failed:\n\n{error_msg}")
 
         if verbose and result.stdout:
             print(result.stdout)
@@ -233,121 +266,6 @@ class GGUFConverter:
             )
         except (json.JSONDecodeError, IOError):
             return False
-
-    def _check_incompatibility_type(self, model_path: Path, incompat_type: str) -> bool:
-        """
-        Check if a model matches a specific incompatibility type
-
-        Args:
-            model_path: Path to the model directory
-            incompat_type: Incompatibility type key from MODEL_INCOMPATIBILITIES
-
-        Returns:
-            True if model matches this incompatibility type
-        """
-        if incompat_type not in self.MODEL_INCOMPATIBILITIES:
-            return False
-
-        config_file = model_path / "config.json"
-        if not config_file.exists():
-            return False
-
-        try:
-            with open(config_file, 'r', encoding='utf-8') as f:
-                config = json.load(f)
-
-            incompat_info = self.MODEL_INCOMPATIBILITIES[incompat_type]
-            detection = incompat_info["detection"]
-
-            # Check config flag if specified
-            if "config_flag" in detection:
-                if config.get(detection["config_flag"], False):
-                    return True
-
-            # Check model families if specified
-            if "model_families" in detection:
-                architectures = config.get("architectures", [])
-                model_type = config.get("model_type", "")
-
-                for pattern in detection["model_families"]:
-                    # Check architectures
-                    if any(pattern in arch for arch in architectures):
-                        return True
-                    # Check model_type
-                    if pattern in model_type:
-                        return True
-
-            return False
-
-        except (json.JSONDecodeError, IOError):
-            return False
-
-    def get_incompatible_quantizations(self, model_path: Union[str, Path]) -> List[str]:
-        """
-        Get list of quantization types incompatible with this model
-
-        Args:
-            model_path: Path to the model directory
-
-        Returns:
-            List of incompatible quantization type names
-        """
-        model_path = Path(model_path)
-        incompatible = []
-
-        # Check all registered incompatibility types
-        for incompat_type in self.MODEL_INCOMPATIBILITIES:
-            if self._check_incompatibility_type(model_path, incompat_type):
-                incompatible.extend(
-                    self.MODEL_INCOMPATIBILITIES[incompat_type]["incompatible_quants"]
-                )
-
-        # Remove duplicates while preserving order
-        seen = set()
-        return [x for x in incompatible if not (x in seen or seen.add(x))]
-
-    def get_incompatibility_info(self, model_path: Union[str, Path]) -> dict:
-        """
-        Get detailed incompatibility information for a model
-
-        Args:
-            model_path: Path to the model directory
-
-        Returns:
-            Dictionary with incompatibility details:
-            {
-                "has_incompatibilities": bool,
-                "types": List[str],  # Matched incompatibility type keys
-                "incompatible_quants": List[str],
-                "alternatives": List[str],
-                "reasons": List[str],
-            }
-        """
-        model_path = Path(model_path)
-        matched_types = []
-        all_incompatible = []
-        all_alternatives = []
-        all_reasons = []
-
-        # Check all registered incompatibility types
-        for incompat_type, info in self.MODEL_INCOMPATIBILITIES.items():
-            if self._check_incompatibility_type(model_path, incompat_type):
-                matched_types.append(incompat_type)
-                all_incompatible.extend(info["incompatible_quants"])
-                all_alternatives.extend(info["alternatives"])
-                all_reasons.append(f"{info['description']}: {info['reason']}")
-
-        # Remove duplicate quants while preserving order
-        seen = set()
-        unique_incompatible = [x for x in all_incompatible if not (x in seen or seen.add(x))]
-
-        return {
-            "has_incompatibilities": len(matched_types) > 0,
-            "types": matched_types,
-            "incompatible_quants": unique_incompatible,
-            "alternatives": all_alternatives,
-            "reasons": all_reasons,
-        }
 
     def _ensure_llama_cpp_repo(self):
         """
@@ -511,25 +429,20 @@ class GGUFConverter:
                     print(result.stderr)
 
         except subprocess.CalledProcessError as e:
-            error_msg = e.stderr if e.stderr else str(e)
+            raw_error = e.stderr if e.stderr else str(e)
+            error_msg = self._clean_llama_error(raw_error)
 
             # Check if imatrix was provided but llama.cpp still complains about missing imatrix
-            # This indicates model incompatibility (e.g., tied embeddings), not user error
-            if "without an importance matrix" in error_msg and imatrix_path:
+            # This indicates model incompatibility, not user error
+            if "without an importance matrix" in raw_error and imatrix_path:
                 raise RuntimeError(
                     f"Quantization failed: Model incompatibility detected.\n\n"
                     f"An importance matrix was provided, but {quantization_type} quantization still failed. "
                     f"This typically means the model architecture is incompatible with this quantization type.\n\n"
-                    f"Common cause: Models with 'tied embeddings' (e.g., Qwen series) lack the output.weight tensor "
-                    f"required for IQ quantizations due to a limitation in llama.cpp.\n\n"
-                    f"Recommended alternatives:\n"
-                    f"  - Q3_K_M or Q3_K_S (good quality, similar size)\n"
-                    f"  - Q2_K (not Q2_K_S) if you need smaller files\n\n"
-                    f"See KNOWN_ISSUES.md for detailed explanation.\n\n"
-                    f"Original error: {error_msg}"
+                    f"Error:\n{error_msg}"
                 )
 
-            raise RuntimeError(f"Quantization failed: {error_msg}")
+            raise RuntimeError(f"Quantization failed:\n\n{error_msg}")
 
         elapsed = time.time() - start_time
 
@@ -667,8 +580,9 @@ class GGUFConverter:
                 print(result.stdout)
 
         except subprocess.CalledProcessError as e:
-            error_msg = e.stderr if e.stderr else str(e)
-            raise RuntimeError(f"Imatrix generation failed: {error_msg}")
+            raw_error = e.stderr if e.stderr else str(e)
+            error_msg = self._clean_llama_error(raw_error)
+            raise RuntimeError(f"Imatrix generation failed:\n\n{error_msg}")
 
         elapsed = time.time() - start_time
 
@@ -745,7 +659,6 @@ class GGUFConverter:
         imatrix_calibration_file: Optional[Union[str, Path]] = None,
         imatrix_output_name: Optional[str] = None,
         imatrix_ngl: Optional[int] = None,
-        ignore_incompatibilities: bool = False,
         ignore_imatrix_warnings: bool = False,
         allow_requantize: bool = False,
         leave_output_tensor: bool = False,
@@ -773,7 +686,6 @@ class GGUFConverter:
             imatrix_chunks: Number of chunks to process for imatrix (None = all)
             imatrix_collect_output: Collect output.weight tensor in imatrix (required for IQ quantizations)
             imatrix_calibration_file: Path to calibration file for imatrix generation (None = use default)
-            ignore_incompatibilities: Skip incompatibility checks (advanced users, may cause failures)
             ignore_imatrix_warnings: Allow IQ quants without imatrix (advanced users, may cause degraded quality)
             allow_requantize: Allow quantizing already-quantized models (may reduce quality)
             leave_output_tensor: Keep output.weight unquantized for better quality (increases model size)
@@ -805,52 +717,6 @@ class GGUFConverter:
                 )
         elif not model_path.is_file():
             raise ValueError(f"Model path does not exist: {model_path}")
-
-        # Check for incompatible quantizations using centralized registry
-        incompat_info = self.get_incompatibility_info(model_path)
-        if incompat_info["has_incompatibilities"] and not ignore_incompatibilities:
-            incompatible = incompat_info["incompatible_quants"]
-            requested_incompatible = [q for q in quantization_types if q in incompatible]
-
-            if requested_incompatible:
-                # Filter out incompatible types
-                original_types = quantization_types.copy()
-                quantization_types = [q for q in quantization_types if q not in incompatible]
-
-                print(f"\n{theme['warning']}WARNING: Model incompatibility detected!{Style.RESET_ALL}")
-                print(f"{theme['warning']}Detected issues: {', '.join(incompat_info['types'])}{Style.RESET_ALL}")
-                print(f"\n{theme['warning']}Incompatible quantizations requested:{Style.RESET_ALL}")
-                print(f"  {', '.join(requested_incompatible)}")
-
-                print(f"\n{theme['warning']}Reason:{Style.RESET_ALL}")
-                for reason in incompat_info["reasons"]:
-                    print(f"  - {reason}")
-
-                print(f"\n{theme['highlight']}Recommended alternatives:{Style.RESET_ALL}")
-                for alt in incompat_info["alternatives"]:
-                    print(f"  - {alt}")
-
-                if quantization_types:
-                    print(f"\n{theme['success']}Continuing with compatible quantizations: {', '.join(quantization_types)}{Style.RESET_ALL}")
-                else:
-                    raise ValueError(
-                        f"All requested quantizations are incompatible with this model.\n"
-                        f"Incompatible: {', '.join(requested_incompatible)}\n"
-                        f"Alternatives: {', '.join(incompat_info['alternatives'])}\n"
-                        f"See KNOWN_ISSUES.md for details."
-                    )
-        elif incompat_info["has_incompatibilities"] and ignore_incompatibilities:
-            # Show warning but proceed
-            incompatible = incompat_info["incompatible_quants"]
-            requested_incompatible = [q for q in quantization_types if q in incompatible]
-
-            if requested_incompatible:
-                print(f"\n{theme['warning']}WARNING: Incompatibility override enabled!{Style.RESET_ALL}")
-                print(f"{theme['warning']}Detected issues: {', '.join(incompat_info['types'])}{Style.RESET_ALL}")
-                print(f"\n{theme['error']}These quantizations are likely to have issues or FAIL:{Style.RESET_ALL}")
-                print(f"  {', '.join(requested_incompatible)}")
-                print(f"\n{theme['warning']}Proceeding anyway as requested (ignore_incompatibilities=True){Style.RESET_ALL}")
-                print(f"{theme['highlight']}If conversion fails, use: {', '.join(incompat_info['alternatives'])}{Style.RESET_ALL}")
 
         # Check for imatrix warnings
         IMATRIX_REQUIRED_TYPES = [
