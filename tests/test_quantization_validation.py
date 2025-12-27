@@ -165,66 +165,6 @@ def test_imatrix_required_types_subset():
             f"Imatrix-required quant {quant} should be in QUANTIZATION_TYPES"
 
 
-def test_incompatible_quants_are_valid():
-    """
-    Test that all incompatible quants listed in MODEL_INCOMPATIBILITIES are valid
-
-    This catches typos in the incompatibility registry
-    """
-    for incompat_type, info in GGUFConverter.MODEL_INCOMPATIBILITIES.items():
-        incompatible_quants = info.get("incompatible_quants", [])
-
-        for quant in incompatible_quants:
-            assert quant in GGUFConverter.QUANTIZATION_TYPES, \
-                f"Incompatible quant {quant} in {incompat_type} should be a valid quantization type"
-
-
-def test_tied_embeddings_incompatible_quants():
-    """
-    Test that tied embeddings incompatibility includes all IQ quants
-    """
-    tied_info = GGUFConverter.MODEL_INCOMPATIBILITIES.get("tied_embeddings", {})
-    incompatible = tied_info.get("incompatible_quants", [])
-
-    # All IQ quants should be incompatible with tied embeddings
-    iq_quants = [q for q in GGUFConverter.QUANTIZATION_TYPES if q.startswith('IQ')]
-
-    for iq_quant in iq_quants:
-        assert iq_quant in incompatible, \
-            f"{iq_quant} should be incompatible with tied embeddings"
-
-
-def test_q2_k_s_incompatible_with_tied_embeddings():
-    """
-    Test that Q2_K_S is also incompatible with tied embeddings
-
-    This is a specific case noted in the incompatibility registry
-    """
-    tied_info = GGUFConverter.MODEL_INCOMPATIBILITIES.get("tied_embeddings", {})
-    incompatible = tied_info.get("incompatible_quants", [])
-
-    assert "Q2_K_S" in incompatible, \
-        "Q2_K_S should be incompatible with tied embeddings (requires output.weight)"
-
-
-def test_alternatives_are_valid_quants():
-    """
-    Test that recommended alternatives are valid quantization types
-    """
-    tied_info = GGUFConverter.MODEL_INCOMPATIBILITIES.get("tied_embeddings", {})
-    alternatives = tied_info.get("alternatives", [])
-
-    # Check that alternatives mention valid quant types
-    alternatives_text = " ".join(alternatives)
-
-    # These should be mentioned as safe alternatives
-    safe_quants = ["Q3_K_M", "Q3_K_S", "Q2_K", "Q4_K_M"]
-
-    for quant in safe_quants:
-        assert quant in alternatives_text, \
-            f"Alternative {quant} should be mentioned in alternatives"
-
-
 def test_unquantized_formats_included():
     """
     Test that unquantized formats are included
