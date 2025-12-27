@@ -60,6 +60,8 @@ def render_convert_tab(
                         save_config(config)
                         # Update widget state to show new path
                         st.session_state.pending_model_path = selected_folder
+                        # Increment reset_count to refresh imatrix dropdown with new model name
+                        st.session_state.reset_count += 1
                         st.rerun()
 
         with cols[-1]:  # Last column is always the check button
@@ -106,6 +108,8 @@ def render_convert_tab(
                     if selected_folder:
                         config["output_dir"] = selected_folder
                         save_config(config)
+                        # Increment reset_count to refresh imatrix dropdown with new directory
+                        st.session_state.reset_count += 1
                         st.rerun()
 
         with cols[-1]:
