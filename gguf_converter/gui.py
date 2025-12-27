@@ -93,6 +93,7 @@ def main() -> None:
 
     with st.sidebar:
         st.header("Settings")
+        st.markdown("[YaGUFF (GitHub)](https://github.com/usrname0/YaGUFF)")
         st.markdown("---")
 
         def save_verbose():
