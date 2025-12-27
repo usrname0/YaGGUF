@@ -117,7 +117,7 @@ def main() -> None:
         # Only set value if not already in session state (prevents warning)
         imatrix_warn_kwargs = {
             "label": "Imatrix warnings",
-            "help": "Warn when selecting IQ quants without an importance matrix. Uncheck to allow IQ quants without imatrix (advanced users only).",
+            "help": "Disable IQ quants without an importance matrix. Uncheck to allow IQ quants without imatrix (advanced users only).",
             "key": "imatrix_warnings_checkbox",
             "on_change": save_imatrix_warnings
         }
