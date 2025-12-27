@@ -86,6 +86,12 @@ def render_update_tab(converter: Any, config: Dict[str, Any]) -> None:
                     st.rerun()
                 else:
                     st.error(f"Restart script not found: {restart_script}")
+            elif update_status["status"] == "up_to_date":
+                # Already on latest version
+                st.toast("Already on the latest version")
+            else:
+                # Error checking for updates
+                st.toast("Could not check for updates")
 
     with col2:
         st.subheader("YaGUFF Version Information")
