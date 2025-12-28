@@ -31,7 +31,7 @@ All quantization types from llama.cpp are supported. Choose based on your size/q
 | **Q6_K** | Large | Very High | K-Quant | Near-F16 quality, larger size |
 | **Q5_K_M** | Medium | Better | K-Quant | Higher quality with acceptable size |
 | Q5_K_S | Medium | Better | K-Quant | 5-bit K small |
-| **Q4_K_M** | Small | Good | K-Quant | **Default recommendation** - best balance |
+| **Q4_K_M** | Small | Good | K-Quant | 
 | Q4_K_S | Small | Good | K-Quant | 4-bit K small |
 | Q3_K_M | Very Small | Fair | K-Quant | Aggressive compression |
 | Q3_K_L | Very Small | Fair | K-Quant | 3-bit K large |
