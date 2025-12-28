@@ -329,6 +329,42 @@ def git_push(tag_name, branch_name):
         print(Colors.red(f"Push failed: {e}"))
 
 
+def run_tests():
+    """
+    Run test suite before version bump
+
+    Returns:
+        True if tests pass, False otherwise
+    """
+    print()
+    print("=" * 60)
+    print("Running tests...")
+    print("=" * 60)
+    print()
+
+    try:
+        result = subprocess.run(
+            ["pytest", "tests/", "-v"],
+            cwd=get_project_root(),
+            capture_output=False
+        )
+
+        if result.returncode == 0:
+            print()
+            print(Colors.green("All tests passed!"))
+            return True
+        else:
+            print()
+            print(Colors.red("Tests failed!"))
+            print(Colors.red("Please fix failing tests before bumping version."))
+            return False
+
+    except FileNotFoundError:
+        print(Colors.yellow("Warning: pytest not found, skipping tests"))
+        response = input("Continue without running tests? [y/N] ")
+        return response.lower() == 'y'
+
+
 def main():
     parser = argparse.ArgumentParser(
         description="Bump version numbers for YaGUFF releases (interactive mode)",
@@ -337,9 +373,14 @@ def main():
 
     args = parser.parse_args()
 
+    # Run tests first
+    if not run_tests():
+        sys.exit(1)
+
     # Get current branch
     current_branch = get_current_branch()
     if current_branch:
+        print()
         print("=" * 60)
         print(f"Current branch: {Colors.blue(current_branch)}")
         print("=" * 60)
