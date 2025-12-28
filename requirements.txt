@@ -1,13 +1,15 @@
-# Note: PyTorch is installed separately by setup scripts (CPU-only version)
+# PyTorch is installed by setup scripts (setup_windows.bat / setup_linux.sh) to ensure the CPU-only version is used.
+# pip install "torch>=2.0.0" "torchvision>=0.15.0" "torchaudio>=2.0.0" --index-url https://download.pytorch.org/whl/cpu
 
-streamlit>=1.40.0 # GUI
-huggingface-hub>=0.36.0
-colorama>=0.4.6 # Colored terminal output
+
+streamlit>=1.40.0,<2.0.0 # GUI
+huggingface-hub>=0.36.0,<1.0.0
+colorama>=0.4.6,<1.0.0 # Colored terminal output
 
 # For model conversion (llama.cpp convert_hf_to_gguf.py script)
-transformers>=4.50.0
-sentencepiece>=0.2.0
-numpy>=2.0.0
-gguf>=0.15.0
-tokenizers>=0.21.0
-mistral-common>=1.8.0  # Required for Ministral-3 and newer Mistral models
+transformers>=4.50.0,<5.0.0
+sentencepiece>=0.2.0,<1.0.0
+numpy>=2.0.0,<3.0.0
+gguf>=0.15.0,<1.0.0
+tokenizers>=0.21.0,<1.0.0
+mistral-common>=1.8.0,<2.0.0  # Required for Ministral-3 and newer Mistral models

@@ -119,11 +119,10 @@ This is normal for large models. The process is CPU-intensive.
 
 ### Other Errors
 
-I tried to prevent wandering into errors without making it too neutered.
-- "Incomapatibility warnings" will disable some quants for some models but you can disable this in the settings.
-- "Imatrix warnings" will disable smaller quants if you don't select an imatrix option.   You can disable this in the settings (good luck).
-- You can "Reset to defaults" in the settings
-- If something gets ugly or confusing just delete the folder and re-install!
+The application includes safety features to prevent common errors:
+- **Imatrix warnings** - IQ quantization types require an importance matrix for best results. By default, these are disabled unless you select an imatrix option. This can be disabled in settings if needed.
+- Use "Reset to defaults" in the settings to restore default configuration.
+- If issues persist, you can delete the installation folder and re-install.
   
 ## License
 

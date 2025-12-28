@@ -17,6 +17,25 @@ sys.path.insert(0, str(project_root))
 from gguf_converter.binary_manager import BinaryManager, remove_readonly
 
 
+def check_git_available() -> bool:
+    """
+    Check if git is installed and available
+
+    Returns:
+        True if git is available, False otherwise
+    """
+    try:
+        result = subprocess.run(
+            ["git", "--version"],
+            capture_output=True,
+            text=True,
+            timeout=5
+        )
+        return result.returncode == 0
+    except (FileNotFoundError, subprocess.TimeoutExpired):
+        return False
+
+
 def ensure_llama_cpp_repo(binary_manager: Any) -> bool:
     """
     Ensure llama.cpp repository exists (clone if missing)
@@ -27,6 +46,19 @@ def ensure_llama_cpp_repo(binary_manager: Any) -> bool:
 
     # Only clone if missing
     if not llama_cpp_dir.exists() or not convert_script.exists():
+        # Check if git is available before attempting clone
+        if not check_git_available():
+            print()
+            print("WARNING: Git is not installed or not available in PATH.")
+            print("The llama.cpp conversion scripts cannot be automatically downloaded.")
+            print("The application will continue, but model conversions will fail.")
+            print()
+            print("To fix this:")
+            print("  1. Install git from https://git-scm.com/downloads")
+            print("  2. Restart the application")
+            print()
+            return False
+
         # Remove old repo if it exists but is incomplete
         if llama_cpp_dir.exists():
             print("Removing incomplete llama.cpp repository...")

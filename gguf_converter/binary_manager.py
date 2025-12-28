@@ -10,6 +10,7 @@ import tarfile
 import shutil
 import json
 import stat
+import socket
 from pathlib import Path
 from typing import Optional, Dict
 from urllib.request import urlretrieve, urlopen
@@ -111,6 +112,51 @@ class BinaryManager:
             mb_total = total_size / (1024 * 1024)
             print(f"\rDownloading: {percent:.1f}% ({mb_downloaded:.1f}/{mb_total:.1f} MB)", end='')
 
+    def _check_disk_space(self, required_bytes: int, path: Optional[Path] = None) -> bool:
+        """
+        Check if there is enough disk space available
+
+        Args:
+            required_bytes: Minimum bytes required
+            path: Path to check (default: bin_dir)
+
+        Returns:
+            True if enough space available, False otherwise
+        """
+        check_path = path if path else self.bin_dir
+        try:
+            stat = shutil.disk_usage(check_path)
+            available_mb = stat.free / (1024 * 1024)
+            required_mb = required_bytes / (1024 * 1024)
+
+            if stat.free < required_bytes:
+                print(f"ERROR: Insufficient disk space")
+                print(f"  Required: {required_mb:.1f} MB")
+                print(f"  Available: {available_mb:.1f} MB")
+                return False
+            return True
+        except Exception as e:
+            print(f"Warning: Could not check disk space: {e}")
+            return True  # Proceed anyway if check fails
+
+    def _check_network_connectivity(self, host: str = "api.github.com", port: int = 443, timeout: int = 5) -> bool:
+        """
+        Check if network connection is available
+
+        Args:
+            host: Host to check connectivity to
+            port: Port to connect to
+            timeout: Connection timeout in seconds
+
+        Returns:
+            True if network is available, False otherwise
+        """
+        try:
+            socket.create_connection((host, port), timeout=timeout)
+            return True
+        except (socket.error, socket.timeout):
+            return False
+
     def get_latest_version(self) -> str:
         """
         Get the latest llama.cpp release tag from GitHub
@@ -167,6 +213,21 @@ class BinaryManager:
 
         print(f"Downloading llama.cpp {tag} for {os_name}-{arch}...")
         print(f"URL: {url}")
+
+        # Check network connectivity before attempting download
+        if not self._check_network_connectivity():
+            raise RuntimeError(
+                "No network connection available. "
+                "Please check your internet connection and try again."
+            )
+
+        # Check disk space before download (estimate 1 GB needed for download + extraction)
+        required_space = 1024 * 1024 * 1024  # 1 GB
+        if not self._check_disk_space(required_space):
+            raise RuntimeError(
+                "Insufficient disk space for binary download. "
+                "Please free up at least 1 GB and try again."
+            )
 
         # Clean up old binaries BEFORE downloading
         self._cleanup_old_binaries()

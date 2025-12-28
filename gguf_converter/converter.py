@@ -7,9 +7,11 @@ import sys
 import json
 import io
 import time
+import shutil
+import socket
 from pathlib import Path
 from typing import Optional, Union, List
-from huggingface_hub import snapshot_download
+from huggingface_hub import snapshot_download, HfApi
 from colorama import Fore, Style, init as colorama_init
 from .binary_manager import BinaryManager
 from . import imatrix_stats
@@ -146,6 +148,57 @@ class GGUFConverter:
         """
         output_dir = Path(output_dir)
         output_dir.mkdir(parents=True, exist_ok=True)
+
+        # Check network connectivity before attempting download
+        try:
+            socket.create_connection(("huggingface.co", 443), timeout=5)
+        except (socket.error, socket.timeout):
+            raise RuntimeError(
+                "No network connection available. "
+                "Please check your internet connection and try again."
+            )
+
+        # Get actual repository size from HuggingFace before downloading
+        print(f"{theme['info']}Checking repository size...{Style.RESET_ALL}")
+        try:
+            api = HfApi()
+            repo_info = api.repo_info(repo_id=repo_id, revision=revision, files_metadata=True)
+
+            # Calculate total size from all files
+            total_size_bytes = 0
+            if hasattr(repo_info, 'siblings') and repo_info.siblings:
+                for file in repo_info.siblings:
+                    if hasattr(file, 'size') and file.size:
+                        total_size_bytes += file.size
+
+            if total_size_bytes > 0:
+                total_size_gb = total_size_bytes / (1024 * 1024 * 1024)
+                print(f"{theme['info']}Repository size: {total_size_gb:.2f} GB{Style.RESET_ALL}")
+
+                # Check disk space with 5% buffer for safety
+                buffer_multiplier = 1.05
+                required_bytes = int(total_size_bytes * buffer_multiplier)
+
+                stat = shutil.disk_usage(output_dir)
+                available_gb = stat.free / (1024 * 1024 * 1024)
+                required_gb = required_bytes / (1024 * 1024 * 1024)
+
+                if stat.free < required_bytes:
+                    raise RuntimeError(
+                        f"Insufficient disk space for model download.\n"
+                        f"Model size: {total_size_gb:.2f} GB\n"
+                        f"Required (with buffer): {required_gb:.2f} GB\n"
+                        f"Available: {available_gb:.2f} GB\n"
+                        f"Please free up at least {required_gb - available_gb:.2f} GB and try again."
+                    )
+            else:
+                print(f"{theme['warning']}Warning: Could not determine repository size, proceeding anyway{Style.RESET_ALL}")
+
+        except RuntimeError:
+            raise  # Re-raise disk space errors
+        except Exception as e:
+            print(f"{theme['warning']}Warning: Could not check repository size: {e}{Style.RESET_ALL}")
+            print(f"{theme['warning']}Proceeding with download anyway...{Style.RESET_ALL}")
 
         print(f"{theme['info']}Downloading {repo_id} from HuggingFace...{Style.RESET_ALL}")
         model_path = snapshot_download(
