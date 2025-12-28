@@ -1,18 +1,18 @@
 #!/usr/bin/env python3
 """
-Script to bump version numbers for YaGUFF releases
+Interactive script to bump version numbers for YaGUFF releases
 
-Automates:
-1. Update LLAMA_CPP_VERSION in binary_manager.py
-2. Increment YaGUFF version in __init__.py
-3. Create git commit and tag
-4. Optionally push to remote
+Workflow:
+1. Shows recent version history
+2. Prompts for new llama.cpp version (default: latest from GitHub)
+3. Prompts for new YaGUFF version (default: auto-increment patch)
+4. Verifies llama.cpp version exists on GitHub
+5. Choose action: dry run, commit locally, or commit and push
 
 Usage:
-    python scripts/bump_version.py b7600 --dry-run    # Check latest version (no changes)
-    python scripts/bump_version.py b7600              # Auto-increment patch version
-    python scripts/bump_version.py b7600 --version 1.0.10  # Specify version
-    python scripts/bump_version.py b7600 --push       # Auto-push after tagging
+    python scripts/bump_version.py
+
+The script will guide you through the process interactively.
 """
 
 import sys
@@ -331,113 +331,85 @@ def git_push(tag_name, branch_name):
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Bump version numbers for YaGUFF releases",
-        formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog="""
-Examples:
-  python scripts/bump_version.py b7600                    # Auto-increment patch
-  python scripts/bump_version.py b7600 --version 1.0.10   # Specify version
-  python scripts/bump_version.py b7600 --push             # Auto-push
-  python scripts/bump_version.py b7600 --dry-run          # Preview only
-        """
-    )
-
-    parser.add_argument(
-        "llama_version",
-        nargs='?',
-        help="New llama.cpp version (e.g., b7600)"
-    )
-
-    parser.add_argument(
-        "--version",
-        help="Specific YaGUFF version (default: auto-increment patch)"
-    )
-
-    parser.add_argument(
-        "--push",
-        action="store_true",
-        help="Push commits and tags to remote after creating"
-    )
-
-    parser.add_argument(
-        "--dry-run",
-        action="store_true",
-        help="Show what would be done without making changes"
+        description="Bump version numbers for YaGUFF releases (interactive mode)",
+        formatter_class=argparse.RawDescriptionHelpFormatter
     )
 
     args = parser.parse_args()
 
-    # If no llama_version provided, show recent versions and exit
-    if not args.llama_version:
-        print(Colors.bold("Recent YaGUFF Versions:"))
-        print("=" * 60)
-
-        recent = get_recent_versions(3)
-        if recent:
-            for tag, yaguff_ver, llama_ver in recent:
-                print(f"{Colors.blue(tag):12} - YaGUFF {yaguff_ver:8} - llama.cpp {llama_ver}")
-        else:
-            print(Colors.yellow("No version tags found"))
-
-        print()
-        print(Colors.bold("Current versions:"))
-        current_yaguff = get_current_yaguff_version()
-        current_llama = get_current_llama_version()
-        print(f"  YaGUFF:      {Colors.green(current_yaguff)}")
-        print(f"  llama.cpp:   {Colors.green(current_llama)}")
-
-        # Fetch latest llama.cpp version
-        print()
-        print("Fetching latest llama.cpp version from GitHub...")
-        latest_llama = get_latest_llama_version()
-        if latest_llama:
-            print(f"  Latest llama.cpp: {Colors.green(latest_llama)}")
-        else:
-            print(Colors.yellow("  Could not fetch latest llama.cpp version"))
-
-        print()
-        print(Colors.bold("Usage:"))
-        print(f"  python scripts/bump_version.py <llama_version>")
-        print(f"  Example: python scripts/bump_version.py {latest_llama if latest_llama else 'b7600'}")
-        return
-
     # Get current branch
     current_branch = get_current_branch()
     if current_branch:
-        print("=" * 50)
+        print("=" * 60)
         print(f"Current branch: {Colors.blue(current_branch)}")
-        print("=" * 50)
+        print("=" * 60)
     else:
         print(Colors.yellow("Warning: Could not detect git branch"))
+
+    # Show recent versions
+    print()
+    print(Colors.bold("Recent YaGUFF Versions:"))
+    print("-" * 60)
+
+    recent = get_recent_versions(3)
+    if recent:
+        for tag, yaguff_ver, llama_ver in recent:
+            print(f"  {Colors.blue(tag):12} - YaGUFF {yaguff_ver:8} - llama.cpp {llama_ver}")
+    else:
+        print(Colors.yellow("  No version tags found"))
 
     # Get current versions
     current_yaguff = get_current_yaguff_version()
     current_llama = get_current_llama_version()
 
-    print(f"\nCurrent YaGUFF version: {current_yaguff}")
-    print(f"Current llama.cpp version: {current_llama}")
+    print()
+    print(Colors.bold("Current versions:"))
+    print(f"  YaGUFF:      {Colors.green(current_yaguff)}")
+    print(f"  llama.cpp:   {Colors.green(current_llama)}")
 
     # Fetch latest llama.cpp version from GitHub
-    print("\nFetching latest llama.cpp version from GitHub...")
+    print()
+    print("Fetching latest llama.cpp version from GitHub...")
     latest_llama = get_latest_llama_version()
     if latest_llama:
-        print(f"Latest llama.cpp version: {latest_llama}")
+        print(f"  Latest llama.cpp: {Colors.green(latest_llama)}")
         if latest_llama == current_llama:
-            print("  (already up to date)")
-        elif latest_llama == args.llama_version:
-            print("  (matches your specified version)")
+            print(f"  {Colors.yellow('(already up to date)')}")
+    else:
+        latest_llama = None
+        print(Colors.yellow("  Could not fetch latest llama.cpp version"))
+
+    # Interactive prompts
+    print()
+    print("=" * 60)
     print()
 
-    # Determine new YaGUFF version
-    if args.version:
-        new_yaguff = args.version
+    # Prompt for llama.cpp version
+    if latest_llama:
+        llama_prompt = f"New llama.cpp version [Enter={Colors.green(latest_llama)}]: "
     else:
-        new_yaguff = increment_version(current_yaguff)
+        llama_prompt = "New llama.cpp version: "
 
-    new_llama = args.llama_version
+    llama_input = input(llama_prompt).strip()
+    new_llama = llama_input if llama_input else latest_llama
 
-    print(f"New YaGUFF version: {new_yaguff}")
-    print(f"New llama.cpp version: {new_llama}")
+    if not new_llama:
+        print(Colors.red("Error: llama.cpp version required"))
+        return
+
+    # Prompt for YaGUFF version
+    suggested_yaguff = increment_version(current_yaguff)
+    yaguff_prompt = f"New YaGUFF version [Enter={Colors.green(suggested_yaguff)}]: "
+    yaguff_input = input(yaguff_prompt).strip()
+    new_yaguff = yaguff_input if yaguff_input else suggested_yaguff
+
+    # Summary
+    print()
+    print("=" * 60)
+    print(Colors.bold("Summary:"))
+    print(f"  YaGUFF:      {current_yaguff} -> {Colors.green(new_yaguff)}")
+    print(f"  llama.cpp:   {current_llama} -> {Colors.green(new_llama)}")
+    print("=" * 60)
     print()
 
     # Verify the llama.cpp version exists on GitHub
@@ -446,7 +418,6 @@ Examples:
     if not version_exists:
         print(Colors.red(f"ERROR: llama.cpp version '{new_llama}' does not exist on GitHub!"))
         print(Colors.red(f"       Please check https://github.com/ggml-org/llama.cpp/tags"))
-        print(Colors.red(f"       or run without arguments to see the latest version."))
         sys.exit(1)
     else:
         print(Colors.green(f"Version {new_llama} verified on GitHub"))
@@ -455,62 +426,84 @@ Examples:
     version_comparison = compare_llama_versions(new_llama, current_llama)
     if version_comparison == -1:
         print()
-        print(Colors.red("=" * 50))
+        print(Colors.red("=" * 60))
         print(Colors.red("WARNING: Going backwards in llama.cpp version!"))
         print(Colors.red(f"         Current: {current_llama}"))
         print(Colors.red(f"         New:     {new_llama}"))
-        print(Colors.red("=" * 50))
+        print(Colors.red("=" * 60))
         print()
     elif version_comparison == 0:
         print(Colors.yellow(f"Note: Keeping llama.cpp version at {new_llama}"))
 
     print()
 
-    if args.dry_run:
-        print(Colors.yellow("=" * 50))
+    # Prompt for action
+    print("What would you like to do?")
+    print("  1) Dry run (preview only, no changes)")
+    print("  2) Commit and tag (local only)")
+    print("  3) Commit, tag, and push to remote")
+    print("  0) Cancel")
+    print()
+
+    action = input("Choose [0-3]: ").strip()
+
+    if action == '0' or not action:
+        print("Cancelled")
+        return
+
+    if action == '1':
+        # Dry run
+        print()
+        print(Colors.yellow("=" * 60))
         print(Colors.yellow("DRY RUN - No changes made"))
-        print(Colors.yellow("=" * 50))
-        if latest_llama and new_llama != latest_llama:
-            print(Colors.yellow(f"\nNote: Latest llama.cpp version is {latest_llama}"))
-            print(Colors.yellow(f"      You specified {new_llama}"))
-        print(f"\nWould update binary_manager.py: {current_llama} -> {new_llama}")
+        print(Colors.yellow("=" * 60))
+        print()
+        print(f"Would update binary_manager.py: {current_llama} -> {new_llama}")
         print(f"Would update __init__.py: {current_yaguff} -> {new_yaguff}")
         print(f"Would create commit: 'Bump to v{new_yaguff} (llama.cpp {new_llama})'")
         print(f"Would create tag: v{new_yaguff}")
-        if args.push:
+        if action == '3':
             print(f"Would push to origin/{current_branch}")
         return
 
-    # Confirm with user
-    response = input("Proceed with version bump? [y/N] ")
+    if action not in ['2', '3']:
+        print(Colors.red("Invalid choice"))
+        return
+
+    # Confirm
+    print()
+    response = input(f"{Colors.yellow('Proceed?')} [y/N] ")
     if response.lower() != 'y':
         print("Aborted")
         return
 
     # Update versions
+    print()
     update_llama_version(new_llama)
     update_yaguff_version(new_yaguff)
 
     # Create commit and tag
     tag_name = git_commit_and_tag(new_yaguff, new_llama)
 
-    if tag_name and args.push:
+    if not tag_name:
+        return
+
+    # Push if requested
+    if action == '3':
         print()
-        response = input(f"Push to remote (origin/{current_branch})? [y/N] ")
-        if response.lower() == 'y':
-            git_push(tag_name, current_branch)
+        git_push(tag_name, current_branch)
 
     print()
-    print(Colors.green("=" * 50))
+    print(Colors.green("=" * 60))
     print(Colors.green("Version bump complete!"))
-    print(Colors.green("=" * 50))
+    print(Colors.green("=" * 60))
     print()
     print(f"YaGUFF version: {current_yaguff} -> {Colors.bold(new_yaguff)}")
     print(f"llama.cpp version: {current_llama} -> {Colors.bold(new_llama)}")
     print(f"Git tag: {Colors.bold(f'v{new_yaguff}')}")
     print()
 
-    if not args.push:
+    if action == '2':
         print(Colors.yellow("To push to remote, run:"))
         print(f"  git push origin {current_branch}")
         print(f"  git push origin v{new_yaguff}")
