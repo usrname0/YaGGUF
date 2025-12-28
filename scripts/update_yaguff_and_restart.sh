@@ -40,11 +40,6 @@ if [ $? -ne 0 ]; then
     echo ""
     echo "Error: Failed to checkout version $VERSION"
     echo ""
-    echo "Possible reasons:"
-    echo "  - You have uncommitted changes (run 'git status')"
-    echo "  - The tag doesn't exist on the remote (run 'git fetch --tags')"
-    echo "  - You're not in a git repository"
-    echo ""
     exit 1
 fi
 
