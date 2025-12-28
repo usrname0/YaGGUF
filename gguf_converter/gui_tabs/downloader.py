@@ -163,7 +163,7 @@ def render_downloader_tab(converter: Any, config: Dict[str, Any]) -> None:
 
     # Show temporary success messages
     if st.session_state.get("download_just_completed", False):
-        st.success(f"Model downloaded successfully!")
+        st.success(f"Model ready!")
         st.session_state.download_just_completed = False
 
     if st.session_state.get("model_path_set", False):

@@ -212,7 +212,6 @@ def check_git_updates_available() -> Dict[str, Any]:
         dict: Status info with keys 'status', 'message', 'latest_version'
     """
     try:
-        import json
         import urllib.request
         import os
 

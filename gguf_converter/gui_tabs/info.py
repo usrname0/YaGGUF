@@ -23,7 +23,7 @@ def render_info_tab(converter: Any, config: Dict[str, Any]) -> None:
     - **Importance Matrix** - Generate or reuse imatrix files for better low-bit quantization (IQ2, IQ3)
     - **Imatrix Statistics** - Analyze importance matrix files to view statistics
     - **HuggingFace Downloader** - Download models and their supporting files
-    - **Cross-platform** - Windows & Linux support (and maybe Mac, untested)
+    - **Cross-platform** - Windows & Linux support (Mac should work too, but untested)
     - **Auto-downloads binaries** - Pre-compiled llama.cpp binaries (CPU)
     - **Customization** - Can use other llama.cpp binaries if desired
     - **Persistent settings** - Automatically saves your preferences
