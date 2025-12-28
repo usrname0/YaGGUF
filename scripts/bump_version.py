@@ -99,6 +99,59 @@ def get_current_branch():
         return None
 
 
+def get_recent_versions(count=3):
+    """
+    Get recent YaGUFF version tags from git
+
+    Args:
+        count: Number of recent versions to retrieve
+
+    Returns:
+        List of (tag, yaguff_version, llama_version) tuples
+    """
+    try:
+        # Get recent tags sorted by version
+        result = subprocess.run(
+            ["git", "tag", "-l", "v*", "--sort=-version:refname"],
+            capture_output=True,
+            text=True,
+            check=True,
+            cwd=get_project_root()
+        )
+
+        tags = result.stdout.strip().split('\n')[:count]
+        versions = []
+
+        for tag in tags:
+            if not tag:
+                continue
+
+            # Get commit message for this tag
+            commit_result = subprocess.run(
+                ["git", "log", "-1", "--format=%s", tag],
+                capture_output=True,
+                text=True,
+                check=True,
+                cwd=get_project_root()
+            )
+
+            commit_msg = commit_result.stdout.strip()
+            # Extract llama.cpp version from commit message
+            # Format: "Bump to v1.0.26 (llama.cpp b7548)"
+            llama_match = re.search(r'\(llama\.cpp\s+([^)]+)\)', commit_msg)
+            llama_version = llama_match.group(1) if llama_match else "unknown"
+
+            # Extract YaGUFF version from tag
+            yaguff_version = tag[1:] if tag.startswith('v') else tag
+
+            versions.append((tag, yaguff_version, llama_version))
+
+        return versions
+
+    except subprocess.CalledProcessError:
+        return []
+
+
 def get_latest_llama_version():
     """
     Get the latest llama.cpp release tag from GitHub
@@ -291,6 +344,7 @@ Examples:
 
     parser.add_argument(
         "llama_version",
+        nargs='?',
         help="New llama.cpp version (e.g., b7600)"
     )
 
@@ -312,6 +366,40 @@ Examples:
     )
 
     args = parser.parse_args()
+
+    # If no llama_version provided, show recent versions and exit
+    if not args.llama_version:
+        print(Colors.bold("Recent YaGUFF Versions:"))
+        print("=" * 60)
+
+        recent = get_recent_versions(3)
+        if recent:
+            for tag, yaguff_ver, llama_ver in recent:
+                print(f"{Colors.blue(tag):12} - YaGUFF {yaguff_ver:8} - llama.cpp {llama_ver}")
+        else:
+            print(Colors.yellow("No version tags found"))
+
+        print()
+        print(Colors.bold("Current versions:"))
+        current_yaguff = get_current_yaguff_version()
+        current_llama = get_current_llama_version()
+        print(f"  YaGUFF:      {Colors.green(current_yaguff)}")
+        print(f"  llama.cpp:   {Colors.green(current_llama)}")
+
+        # Fetch latest llama.cpp version
+        print()
+        print("Fetching latest llama.cpp version from GitHub...")
+        latest_llama = get_latest_llama_version()
+        if latest_llama:
+            print(f"  Latest llama.cpp: {Colors.green(latest_llama)}")
+        else:
+            print(Colors.yellow("  Could not fetch latest llama.cpp version"))
+
+        print()
+        print(Colors.bold("Usage:"))
+        print(f"  python scripts/bump_version.py <llama_version>")
+        print(f"  Example: python scripts/bump_version.py {latest_llama if latest_llama else 'b7600'}")
+        return
 
     # Get current branch
     current_branch = get_current_branch()
