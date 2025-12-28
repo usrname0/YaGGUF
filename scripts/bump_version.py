@@ -441,7 +441,7 @@ def main():
     print("What would you like to do?")
     print("  1) Dry run (preview only, no changes)")
     print("  2) Commit and tag (local only)")
-    print(f"  3) Commit, tag, and push to {Colors.green(current_branch)}")
+    print(f"  3) Commit, tag, and push to origin/{Colors.green(current_branch)}")
     print("  0) Cancel")
     print()
 
