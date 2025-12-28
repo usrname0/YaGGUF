@@ -39,10 +39,17 @@ if "%VERSION%"=="" (
 )
 
 echo Checking out version %VERSION%...
-git -c advice.detachedHead=false checkout %VERSION% 2>nul
+git -c advice.detachedHead=false checkout %VERSION%
 
 if %errorlevel% neq 0 (
+    echo.
     echo Error: Failed to checkout version %VERSION%
+    echo.
+    echo Possible reasons:
+    echo   - You have uncommitted changes (run 'git status')
+    echo   - The tag doesn't exist on the remote (run 'git fetch --tags')
+    echo   - You're not in a git repository
+    echo.
     pause
     exit /b 1
 )
