@@ -329,9 +329,29 @@ def git_push(tag_name, branch_name):
         print(Colors.red(f"Push failed: {e}"))
 
 
+def get_venv_python():
+    """
+    Get path to venv Python interpreter
+
+    Returns:
+        Path to venv python or None if not found
+    """
+    project_root = get_project_root()
+    venv_path = project_root / "venv"
+
+    if sys.platform == "win32":
+        python_exe = venv_path / "Scripts" / "python.exe"
+    else:
+        python_exe = venv_path / "bin" / "python"
+
+    if python_exe.exists():
+        return python_exe
+    return None
+
+
 def run_tests():
     """
-    Run test suite before version bump
+    Run test suite before version bump using venv Python
 
     Returns:
         True if tests pass, False otherwise
@@ -342,9 +362,18 @@ def run_tests():
     print("=" * 60)
     print()
 
+    # Try to use venv python, fallback to system python
+    venv_python = get_venv_python()
+    if venv_python:
+        python_cmd = str(venv_python)
+        print(f"Using venv Python: {venv_python}")
+    else:
+        python_cmd = sys.executable
+        print(Colors.yellow(f"Warning: venv not found, using {python_cmd}"))
+
     try:
         result = subprocess.run(
-            ["pytest", "tests/", "-v"],
+            [python_cmd, "-m", "pytest", "tests/", "-v"],
             cwd=get_project_root(),
             capture_output=False
         )

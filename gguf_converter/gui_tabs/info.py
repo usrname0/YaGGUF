@@ -14,28 +14,28 @@ def render_info_tab(converter: Any, config: Dict[str, Any]) -> None:
     st.markdown(f"""
     ### YaGUFF - Yet Another GGUF Converter
 
-    A user-friendly GGUF converter that sits on top of llama.cpp.
+    A user-friendly GGUF converter that sits on top of llama.cpp.  
     Intended for anyone who prefers a GUI or wants a quant without going down the whole rabbithole.
 
     **Features:**
     - **Convert & Quantize** - HuggingFace models to GGUF with multiple quantization formats at once
+    - **All quantization types** - Full support for llama.cpp quantization types
     - **Importance Matrix** - Generate or reuse imatrix files for better low-bit quantization (IQ2, IQ3)
     - **Imatrix Statistics** - Analyze importance matrix files to view statistics
-    - **HuggingFace Downloader** - Download models without converting
+    - **HuggingFace Downloader** - Download models and their supporting files
+    - **Cross-platform** - Windows & Linux support (and maybe Mac, untested)
     - **Auto-downloads binaries** - Pre-compiled llama.cpp binaries (CPU)
-    - **Cross-platform** - Windows, Mac, Linux support
-    - **Customization** - You can use your own llama.cpp binaries if you want to
+    - **Customization** - Can use other llama.cpp binaries if desired
     - **Persistent settings** - Automatically saves your preferences
-    - **All quantization types** - Full support for llama.cpp quantization types
 
     **Tabs:**
     1. **Convert & Quantize** - Main conversion interface with imatrix options
     2. **Imatrix Settings** - Configure calibration data and processing settings
     3. **Imatrix Statistics** - Analyze existing imatrix files
     4. **HuggingFace Downloader** - Download models from HuggingFace
-    5. **llama.cpp** - Configure and manage llama.cpp binaries
-    6. **Info** - This tab
-    7. **Update** - Update application and dependencies
+    5. **Info** - This tab
+    6. **llama.cpp** - Customize llama.cpp setup
+    7. **Update** - Update YaGUFF, llama.cpp and dependencies
 
     **Settings:**
     - Your settings are automatically saved as you change them
