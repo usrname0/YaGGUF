@@ -3,7 +3,7 @@
 There are simultaneously too many and not enough GGUF converters in the world.
 
  ![dark mode](./docs/convert_and_quantize-dark.png)
- ![light mode](./docs/convert_and_quantize-light.png)
+(dark mode)
  
 ## Features
 
