@@ -54,10 +54,15 @@ All quantization types from llama.cpp are supported. Choose based on your size/q
 
 **Quick Guide:**
 - Bigger is better (more precision)
-- Need omega deluxe quality? Use **F16** or **Q8_0**
-- Want decent quality? Use **Q6_K** or **Q5_K_M**
-- Just medium? Use **Q4_K_M**
-- Want smallest size? Use IQ3_M or IQ2_M with importance matrix
+- For best quality use **F16** or **Q8_0**
+- For decent quality use **Q6_K** or **Q5_K_M**
+- Medium? Use **Q4_K_M**
+- For smallest size use IQ3_M or IQ2_M with importance matrix
+
+## Requirements
+
+- [Python](https://www.python.org/downloads/) 3.8 or higher
+- [Git](https://git-scm.com/downloads) 2.20 or higher 
 
 ## Installation - Windows
 
@@ -94,11 +99,6 @@ All quantization types from llama.cpp are supported. Choose based on your size/q
 - Use terminal `./run_gui.sh`
 
 The GUI will automatically open in your browser on a free port like: `http://localhost:8501`
-
-## Requirements
-
-- [Python](https://www.python.org/downloads/) 3.8 or higher
-- [Git](https://git-scm.com/downloads) 2.20 or higher 
 
 ## Troubleshooting
 
