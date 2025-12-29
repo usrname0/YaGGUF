@@ -34,7 +34,7 @@ def render_convert_tab(
             # Only set value if key not in session state (prevents warning)
             model_path_kwargs = {
                 "label": "Model path",
-                "placeholder": "~/Models/my-model",
+                "placeholder": "C:/Models/my-model or /home/user/Models/my-model",
                 "help": "Local model directory containing config.json and model files.",
                 "key": "model_path_input"
             }
@@ -88,7 +88,7 @@ def render_convert_tab(
             output_dir = st.text_input(
                 "Output directory",
                 value=config.get("output_dir", ""),
-                placeholder="~/Models/converted",
+                placeholder="C:/Models/output or /home/user/Models/output",
                 help="Where to save the converted files"
             )
 

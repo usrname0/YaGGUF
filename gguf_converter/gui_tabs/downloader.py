@@ -109,7 +109,7 @@ def render_downloader_tab(converter: Any, config: Dict[str, Any]) -> None:
             repo_size_gb = st.session_state.repo_size_data["size_gb"]
             st.info(f"Repository size: {repo_size_gb:.2f} GB")
         else:
-            st.code("Click 'Check Size' to see repository size", language=None)
+            st.code("Enter Repository ID to see repository size", language=None)
 
     with col_info2:
         if st.button(
@@ -163,9 +163,9 @@ def render_downloader_tab(converter: Any, config: Dict[str, Any]) -> None:
             if current_path:
                 current_path_name = Path(current_path.strip().strip('"').strip("'")).name
                 if current_path_name != model_name:
-                    download_dir_label = f"Download directory (/{model_name}/ folder will be created)"
+                    download_dir_label = f"Download directory (/{model_name}/ subfolder will be created)"
             else:
-                download_dir_label = f"Download directory (/{model_name}/ folder will be created)"
+                download_dir_label = f"Download directory (/{model_name}/ subfolder will be created)"
 
         download_dir = st.text_input(
             download_dir_label,
