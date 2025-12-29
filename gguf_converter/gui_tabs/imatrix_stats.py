@@ -4,15 +4,18 @@ Imatrix Statistics tab for GGUF Converter GUI
 
 import streamlit as st
 from pathlib import Path
-from typing import Dict, Any
+from typing import Dict, Any, TYPE_CHECKING
 
 from ..gui_utils import (
     strip_quotes, open_folder, browse_folder,
     save_config, TKINTER_AVAILABLE
 )
 
+if TYPE_CHECKING:
+    from ..converter import GGUFConverter
 
-def render_imatrix_stats_tab(converter: Any, config: Dict[str, Any]) -> None:
+
+def render_imatrix_stats_tab(converter: "GGUFConverter", config: Dict[str, Any]) -> None:
     """Render the Imatrix Statistics tab"""
     st.header("Imatrix Statistics")
 

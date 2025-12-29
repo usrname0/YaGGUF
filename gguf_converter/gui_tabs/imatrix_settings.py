@@ -5,15 +5,18 @@ Imatrix Settings tab for GGUF Converter GUI
 import streamlit as st
 from pathlib import Path
 import itertools
-from typing import Dict, Any
+from typing import Dict, Any, TYPE_CHECKING
 
 from ..gui_utils import (
     strip_quotes, open_folder, browse_folder,
     save_config, make_config_saver, get_default_config, TKINTER_AVAILABLE
 )
 
+if TYPE_CHECKING:
+    from ..converter import GGUFConverter
 
-def render_imatrix_settings_tab(converter: Any, config: Dict[str, Any]) -> None:
+
+def render_imatrix_settings_tab(converter: "GGUFConverter", config: Dict[str, Any]) -> None:
     """Render the Imatrix Settings tab"""
     st.header("Importance Matrix Settings")
     st.markdown("Configure how importance matrices are generated for low-bit quantization")

@@ -1,7 +1,6 @@
 # PyTorch is installed by setup scripts (setup_windows.bat / setup_linux.sh) to ensure the CPU-only version is used.
 # pip install "torch>=2.0.0" "torchvision>=0.15.0" "torchaudio>=2.0.0" --index-url https://download.pytorch.org/whl/cpu
 
-
 streamlit>=1.40.0,<2.0.0 # GUI
 huggingface-hub>=0.36.0,<1.0.0
 colorama>=0.4.6,<1.0.0 # Colored terminal output

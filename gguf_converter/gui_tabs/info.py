@@ -3,12 +3,15 @@ Info tab for GGUF Converter GUI
 """
 
 import streamlit as st
-from typing import Dict, Any
+from typing import Dict, Any, TYPE_CHECKING
 
 from ..gui_utils import CONFIG_FILE
 
+if TYPE_CHECKING:
+    from ..converter import GGUFConverter
 
-def render_info_tab(converter: Any, config: Dict[str, Any]) -> None:
+
+def render_info_tab(converter: "GGUFConverter", config: Dict[str, Any]) -> None:
     """Render the Info tab"""
     st.header("About")
     st.markdown(f"""

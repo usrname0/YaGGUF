@@ -4,7 +4,7 @@ llama.cpp tab for GGUF Converter GUI
 
 import streamlit as st
 from pathlib import Path
-from typing import Dict, Any
+from typing import Dict, Any, TYPE_CHECKING
 
 from ..gui_utils import (
     strip_quotes, open_folder, browse_folder,
@@ -13,8 +13,11 @@ from ..gui_utils import (
     TKINTER_AVAILABLE
 )
 
+if TYPE_CHECKING:
+    from ..converter import GGUFConverter
 
-def render_llama_cpp_tab(converter: Any, config: Dict[str, Any]) -> None:
+
+def render_llama_cpp_tab(converter: "GGUFConverter", config: Dict[str, Any]) -> None:
     """Render the llama.cpp tab"""
     # Handle pending binaries folder update
     if 'pending_binaries_folder' in st.session_state:

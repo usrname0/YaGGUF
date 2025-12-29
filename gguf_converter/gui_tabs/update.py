@@ -10,7 +10,7 @@ import io
 import os
 import sys
 from contextlib import redirect_stdout
-from typing import Dict, Any
+from typing import Dict, Any, TYPE_CHECKING
 from colorama import init as colorama_init, Style
 from ..theme import THEME as theme
 
@@ -20,6 +20,9 @@ from ..gui_utils import (
     display_binary_version_status, get_conversion_scripts_info,
     display_conversion_scripts_version_status
 )
+
+if TYPE_CHECKING:
+    from ..converter import GGUFConverter
 
 # Initialize colorama for cross-platform color support
 colorama_init(autoreset=True)
@@ -43,7 +46,7 @@ class TeeOutput(io.TextIOBase):
         self.terminal.flush()
 
 
-def render_update_tab(converter: Any, config: Dict[str, Any]) -> None:
+def render_update_tab(converter: "GGUFConverter", config: Dict[str, Any]) -> None:
     """Render the Update tab"""
     st.header("Update")
 

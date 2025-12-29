@@ -5,7 +5,7 @@ HuggingFace Downloader tab for GGUF Converter GUI
 import streamlit as st
 from pathlib import Path
 import webbrowser
-from typing import Dict, Any
+from typing import Dict, Any, TYPE_CHECKING
 from huggingface_hub import HfApi
 from colorama import init as colorama_init, Style
 from ..theme import THEME as theme
@@ -15,11 +15,14 @@ from ..gui_utils import (
     save_config, TKINTER_AVAILABLE, extract_repo_id_from_url
 )
 
+if TYPE_CHECKING:
+    from ..converter import GGUFConverter
+
 # Initialize colorama for cross-platform color support
 colorama_init(autoreset=True)
 
 
-def render_downloader_tab(converter: Any, config: Dict[str, Any]) -> None:
+def render_downloader_tab(converter: "GGUFConverter", config: Dict[str, Any]) -> None:
     """Render the HuggingFace Downloader tab"""
     st.header("HuggingFace Downloader")
     st.markdown("Download models from HuggingFace")
@@ -287,16 +290,18 @@ def render_downloader_tab(converter: Any, config: Dict[str, Any]) -> None:
                 # Show in Streamlit UI
                 st.error(f"Error: {e}")
 
-                # Print traceback to terminal with colored exception message
+                # Print to terminal - traceback only for unexpected errors
                 import traceback
                 import sys
                 exc_type, exc_value, exc_tb = sys.exc_info()
 
-                # Print traceback in normal colors
-                traceback.print_tb(exc_tb)
-
-                # Print exception type and message in red
-                print(f"{theme['error']}{exc_type.__name__}: {exc_value}{Style.RESET_ALL}")
+                # Expected user errors - just print the message, no traceback
+                if isinstance(e, (RuntimeError, ValueError, FileNotFoundError)):
+                    print(f"\n{theme['error']}{exc_type.__name__}: {exc_value}{Style.RESET_ALL}\n")
+                else:
+                    # Unexpected errors - print full traceback for debugging
+                    traceback.print_tb(exc_tb)
+                    print(f"{theme['error']}{exc_type.__name__}: {exc_value}{Style.RESET_ALL}")
 
     # Show downloaded model path if one exists (persistent)
     if st.session_state.get("downloaded_model_path"):

@@ -4,7 +4,7 @@ Convert & Quantize tab for GGUF Converter GUI
 
 import streamlit as st
 from pathlib import Path
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, TYPE_CHECKING
 from colorama import init as colorama_init, Style
 from ..theme import THEME as theme
 
@@ -12,6 +12,9 @@ from ..gui_utils import (
     strip_quotes, open_folder, browse_folder,
     save_config, make_config_saver, path_input_columns
 )
+
+if TYPE_CHECKING:
+    from ..converter import GGUFConverter
 
 # Initialize colorama for cross-platform color support
 colorama_init(autoreset=True)
@@ -60,7 +63,7 @@ def validate_calibration_file(config: Dict[str, Any]) -> Optional[Path]:
 
 
 def render_convert_tab(
-    converter: Any,
+    converter: "GGUFConverter",
     config: Dict[str, Any],
     verbose: bool,
     nthreads: Optional[int],
@@ -940,13 +943,15 @@ def render_convert_tab(
                     st.markdown("**Verbose output:**")
                     st.exception(e)
 
-                # Print traceback to terminal with colored exception message
+                # Print to terminal - traceback only for unexpected errors
                 import traceback
                 import sys
                 exc_type, exc_value, exc_tb = sys.exc_info()
 
-                # Print traceback in normal colors
-                traceback.print_tb(exc_tb)
-
-                # Print exception type and message in red
-                print(f"{theme['error']}{exc_type.__name__}: {exc_value}{Style.RESET_ALL}")
+                # Expected user errors - just print the message, no traceback
+                if isinstance(e, (RuntimeError, ValueError, FileNotFoundError)):
+                    print(f"\n{theme['error']}{exc_type.__name__}: {exc_value}{Style.RESET_ALL}\n")
+                else:
+                    # Unexpected errors - print full traceback for debugging
+                    traceback.print_tb(exc_tb)
+                    print(f"{theme['error']}{exc_type.__name__}: {exc_value}{Style.RESET_ALL}")
