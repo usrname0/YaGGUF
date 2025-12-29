@@ -5,7 +5,8 @@ Convert & Quantize tab for GGUF Converter GUI
 import streamlit as st
 from pathlib import Path
 from typing import Dict, Any, Optional
-from colorama import Fore, Style, init as colorama_init
+from colorama import init as colorama_init, Style
+from ..theme import THEME as theme
 
 from ..gui_utils import (
     strip_quotes, open_folder, browse_folder,
@@ -15,14 +16,47 @@ from ..gui_utils import (
 # Initialize colorama for cross-platform color support
 colorama_init(autoreset=True)
 
-# Theme for terminal colors
-theme = {
-    "info": Fore.WHITE + Style.DIM,
-    "success": Fore.GREEN,
-    "warning": Fore.YELLOW,
-    "error": Fore.RED,
-    "highlight": Fore.CYAN,
-}
+
+def validate_calibration_file(config: Dict[str, Any]) -> Optional[Path]:
+    """
+    Validate and return the calibration file path.
+
+    Builds the path from config, validates it exists, and shows errors if not found.
+
+    Args:
+        config: Configuration dictionary
+
+    Returns:
+        Path to calibration file if valid, None if not found
+    """
+    cal_dir = config.get("imatrix_calibration_dir", "")
+    cal_file = config.get("imatrix_calibration_file", "wiki.train.raw")
+
+    if cal_dir:
+        calibration_file_path = Path(cal_dir) / cal_file
+    else:
+        # Use default calibration_data directory (one level up from gguf_converter module)
+        default_cal_dir = Path(__file__).parent.parent.parent / "calibration_data"
+        calibration_file_path = default_cal_dir / cal_file
+
+    # Validate calibration file exists
+    if not calibration_file_path.exists():
+        # Print detailed error to terminal
+        print(f"\n{theme['error']}Calibration file not found:{Style.RESET_ALL}")
+        print(f"{theme['error']}  Looking for: {calibration_file_path}{Style.RESET_ALL}")
+        print(f"{theme['error']}  Config has: {cal_file}{Style.RESET_ALL}")
+        if cal_dir:
+            print(f"{theme['error']}  In directory: {cal_dir}{Style.RESET_ALL}")
+        print(f"{theme['warning']}  Tip: Go to Imatrix Settings tab and reselect your calibration file{Style.RESET_ALL}\n")
+
+        # Show detailed error in GUI
+        st.error(f"**Calibration file not found:** `{cal_file}`\n\n"
+               f"Expected path: `{calibration_file_path}`\n\n"
+               f"**Fix:** Go to the **Imatrix Settings** tab and select a valid calibration file, "
+               f"use an existing imatrix, or turn off imatrix generation.")
+        return None
+
+    return calibration_file_path
 
 
 def render_convert_tab(
@@ -368,20 +402,25 @@ def render_convert_tab(
 
                 # Track fallback for warning display later
                 if fallback_happened:
+                    # Only print to terminal if this is a NEW fallback (not already in session state)
+                    is_new_fallback = "imatrix_fallback_warning" not in st.session_state
+
                     st.session_state.imatrix_fallback_warning = {
                         "previous": saved_reuse_path,
                         "current": imatrix_selection,
                         "is_file": imatrix_selection in imatrix_files
                     }
-                    # Print to terminal immediately
-                    if imatrix_selection in imatrix_files:
-                        print(f"\n{theme['warning']}Warning: Imatrix file auto-switched{Style.RESET_ALL}")
-                        print(f"{theme['warning']}  Previous: {saved_reuse_path} (not found){Style.RESET_ALL}")
-                        print(f"{theme['warning']}  Now using: {imatrix_selection}{Style.RESET_ALL}\n")
-                    else:
-                        print(f"\n{theme['warning']}Warning: Imatrix mode auto-switched{Style.RESET_ALL}")
-                        print(f"{theme['warning']}  Previous: {saved_reuse_path} (not found){Style.RESET_ALL}")
-                        print(f"{theme['warning']}  Now using: {imatrix_selection}{Style.RESET_ALL}\n")
+
+                    # Print to terminal only on first detection
+                    if is_new_fallback:
+                        if imatrix_selection in imatrix_files:
+                            print(f"\n{theme['warning']}Warning: Imatrix file auto-switched{Style.RESET_ALL}")
+                            print(f"{theme['warning']}  Previous: {saved_reuse_path} (not found){Style.RESET_ALL}")
+                            print(f"{theme['warning']}  Now using: {imatrix_selection}{Style.RESET_ALL}\n")
+                        else:
+                            print(f"\n{theme['warning']}Warning: Imatrix mode auto-switched{Style.RESET_ALL}")
+                            print(f"{theme['warning']}  Previous: {saved_reuse_path} (not found){Style.RESET_ALL}")
+                            print(f"{theme['warning']}  Now using: {imatrix_selection}{Style.RESET_ALL}\n")
                 else:
                     # Clear warning if no fallback
                     if "imatrix_fallback_warning" in st.session_state:
@@ -800,32 +839,9 @@ def render_convert_tab(
                         imatrix_output_filename = None  # Use default naming
                         config["imatrix_mode"] = "generate"
 
-                        # Build calibration file path for generation
-                        cal_dir = config.get("imatrix_calibration_dir", "")
-                        cal_file = config.get("imatrix_calibration_file", "wiki.train.raw")
-
-                        if cal_dir:
-                            calibration_file_path = Path(cal_dir) / cal_file
-                        else:
-                            # Use default calibration_data directory (one level up from gguf_converter module)
-                            default_cal_dir = Path(__file__).parent.parent.parent / "calibration_data"
-                            calibration_file_path = default_cal_dir / cal_file
-
-                        # Validate calibration file exists
-                        if not calibration_file_path.exists():
-                            # Print detailed error to terminal
-                            print(f"\n{theme['error']}Calibration file not found:{Style.RESET_ALL}")
-                            print(f"{theme['error']}  Looking for: {calibration_file_path}{Style.RESET_ALL}")
-                            print(f"{theme['error']}  Config has: {cal_file}{Style.RESET_ALL}")
-                            if cal_dir:
-                                print(f"{theme['error']}  In directory: {cal_dir}{Style.RESET_ALL}")
-                            print(f"{theme['warning']}  Tip: Go to Imatrix Settings tab and reselect your calibration file{Style.RESET_ALL}\n")
-
-                            # Show detailed error in GUI
-                            st.error(f"**Calibration file not found:** `{cal_file}`\n\n"
-                                   f"Expected path: `{calibration_file_path}`\n\n"
-                                   f"**Fix:** Go to the **Imatrix Settings** tab and select a valid calibration file, "
-                                   f"use an existing imatrix, or turn off imatrix generation.")
+                        # Validate calibration file
+                        calibration_file_path = validate_calibration_file(config)
+                        if calibration_file_path is None:
                             return  # Stop processing but keep UI working
                     elif imatrix_mode == "GENERATE (custom name)":
                         # Generate with custom name
@@ -842,32 +858,9 @@ def render_convert_tab(
                         else:
                             imatrix_output_filename = None
 
-                        # Build calibration file path for generation
-                        cal_dir = config.get("imatrix_calibration_dir", "")
-                        cal_file = config.get("imatrix_calibration_file", "wiki.train.raw")
-
-                        if cal_dir:
-                            calibration_file_path = Path(cal_dir) / cal_file
-                        else:
-                            # Use default calibration_data directory (one level up from gguf_converter module)
-                            default_cal_dir = Path(__file__).parent.parent.parent / "calibration_data"
-                            calibration_file_path = default_cal_dir / cal_file
-
-                        # Validate calibration file exists
-                        if not calibration_file_path.exists():
-                            # Print detailed error to terminal
-                            print(f"\n{theme['error']}Calibration file not found:{Style.RESET_ALL}")
-                            print(f"{theme['error']}  Looking for: {calibration_file_path}{Style.RESET_ALL}")
-                            print(f"{theme['error']}  Config has: {cal_file}{Style.RESET_ALL}")
-                            if cal_dir:
-                                print(f"{theme['error']}  In directory: {cal_dir}{Style.RESET_ALL}")
-                            print(f"{theme['warning']}  Tip: Go to Imatrix Settings tab and reselect your calibration file{Style.RESET_ALL}\n")
-
-                            # Show detailed error in GUI
-                            st.error(f"**Calibration file not found:** `{cal_file}`\n\n"
-                                   f"Expected path: `{calibration_file_path}`\n\n"
-                                   f"**Fix:** Go to the **Imatrix Settings** tab and select a valid calibration file, "
-                                   f"use an existing imatrix, or turn off imatrix generation.")
+                        # Validate calibration file
+                        calibration_file_path = validate_calibration_file(config)
+                        if calibration_file_path is None:
                             return  # Stop processing but keep UI working
 
                     save_config(config)
@@ -947,7 +940,13 @@ def render_convert_tab(
                     st.markdown("**Verbose output:**")
                     st.exception(e)
 
-                # ALSO print to terminal so user sees it
-                print(f"\n{theme['error']}Error: {e}{Style.RESET_ALL}", flush=True)
+                # Print traceback to terminal with colored exception message
                 import traceback
-                traceback.print_exc()
+                import sys
+                exc_type, exc_value, exc_tb = sys.exc_info()
+
+                # Print traceback in normal colors
+                traceback.print_tb(exc_tb)
+
+                # Print exception type and message in red
+                print(f"{theme['error']}{exc_type.__name__}: {exc_value}{Style.RESET_ALL}")

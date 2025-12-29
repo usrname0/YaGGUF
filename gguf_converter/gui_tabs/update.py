@@ -11,7 +11,8 @@ import os
 import sys
 from contextlib import redirect_stdout
 from typing import Dict, Any
-from colorama import Fore, Style, init as colorama_init
+from colorama import init as colorama_init, Style
+from ..theme import THEME as theme
 
 from ..gui_utils import (
     get_current_version, check_git_updates_available,
@@ -22,15 +23,6 @@ from ..gui_utils import (
 
 # Initialize colorama for cross-platform color support
 colorama_init(autoreset=True)
-
-# Theme for terminal colors
-theme = {
-    "info": Fore.WHITE + Style.DIM,
-    "success": Fore.GREEN,
-    "warning": Fore.YELLOW,
-    "error": Fore.RED,
-    "highlight": Fore.CYAN,
-}
 
 
 class TeeOutput(io.TextIOBase):

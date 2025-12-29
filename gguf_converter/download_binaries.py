@@ -7,19 +7,11 @@ import sys
 import argparse
 from pathlib import Path
 from .binary_manager import BinaryManager
-from colorama import Fore, Style, init as colorama_init
+from .theme import THEME as theme
+from colorama import init as colorama_init, Style
 
 # Initialize colorama for cross-platform color support
 colorama_init(autoreset=True)
-
-# Theme for terminal colors
-theme = {
-    "info": Fore.WHITE + Style.DIM,
-    "success": Fore.GREEN,
-    "warning": Fore.YELLOW,
-    "error": Fore.RED,
-    "highlight": Fore.CYAN,
-}
 
 
 def main() -> int:

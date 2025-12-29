@@ -9,19 +9,11 @@ import re
 from pathlib import Path
 from typing import Dict, List, Tuple
 import math
-from colorama import Fore, Style, init as colorama_init
+from colorama import init as colorama_init, Style
+from .theme import THEME as theme
 
 # Initialize colorama for cross-platform color support
 colorama_init(autoreset=True)
-
-# Theme for terminal colors
-theme = {
-    "info": Fore.WHITE + Style.DIM,
-    "success": Fore.GREEN,
-    "warning": Fore.YELLOW,
-    "error": Fore.RED,
-    "highlight": Fore.CYAN,
-}
 
 
 class TensorStatistics:

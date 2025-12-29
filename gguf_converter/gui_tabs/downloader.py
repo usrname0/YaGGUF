@@ -7,7 +7,8 @@ from pathlib import Path
 import webbrowser
 from typing import Dict, Any
 from huggingface_hub import HfApi
-from colorama import Fore, Style, init as colorama_init
+from colorama import init as colorama_init, Style
+from ..theme import THEME as theme
 
 from ..gui_utils import (
     strip_quotes, open_folder, browse_folder,
@@ -16,15 +17,6 @@ from ..gui_utils import (
 
 # Initialize colorama for cross-platform color support
 colorama_init(autoreset=True)
-
-# Theme for terminal colors
-theme = {
-    "info": Fore.WHITE + Style.DIM,
-    "success": Fore.GREEN,
-    "warning": Fore.YELLOW,
-    "error": Fore.RED,
-    "highlight": Fore.CYAN,
-}
 
 
 def render_downloader_tab(converter: Any, config: Dict[str, Any]) -> None:
@@ -283,6 +275,9 @@ def render_downloader_tab(converter: Any, config: Dict[str, Any]) -> None:
                 with st.spinner(f"Downloading {repo_id_clean}..."):
                     model_path = converter.download_model(repo_id_clean, download_dir_clean)
 
+                # Print success to terminal
+                print(f"\n{theme['success']}Download complete: {model_path}{Style.RESET_ALL}\n")
+
                 # Store in session state and mark as just completed
                 st.session_state.downloaded_model_path = model_path.as_posix()
                 st.session_state.download_just_completed = True
@@ -292,10 +287,16 @@ def render_downloader_tab(converter: Any, config: Dict[str, Any]) -> None:
                 # Show in Streamlit UI
                 st.error(f"Error: {e}")
 
-                # ALSO print to terminal so user sees it
-                print(f"\n{theme['error']}Error: {e}{Style.RESET_ALL}", flush=True)
+                # Print traceback to terminal with colored exception message
                 import traceback
-                traceback.print_exc()
+                import sys
+                exc_type, exc_value, exc_tb = sys.exc_info()
+
+                # Print traceback in normal colors
+                traceback.print_tb(exc_tb)
+
+                # Print exception type and message in red
+                print(f"{theme['error']}{exc_type.__name__}: {exc_value}{Style.RESET_ALL}")
 
     # Show downloaded model path if one exists (persistent)
     if st.session_state.get("downloaded_model_path"):

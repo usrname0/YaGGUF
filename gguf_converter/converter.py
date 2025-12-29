@@ -11,22 +11,13 @@ import shutil
 from pathlib import Path
 from typing import Optional, Union, List
 from huggingface_hub import snapshot_download, HfApi
-from colorama import Fore, Style, init as colorama_init
+from colorama import init as colorama_init, Style
 from .binary_manager import BinaryManager
 from . import imatrix_stats
+from .theme import THEME as theme
 
 # Initialize colorama for cross-platform color support
 colorama_init(autoreset=True)
-
-# Theme for terminal colors
-theme = {
-    "info": Fore.WHITE + Style.DIM,
-    "success": Fore.GREEN,
-    "warning": Fore.YELLOW,
-    "error": Fore.RED,
-    "highlight": Fore.CYAN,
-    "metadata": Fore.WHITE + Style.DIM,
-}
 
 
 
@@ -174,13 +165,7 @@ class GGUFConverter:
                 required_gb = required_bytes / (1024 * 1024 * 1024)
 
                 if stat.free < required_bytes:
-                    # Print colored version to terminal
-                    print(f"\n{theme['error']}Insufficient disk space for model download.{Style.RESET_ALL}")
-                    print(f"{theme['error']}Model size: {total_size_gb:.2f} GB{Style.RESET_ALL}")
-                    print(f"{theme['error']}Required (with buffer): {required_gb:.2f} GB{Style.RESET_ALL}")
-                    print(f"{theme['error']}Available: {available_gb:.2f} GB{Style.RESET_ALL}")
-                    print(f"{theme['error']}Please free up at least {required_gb - available_gb:.2f} GB and try again.{Style.RESET_ALL}\n")
-                    # Raise plain exception for GUI display
+                    # Raise exception - GUI layer will handle display
                     raise RuntimeError(
                         f"Insufficient disk space for model download.\n"
                         f"Model size: {total_size_gb:.2f} GB\n"

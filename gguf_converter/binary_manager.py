@@ -4,7 +4,6 @@ Binary manager for downloading and managing llama.cpp executables
 
 import os
 import platform
-import sys
 import zipfile
 import tarfile
 import shutil
@@ -13,19 +12,13 @@ import stat
 from pathlib import Path
 from typing import Optional, Dict
 from urllib.request import urlretrieve, urlopen
-from colorama import Fore, Style, init as colorama_init
+from colorama import init as colorama_init, Style
 
 # Initialize colorama for cross-platform color support
 colorama_init(autoreset=True)
 
-# Theme for terminal colors
-theme = {
-    "info": Fore.WHITE + Style.DIM,
-    "success": Fore.GREEN,
-    "warning": Fore.YELLOW,
-    "error": Fore.RED,
-    "highlight": Fore.CYAN,
-}
+# Import shared theme
+from .theme import THEME as theme
 
 
 def remove_readonly(func, path, excinfo):
@@ -304,8 +297,6 @@ class BinaryManager:
         """
         Set execute permissions on binary files (Unix only)
         """
-        import stat
-
         # Set execute permissions on llama-* binaries (not .so files)
         for path in self.bin_dir.glob('llama-*'):
             if path.is_file() and not path.suffix:  # No extension (not .so files)
