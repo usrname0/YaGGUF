@@ -46,7 +46,7 @@ class BinaryManager:
     Manages llama.cpp binary downloads and locations
     """
 
-    LLAMA_CPP_VERSION = "b7563"
+    LLAMA_CPP_VERSION = "b7574"
     RELEASE_URL_TEMPLATE = "https://github.com/ggml-org/llama.cpp/releases/download/{tag}/{filename}"
 
     def __init__(self, bin_dir: Optional[Path] = None, custom_binaries_folder: Optional[str] = None):
