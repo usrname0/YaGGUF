@@ -10,7 +10,6 @@ import tarfile
 import shutil
 import json
 import stat
-import socket
 from pathlib import Path
 from typing import Optional, Dict
 from urllib.request import urlretrieve, urlopen
@@ -139,24 +138,6 @@ class BinaryManager:
             print(f"Warning: Could not check disk space: {e}")
             return True  # Proceed anyway if check fails
 
-    def _check_network_connectivity(self, host: str = "api.github.com", port: int = 443, timeout: int = 5) -> bool:
-        """
-        Check if network connection is available
-
-        Args:
-            host: Host to check connectivity to
-            port: Port to connect to
-            timeout: Connection timeout in seconds
-
-        Returns:
-            True if network is available, False otherwise
-        """
-        try:
-            socket.create_connection((host, port), timeout=timeout)
-            return True
-        except (socket.error, socket.timeout):
-            return False
-
     def get_latest_version(self) -> str:
         """
         Get the latest llama.cpp release tag from GitHub
@@ -213,13 +194,6 @@ class BinaryManager:
 
         print(f"Downloading llama.cpp {tag} for {os_name}-{arch}...")
         print(f"URL: {url}")
-
-        # Check network connectivity before attempting download
-        if not self._check_network_connectivity():
-            raise RuntimeError(
-                "No network connection available. "
-                "Please check your internet connection and try again."
-            )
 
         # Check disk space before download (estimate 1 GB needed for download + extraction)
         required_space = 1024 * 1024 * 1024  # 1 GB

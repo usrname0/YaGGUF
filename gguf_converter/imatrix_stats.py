@@ -343,7 +343,7 @@ def show_statistics(imatrix_path: str) -> bool:
         # Print header
         print(f"\nComputing statistics for {imatrix_path} ({len(tstats)} tensors)")
         print(f"\n{'Layer':>5}  {'Tensor':<20}  {'Σ(Act²)':>14}  {'Min':>10}  {'Max':>14}  {'μ':>10}  {'σ':>10}   {'%Active':>8}  {'N':>10}  {'Entropy':>12}  {'E(norm)':>8}  {'ZD':>11}  {'CosSim':>8}")
-        print("=" * 192)
+        print("=" * 171)
 
         # Print tensor statistics
         for ts in tstats:

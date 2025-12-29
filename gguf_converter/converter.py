@@ -8,7 +8,6 @@ import json
 import io
 import time
 import shutil
-import socket
 from pathlib import Path
 from typing import Optional, Union, List
 from huggingface_hub import snapshot_download, HfApi
@@ -148,15 +147,6 @@ class GGUFConverter:
         """
         output_dir = Path(output_dir)
         output_dir.mkdir(parents=True, exist_ok=True)
-
-        # Check network connectivity before attempting download
-        try:
-            socket.create_connection(("huggingface.co", 443), timeout=5)
-        except (socket.error, socket.timeout):
-            raise RuntimeError(
-                "No network connection available. "
-                "Please check your internet connection and try again."
-            )
 
         # Get actual repository size from HuggingFace before downloading
         print(f"{theme['info']}Checking repository size...{Style.RESET_ALL}")

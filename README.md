@@ -56,7 +56,7 @@ All quantization types from llama.cpp are supported. Choose based on your size/q
 - Bigger is better (more precision)
 - For best quality use **F16** or **Q8_0**
 - For decent quality use **Q6_K** or **Q5_K_M**
-- Medium? Use **Q4_K_M**
+- Medium quality? Use **Q4_K_M**
 - For smallest size use IQ3_M or IQ2_M with importance matrix
 
 ## Requirements
@@ -77,14 +77,14 @@ All quantization types from llama.cpp are supported. Choose based on your size/q
 ## Installation - Linux
 
 ```bash
-# Clone the repository
-    git clone https://github.com/usrname0/YaGUFF.git
-    cd YaGUFF
-
 # If you want to select folders via the gui install tkinter (optional):
     sudo apt install python3-tk      # Ubuntu/Debian
     sudo dnf install python3-tkinter # Fedora/RHEL
     sudo pacman -S tk                # Arch
+
+# Clone the repository
+    git clone https://github.com/usrname0/YaGUFF.git
+    cd YaGUFF
 
 # Run the launcher script for Linux (runs a setup script if no venv detected):
     ./run_gui.sh
@@ -119,8 +119,7 @@ This is normal for large models. The process is CPU-intensive.
 
 ### Other Errors
 
-The application includes safety features to prevent common errors:
-- **Imatrix warnings** - IQ quantization types require an importance matrix for best results. By default, these are disabled unless you select an imatrix option. This can be disabled in settings if needed.
+- **Imatrix warnings** - Some IQ quantization types are disabled without an importance matrix for best results and to avoid errors. This can be disabled in settings if needed.
 - Use "Reset to defaults" in the settings to restore default configuration.
 - If issues persist, you can delete the installation folder and re-install.
   
