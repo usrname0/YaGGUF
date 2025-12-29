@@ -165,9 +165,9 @@ class GGUFConverter:
                 total_size_gb = total_size_bytes / (1024 * 1024 * 1024)
                 print(f"{theme['info']}Repository size: {total_size_gb:.2f} GB{Style.RESET_ALL}")
 
-                # Check disk space with 5% buffer for safety
-                buffer_multiplier = 1.05
-                required_bytes = int(total_size_bytes * buffer_multiplier)
+                # Check disk space with fixed 500MB buffer for safety
+                buffer_bytes = 500 * 1024 * 1024  # 500MB
+                required_bytes = total_size_bytes + buffer_bytes
 
                 stat = shutil.disk_usage(output_dir)
                 available_gb = stat.free / (1024 * 1024 * 1024)

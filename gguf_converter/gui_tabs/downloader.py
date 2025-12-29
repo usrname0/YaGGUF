@@ -6,6 +6,7 @@ import streamlit as st
 from pathlib import Path
 import webbrowser
 from typing import Dict, Any
+from huggingface_hub import HfApi
 
 from ..gui_utils import (
     strip_quotes, open_folder, browse_folder,
@@ -23,20 +24,75 @@ def render_downloader_tab(converter: Any, config: Dict[str, Any]) -> None:
     if "downloaded_model_path" not in st.session_state:
         st.session_state.downloaded_model_path = None
 
-    # Repository ID with Check Repo button
-    col_repo, col_repo_btn = st.columns([5, 1])
+    # Initialize session state for repo size data
+    if "repo_size_data" not in st.session_state:
+        st.session_state.repo_size_data = None
+
+    # Repository ID with View Repo button
+    col_repo, col_repo_view = st.columns([5, 1])
     with col_repo:
         repo_id = st.text_input(
             "Repository ID",
             value=config.get("repo_id", ""),
             placeholder="username/model-name"
         )
-    with col_repo_btn:
+
+    # Extract repo ID from URL if user pasted a full HuggingFace URL
+    if repo_id and ("huggingface.co/" in repo_id or "hf.co/" in repo_id):
+        import re
+        # Match patterns like https://huggingface.co/username/model-name or hf.co/username/model-name
+        match = re.search(r'(?:huggingface\.co|hf\.co)/([^/]+/[^/]+)', repo_id)
+        if match:
+            extracted_repo_id = match.group(1)
+            if extracted_repo_id != repo_id:
+                # Update config with extracted repo ID
+                config["repo_id"] = extracted_repo_id
+                save_config(config)
+                st.toast(f"Extracted repo ID: {extracted_repo_id}")
+                st.rerun()
+
+    # Save repo_id to config if it changed
+    if repo_id != config.get("repo_id", ""):
+        config["repo_id"] = repo_id
+        save_config(config)
+
+    repo_id_populated = bool(repo_id and repo_id.strip())
+
+    # Auto-fetch repo size when repo ID changes
+    if repo_id_populated:
+        # Check if we need to fetch size for this repo
+        if not st.session_state.repo_size_data or st.session_state.repo_size_data.get("repo_id") != repo_id.strip():
+            try:
+                api = HfApi()
+                repo_info = api.repo_info(repo_id=repo_id.strip(), files_metadata=True)
+
+                # Calculate total size from all files
+                total_size_bytes = 0
+                if hasattr(repo_info, 'siblings') and repo_info.siblings:
+                    for file in repo_info.siblings:
+                        if hasattr(file, 'size') and file.size:
+                            total_size_bytes += file.size
+
+                if total_size_bytes > 0:
+                    total_size_gb = total_size_bytes / (1024 * 1024 * 1024)
+                    st.session_state.repo_size_data = {
+                        "repo_id": repo_id.strip(),
+                        "size_gb": total_size_gb
+                    }
+                else:
+                    st.session_state.repo_size_data = None
+            except Exception:
+                # Silently fail on auto-fetch - user can click Check Size button if needed
+                st.session_state.repo_size_data = None
+    else:
+        # Clear repo size data if repo ID is empty
+        st.session_state.repo_size_data = None
+
+    with col_repo_view:
         st.markdown("<br>", unsafe_allow_html=True)  # Spacer to align with input
-        repo_id_populated = bool(repo_id and repo_id.strip())
         if st.button(
-            "Check Repo",
-            key="check_repo_download_btn",
+            "View Repo",
+            key="view_repo_download_btn",
             use_container_width=True,
             disabled=not repo_id_populated,
             help="Open HuggingFace repo in browser" if repo_id_populated else "Enter a repo ID first"
@@ -46,12 +102,55 @@ def render_downloader_tab(converter: Any, config: Dict[str, Any]) -> None:
                 webbrowser.open(url)
                 st.toast(f"Opened {url}")
 
-    # Download directory with Select Folder and Open Folder buttons
+    # Show repo size info or placeholder with Check Size button
+    col_info1, col_info2 = st.columns([5, 1])
+    with col_info1:
+        if st.session_state.repo_size_data:
+            repo_size_gb = st.session_state.repo_size_data["size_gb"]
+            st.info(f"Repository size: {repo_size_gb:.2f} GB")
+        else:
+            st.code("Click 'Check Size' to see repository size", language=None)
+
+    with col_info2:
+        if st.button(
+            "Check Size",
+            key="check_repo_size_btn",
+            use_container_width=True,
+            disabled=not repo_id_populated,
+            help="Check repository size on HuggingFace" if repo_id_populated else "Enter a repo ID first"
+        ):
+            if repo_id_populated:
+                try:
+                    with st.spinner("Checking repository size..."):
+                        api = HfApi()
+                        repo_info = api.repo_info(repo_id=repo_id.strip(), files_metadata=True)
+
+                        # Calculate total size from all files
+                        total_size_bytes = 0
+                        if hasattr(repo_info, 'siblings') and repo_info.siblings:
+                            for file in repo_info.siblings:
+                                if hasattr(file, 'size') and file.size:
+                                    total_size_bytes += file.size
+
+                        if total_size_bytes > 0:
+                            total_size_gb = total_size_bytes / (1024 * 1024 * 1024)
+                            st.session_state.repo_size_data = {
+                                "repo_id": repo_id.strip(),
+                                "size_gb": total_size_gb
+                            }
+                        else:
+                            st.session_state.repo_size_data = None
+                            st.warning("Could not determine repository size")
+                except Exception as e:
+                    st.session_state.repo_size_data = None
+                    st.error(f"Error checking repository: {e}")
+
+    # Download directory with Select Folder button
     if TKINTER_AVAILABLE:
-        col_download, col_download_browse, col_download_check = st.columns([4, 1, 1])
+        col_download, col_download_browse = st.columns([5, 1])
     else:
-        col_download, col_download_check = st.columns([5, 1])
-        col_download_browse = None  # Not used when tkinter unavailable
+        col_download = st.columns([6])[0]
+        col_download_browse = None
 
     with col_download:
         # Create dynamic label based on repository ID
@@ -71,11 +170,16 @@ def render_downloader_tab(converter: Any, config: Dict[str, Any]) -> None:
         download_dir = st.text_input(
             download_dir_label,
             value=config.get("download_dir", ""),
-            placeholder="~/Models"
+            placeholder="C:/Models or /home/user/Models"
         )
 
-    if TKINTER_AVAILABLE:
-        with col_download_browse:  # type: ignore[union-attr]
+    # Save download_dir to config if it changed
+    if download_dir != config.get("download_dir", ""):
+        config["download_dir"] = download_dir
+        save_config(config)
+
+    if TKINTER_AVAILABLE and col_download_browse:
+        with col_download_browse:
             st.markdown("<br>", unsafe_allow_html=True)  # Spacer to align with input
             if st.button(
                 "Select Folder",
@@ -91,20 +195,62 @@ def render_downloader_tab(converter: Any, config: Dict[str, Any]) -> None:
                     save_config(config)
                     st.rerun()
 
-    with col_download_check:
-        st.markdown("<br>", unsafe_allow_html=True)  # Spacer to align with input
+    # Show download directory info or placeholder with Open Folder button
+    col_dir_info1, col_dir_info2 = st.columns([5, 1])
+
+    with col_dir_info1:
+        # Use current value from text input, not config
+        download_dir_clean = strip_quotes(download_dir)
+        if download_dir_clean and Path(download_dir_clean).exists():
+            import shutil
+
+            # Calculate full download path including model subfolder
+            full_path = Path(download_dir_clean)
+            if repo_id and repo_id.strip():
+                model_name = repo_id.strip().split('/')[-1]
+                full_path = full_path / model_name
+
+            stat = shutil.disk_usage(download_dir_clean)
+            free_gb = stat.free / (1024 * 1024 * 1024)
+
+            # Check if we have enough space for the repository
+            insufficient_space = False
+            if st.session_state.repo_size_data:
+                repo_size_gb = st.session_state.repo_size_data["size_gb"]
+                buffer_gb = 0.5  # 500MB buffer
+                required_gb = repo_size_gb + buffer_gb
+                if free_gb < required_gb:
+                    insufficient_space = True
+
+            if insufficient_space:
+                st.warning(f"{full_path.as_posix()}\n\nInsufficient free space: {free_gb:.2f} GB")
+            else:
+                st.info(f"{full_path.as_posix()}\n\nFree space: {free_gb:.2f} GB")
+        else:
+            st.code("Select a download directory.\n\nFree space: unknown", language=None)
+
+    with col_dir_info2:
         download_dir_check = strip_quotes(download_dir)
-        download_dir_exists = bool(download_dir_check and Path(download_dir_check).exists())
+        # Calculate full path with model subfolder if repo ID exists
+        full_folder_path = download_dir_check
+        if download_dir_check and repo_id and repo_id.strip():
+            model_name = repo_id.strip().split('/')[-1]
+            full_folder_path = str(Path(download_dir_check) / model_name)
+
+        # Check if the full path exists, otherwise fall back to base download dir
+        folder_to_open = full_folder_path if Path(full_folder_path).exists() else download_dir_check
+        folder_exists = bool(folder_to_open and Path(folder_to_open).exists())
+
         if st.button(
             "Open Folder",
             key="check_download_folder_btn",
             use_container_width=True,
-            disabled=not download_dir_exists,
-            help="Open folder in file explorer" if download_dir_exists else "Path doesn't exist yet"
+            disabled=not folder_exists,
+            help="Open folder in file explorer" if folder_exists else "Path doesn't exist yet"
         ):
-            if download_dir_exists:
+            if folder_exists:
                 try:
-                    open_folder(download_dir_check)
+                    open_folder(folder_to_open)
                     st.toast("Opened folder")
                 except Exception as e:
                     st.toast(f"Could not open folder: {e}")
