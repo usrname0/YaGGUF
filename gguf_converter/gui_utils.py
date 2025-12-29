@@ -8,6 +8,19 @@ import json
 import subprocess
 import platform
 from typing import Dict, Optional, Tuple, Any, Callable, List
+from colorama import Fore, Style, init as colorama_init
+
+# Initialize colorama for cross-platform color support
+colorama_init(autoreset=True)
+
+# Theme for terminal colors
+theme = {
+    "info": Fore.WHITE + Style.DIM,
+    "success": Fore.GREEN,
+    "warning": Fore.YELLOW,
+    "error": Fore.RED,
+    "highlight": Fore.CYAN,
+}
 
 # Optional tkinter import for native file dialogs
 try:
@@ -21,7 +34,8 @@ except ImportError:
 
 # Export TKINTER_AVAILABLE for use in other modules
 __all__ = ['TKINTER_AVAILABLE', 'browse_folder', 'open_folder', 'strip_quotes',
-           'save_config', 'load_config', 'make_config_saver', 'path_input_columns']
+           'save_config', 'load_config', 'make_config_saver', 'path_input_columns',
+           'extract_repo_id_from_url', 'check_disk_space_sufficient']
 
 
 # Config file location
@@ -102,7 +116,7 @@ def load_config() -> Dict[str, Any]:
             config.update(saved_config)
             return config
         except Exception as e:
-            print(f"Warning: Could not load config: {e}", flush=True)
+            print(f"{theme['warning']}Warning: Could not load config: {e}{Style.RESET_ALL}", flush=True)
             return get_default_config()
     return get_default_config()
 
@@ -113,7 +127,7 @@ def save_config(config: Dict[str, Any]) -> None:
         with open(CONFIG_FILE, 'w') as f:
             json.dump(config, f, indent=2)
     except Exception as e:
-        print(f"Warning: Could not save config: {e}", flush=True)
+        print(f"{theme['warning']}Warning: Could not save config: {e}{Style.RESET_ALL}", flush=True)
 
 
 def make_config_saver(config: Dict[str, Any], config_key: str, session_key: str) -> Callable[[], None]:
@@ -327,7 +341,7 @@ def browse_folder(initial_dir: Optional[str] = None) -> Optional[str]:
         root.destroy()
         return folder_path if folder_path else None
     except Exception as e:
-        print(f"Error opening folder picker: {e}")
+        print(f"{theme['error']}Error opening folder picker: {e}{Style.RESET_ALL}")
         return None
 
 
@@ -570,6 +584,83 @@ def display_conversion_scripts_version_status(converter: Any) -> None:
             st.info(f"Expected conversion scripts version: **{expected_version}**")
     elif scripts_info["status"] == "missing":
         st.info(f"Expected conversion scripts version: **{expected_version}**")
+
+
+def extract_repo_id_from_url(url_or_repo_id: str) -> Optional[str]:
+    """
+    Extract repository ID from HuggingFace URL or return the repo ID if already in correct format
+
+    Handles various HuggingFace URL formats:
+    - https://huggingface.co/username/model-name
+    - https://huggingface.co/username/model-name/tree/main
+    - hf.co/username/model-name
+    - username/model-name (already in correct format)
+
+    Args:
+        url_or_repo_id: HuggingFace URL or repository ID
+
+    Returns:
+        str: Extracted repository ID (username/model-name) or None if invalid
+
+    Examples:
+        >>> extract_repo_id_from_url("https://huggingface.co/meta-llama/Llama-3.2-3B")
+        'meta-llama/Llama-3.2-3B'
+        >>> extract_repo_id_from_url("meta-llama/Llama-3.2-3B")
+        'meta-llama/Llama-3.2-3B'
+    """
+    import re
+
+    if not url_or_repo_id:
+        return None
+
+    url_or_repo_id = url_or_repo_id.strip()
+
+    # Check if it's a URL
+    if "huggingface.co/" in url_or_repo_id or "hf.co/" in url_or_repo_id:
+        # Match patterns like https://huggingface.co/username/model-name or hf.co/username/model-name
+        match = re.search(r'(?:huggingface\.co|hf\.co)/([^/]+/[^/]+)', url_or_repo_id)
+        if match:
+            return match.group(1)
+        return None
+
+    # If not a URL, check if it's already in username/model-name format
+    if re.match(r'^[^/]+/[^/]+$', url_or_repo_id):
+        return url_or_repo_id
+
+    return None
+
+
+def check_disk_space_sufficient(path: Path, required_bytes: int, buffer_bytes: int = 500 * 1024 * 1024) -> Tuple[bool, int]:
+    """
+    Check if there is sufficient disk space at the given path
+
+    Args:
+        path: Path to check disk space for
+        required_bytes: Required space in bytes
+        buffer_bytes: Additional buffer space in bytes (default: 500MB)
+
+    Returns:
+        tuple: (is_sufficient, free_bytes)
+            - is_sufficient: True if enough space available
+            - free_bytes: Available free space in bytes
+
+    Examples:
+        >>> sufficient, free = check_disk_space_sufficient(Path("/tmp"), 1024 * 1024 * 1024)  # 1GB
+        >>> print(f"Sufficient: {sufficient}, Free: {free / (1024**3):.2f} GB")
+    """
+    import shutil
+
+    if not path.exists():
+        # If path doesn't exist, we can't check disk space
+        return False, 0
+
+    try:
+        stat = shutil.disk_usage(path)
+        total_required = required_bytes + buffer_bytes
+        return stat.free >= total_required, stat.free
+    except Exception:
+        # If we can't check, assume insufficient
+        return False, 0
 
 
 def run_and_stream_command(command: List[str]) -> None:

@@ -11,6 +11,7 @@ import os
 import sys
 from contextlib import redirect_stdout
 from typing import Dict, Any
+from colorama import Fore, Style, init as colorama_init
 
 from ..gui_utils import (
     get_current_version, check_git_updates_available,
@@ -18,6 +19,18 @@ from ..gui_utils import (
     display_binary_version_status, get_conversion_scripts_info,
     display_conversion_scripts_version_status
 )
+
+# Initialize colorama for cross-platform color support
+colorama_init(autoreset=True)
+
+# Theme for terminal colors
+theme = {
+    "info": Fore.WHITE + Style.DIM,
+    "success": Fore.GREEN,
+    "warning": Fore.YELLOW,
+    "error": Fore.RED,
+    "highlight": Fore.CYAN,
+}
 
 
 class TeeOutput(io.TextIOBase):
@@ -158,7 +171,7 @@ def render_update_tab(converter: Any, config: Dict[str, Any]) -> None:
                     st.toast("Binaries updated successfully!")
                     success = True
                 except Exception as e:
-                    print(f"\n--- An error occurred ---\n{str(e)}")
+                    print(f"\n{theme['error']}--- An error occurred ---{Style.RESET_ALL}\n{str(e)}")
                     st.toast(f"An error occurred during binary update: {e}")
                     success = False
 
@@ -177,12 +190,12 @@ def render_update_tab(converter: Any, config: Dict[str, Any]) -> None:
             with redirect_stdout(tee):  # type: ignore[arg-type]
                 try:
                     latest_version = st.session_state.converter.binary_manager.get_latest_version()
-                    print(f"Latest version: {latest_version}")
+                    print(f"{theme['info']}Latest version: {latest_version}{Style.RESET_ALL}")
                     st.session_state.converter.binary_manager.download_binaries(force=True, version=latest_version)
                     st.toast("Binaries updated successfully!")
                     success = True
                 except Exception as e:
-                    print(f"\n--- An error occurred ---\n{str(e)}")
+                    print(f"\n{theme['error']}--- An error occurred ---{Style.RESET_ALL}\n{str(e)}")
                     st.toast(f"An error occurred during binary update: {e}")
                     success = False
 
@@ -225,11 +238,11 @@ def render_update_tab(converter: Any, config: Dict[str, Any]) -> None:
                         st.toast("Conversion scripts updated successfully!")
                         success = True
                     else:
-                        print(f"\n--- An error occurred ---\n{result['message']}")
+                        print(f"\n{theme['error']}--- An error occurred ---{Style.RESET_ALL}\n{result['message']}")
                         st.toast(f"An error occurred: {result['message']}")
                         success = False
                 except Exception as e:
-                    print(f"\n--- An error occurred ---\n{str(e)}")
+                    print(f"\n{theme['error']}--- An error occurred ---{Style.RESET_ALL}\n{str(e)}")
                     st.toast(f"An error occurred during update: {e}")
                     success = False
 
@@ -252,11 +265,11 @@ def render_update_tab(converter: Any, config: Dict[str, Any]) -> None:
                         st.toast("Conversion scripts updated successfully!")
                         success = True
                     else:
-                        print(f"\n--- An error occurred ---\n{result['message']}")
+                        print(f"\n{theme['error']}--- An error occurred ---{Style.RESET_ALL}\n{result['message']}")
                         st.toast(f"An error occurred: {result['message']}")
                         success = False
                 except Exception as e:
-                    print(f"\n--- An error occurred ---\n{str(e)}")
+                    print(f"\n{theme['error']}--- An error occurred ---{Style.RESET_ALL}\n{str(e)}")
                     st.toast(f"An error occurred during update: {e}")
                     success = False
 

@@ -9,6 +9,19 @@ import re
 from pathlib import Path
 from typing import Dict, List, Tuple
 import math
+from colorama import Fore, Style, init as colorama_init
+
+# Initialize colorama for cross-platform color support
+colorama_init(autoreset=True)
+
+# Theme for terminal colors
+theme = {
+    "info": Fore.WHITE + Style.DIM,
+    "success": Fore.GREEN,
+    "warning": Fore.YELLOW,
+    "error": Fore.RED,
+    "highlight": Fore.CYAN,
+}
 
 
 class TensorStatistics:
@@ -310,7 +323,7 @@ def show_statistics(imatrix_path: str) -> bool:
         stats_dict = load_imatrix_gguf(imatrix_path)
 
         if not stats_dict:
-            print(f"\nError: {imatrix_path} is not a valid imatrix file\n")
+            print(f"\n{theme['error']}Error: {imatrix_path} is not a valid imatrix file{Style.RESET_ALL}\n")
             return False
 
         # Compute statistics for each tensor
@@ -320,11 +333,11 @@ def show_statistics(imatrix_path: str) -> bool:
                 ts = compute_statistics(name, stats)
                 tstats.append(ts)
             except Exception as e:
-                print(f"Warning: Could not compute statistics for {name}: {e}")
+                print(f"{theme['warning']}Warning: Could not compute statistics for {name}: {e}{Style.RESET_ALL}")
                 continue
 
         if not tstats:
-            print(f"Error: cannot compute statistics for {imatrix_path}\n")
+            print(f"{theme['error']}Error: cannot compute statistics for {imatrix_path}{Style.RESET_ALL}\n")
             return False
 
         # Compute cosine similarity
@@ -341,7 +354,7 @@ def show_statistics(imatrix_path: str) -> bool:
         weighted_stats = {}
 
         # Print header
-        print(f"\nComputing statistics for {imatrix_path} ({len(tstats)} tensors)")
+        print(f"\n{theme['highlight']}Computing statistics for {imatrix_path} ({len(tstats)} tensors){Style.RESET_ALL}")
         print(f"\n{'Layer':>5}  {'Tensor':<20}  {'Σ(Act²)':>14}  {'Min':>10}  {'Max':>14}  {'μ':>10}  {'σ':>10}   {'%Active':>8}  {'N':>10}  {'Entropy':>12}  {'E(norm)':>8}  {'ZD':>11}  {'CosSim':>8}")
         print("=" * 171)
 
@@ -383,7 +396,7 @@ def show_statistics(imatrix_path: str) -> bool:
         # Print weighted averages per layer
         layers = [k for k in weighted_stats.keys() if k >= 0]
         if layers:
-            print(f"\nComputing weighted average statistics per layer ({len(layers)} layers)")
+            print(f"\n{theme['highlight']}Computing weighted average statistics per layer ({len(layers)} layers){Style.RESET_ALL}")
             print(f"\n{'Layer':>5}  {'μΣ(Act²)':>14}  {'μZD':>11}    {'μCosSim':>8}")
             print("=" * 52)
 
@@ -400,7 +413,7 @@ def show_statistics(imatrix_path: str) -> bool:
         return True
 
     except Exception as e:
-        print(f"\nError: Failed to show statistics: {e}\n")
+        print(f"\n{theme['error']}Error: Failed to show statistics: {e}{Style.RESET_ALL}\n")
         import traceback
         traceback.print_exc()
         return False
@@ -409,13 +422,13 @@ def show_statistics(imatrix_path: str) -> bool:
 def main():
     """Main entry point"""
     if len(sys.argv) < 2:
-        print("Usage: python imatrix_stats.py <imatrix.gguf>")
+        print(f"{theme['info']}Usage: python imatrix_stats.py <imatrix.gguf>{Style.RESET_ALL}")
         sys.exit(1)
 
     imatrix_path = sys.argv[1]
 
     if not Path(imatrix_path).exists():
-        print(f"Error: File not found: {imatrix_path}")
+        print(f"{theme['error']}Error: File not found: {imatrix_path}{Style.RESET_ALL}")
         sys.exit(1)
 
     success = show_statistics(imatrix_path)

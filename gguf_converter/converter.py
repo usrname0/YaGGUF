@@ -20,12 +20,12 @@ colorama_init(autoreset=True)
 
 # Theme for terminal colors
 theme = {
-    "info": Fore.YELLOW,
-    "success": Fore.CYAN,
+    "info": Fore.WHITE + Style.DIM,
+    "success": Fore.GREEN,
     "warning": Fore.YELLOW,
     "error": Fore.RED,
     "highlight": Fore.CYAN,
-    "metadata": Fore.YELLOW,
+    "metadata": Fore.WHITE + Style.DIM,
 }
 
 
@@ -122,7 +122,7 @@ class GGUFConverter:
         if custom_binaries_folder is None:
             if not self.binary_manager.ensure_binaries():
                 raise RuntimeError(
-                    "Failed to get llama.cpp binaries. "
+                    "Failed to get llama.cpp binaries.\n"
                     "Please check your internet connection or install llama.cpp manually."
                 )
         if custom_llama_cpp_repo is None:
@@ -174,6 +174,13 @@ class GGUFConverter:
                 required_gb = required_bytes / (1024 * 1024 * 1024)
 
                 if stat.free < required_bytes:
+                    # Print colored version to terminal
+                    print(f"\n{theme['error']}Insufficient disk space for model download.{Style.RESET_ALL}")
+                    print(f"{theme['error']}Model size: {total_size_gb:.2f} GB{Style.RESET_ALL}")
+                    print(f"{theme['error']}Required (with buffer): {required_gb:.2f} GB{Style.RESET_ALL}")
+                    print(f"{theme['error']}Available: {available_gb:.2f} GB{Style.RESET_ALL}")
+                    print(f"{theme['error']}Please free up at least {required_gb - available_gb:.2f} GB and try again.{Style.RESET_ALL}\n")
+                    # Raise plain exception for GUI display
                     raise RuntimeError(
                         f"Insufficient disk space for model download.\n"
                         f"Model size: {total_size_gb:.2f} GB\n"
@@ -235,8 +242,8 @@ class GGUFConverter:
 
         if not convert_script:
             raise RuntimeError(
-                "Could not find convert_hf_to_gguf.py script. "
-                "The llama.cpp repository should have been auto-cloned. "
+                "Could not find convert_hf_to_gguf.py script.\n"
+                "The llama.cpp repository should have been auto-cloned.\n"
                 "Please check your git installation or manually clone llama.cpp."
             )
 
@@ -259,7 +266,7 @@ class GGUFConverter:
             cmd.append("--mistral-format")
 
         print(f"{theme['info']}Converting {model_path.name} to GGUF format...{Style.RESET_ALL}")
-        print(f"{theme['highlight']}Command: {' '.join(cmd)}{Style.RESET_ALL}")
+        print(f"{theme['highlight']}Running: {' '.join(cmd)}{Style.RESET_ALL}")
 
         result = subprocess.run(cmd, capture_output=not verbose, text=True)
 
@@ -408,7 +415,7 @@ class GGUFConverter:
 
         if quantization_type not in self.QUANTIZATION_TYPES:
             raise ValueError(
-                f"Invalid quantization type: {quantization_type}. "
+                f"Invalid quantization type: {quantization_type}.\n"
                 f"Available: {', '.join(self.QUANTIZATION_TYPES)}"
             )
 
@@ -480,7 +487,7 @@ class GGUFConverter:
             if "without an importance matrix" in raw_error and imatrix_path:
                 raise RuntimeError(
                     f"Quantization failed: Model incompatibility detected.\n\n"
-                    f"An importance matrix was provided, but {quantization_type} quantization still failed. "
+                    f"An importance matrix was provided, but {quantization_type} quantization still failed.\n"
                     f"This typically means the model architecture is incompatible with this quantization type.\n\n"
                     f"Error:\n{error_msg}"
                 )
@@ -773,10 +780,10 @@ class GGUFConverter:
 
         if requested_iq_quants and not using_imatrix and ignore_imatrix_warnings:
             print(f"\n{theme['warning']}WARNING: Imatrix warnings override enabled!{Style.RESET_ALL}")
-            print(f"\n{theme['error']}These quantizations require an importance matrix for best quality:{Style.RESET_ALL}")
+            print(f"\n{theme['warning']}These quantizations require an importance matrix for best quality:{Style.RESET_ALL}")
             print(f"  {', '.join(requested_iq_quants)}")
             print(f"\n{theme['warning']}Proceeding without imatrix as requested (ignore_imatrix_warnings=True){Style.RESET_ALL}")
-            print(f"{theme['highlight']}Results may have significantly degraded quality. Consider enabling imatrix generation.{Style.RESET_ALL}")
+            print(f"{theme['warning']}Results may have significantly degraded quality. Consider enabling imatrix generation.{Style.RESET_ALL}")
 
         is_already_gguf = False
         model_name = model_path.name
@@ -820,12 +827,12 @@ class GGUFConverter:
                 if not calibration_file.exists():
                     raise FileNotFoundError(
                         f"Calibration file not found: {calibration_file}\n"
-                        f"llama-imatrix requires a calibration file. Please add a calibration file "
+                        f"llama-imatrix requires a calibration file. Please add a calibration file\n"
                         f"(like wiki.train.raw) to the calibration_data directory."
                     )
             else:
                 raise ValueError(
-                    "No calibration file specified. llama-imatrix requires a calibration file. "
+                    "No calibration file specified. llama-imatrix requires a calibration file.\n"
                     "Please select a calibration file in the Imatrix Settings tab."
                 )
 

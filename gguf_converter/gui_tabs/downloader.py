@@ -7,11 +7,24 @@ from pathlib import Path
 import webbrowser
 from typing import Dict, Any
 from huggingface_hub import HfApi
+from colorama import Fore, Style, init as colorama_init
 
 from ..gui_utils import (
     strip_quotes, open_folder, browse_folder,
-    save_config, TKINTER_AVAILABLE
+    save_config, TKINTER_AVAILABLE, extract_repo_id_from_url
 )
+
+# Initialize colorama for cross-platform color support
+colorama_init(autoreset=True)
+
+# Theme for terminal colors
+theme = {
+    "info": Fore.WHITE + Style.DIM,
+    "success": Fore.GREEN,
+    "warning": Fore.YELLOW,
+    "error": Fore.RED,
+    "highlight": Fore.CYAN,
+}
 
 
 def render_downloader_tab(converter: Any, config: Dict[str, Any]) -> None:
@@ -39,17 +52,13 @@ def render_downloader_tab(converter: Any, config: Dict[str, Any]) -> None:
 
     # Extract repo ID from URL if user pasted a full HuggingFace URL
     if repo_id and ("huggingface.co/" in repo_id or "hf.co/" in repo_id):
-        import re
-        # Match patterns like https://huggingface.co/username/model-name or hf.co/username/model-name
-        match = re.search(r'(?:huggingface\.co|hf\.co)/([^/]+/[^/]+)', repo_id)
-        if match:
-            extracted_repo_id = match.group(1)
-            if extracted_repo_id != repo_id:
-                # Update config with extracted repo ID
-                config["repo_id"] = extracted_repo_id
-                save_config(config)
-                st.toast(f"Extracted repo ID: {extracted_repo_id}")
-                st.rerun()
+        extracted_repo_id = extract_repo_id_from_url(repo_id)
+        if extracted_repo_id and extracted_repo_id != repo_id:
+            # Update config with extracted repo ID
+            config["repo_id"] = extracted_repo_id
+            save_config(config)
+            st.toast(f"Extracted repo ID: {extracted_repo_id}")
+            st.rerun()
 
     # Save repo_id to config if it changed
     if repo_id != config.get("repo_id", ""):
@@ -284,7 +293,7 @@ def render_downloader_tab(converter: Any, config: Dict[str, Any]) -> None:
                 st.error(f"Error: {e}")
 
                 # ALSO print to terminal so user sees it
-                print(f"\nError: {e}", flush=True)
+                print(f"\n{theme['error']}Error: {e}{Style.RESET_ALL}", flush=True)
                 import traceback
                 traceback.print_exc()
 

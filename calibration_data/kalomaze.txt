@@ -1,9 +1,3 @@
-# Default Calibration Dataset for Importance Matrix (imatrix) Generation
-#
-# This dataset is based on calibration data from the llama.cpp community,
-# inspired by kalomaze's "groups_merged.txt" - a diverse, general-purpose
-# imatrix calibration dataset.
-#
 # Source: https://github.com/ggml-org/llama.cpp/discussions/5263
 # Credit: kalomaze and the llama.cpp community (February 2024)
 #

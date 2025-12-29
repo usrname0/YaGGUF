@@ -13,6 +13,19 @@ import stat
 from pathlib import Path
 from typing import Optional, Dict
 from urllib.request import urlretrieve, urlopen
+from colorama import Fore, Style, init as colorama_init
+
+# Initialize colorama for cross-platform color support
+colorama_init(autoreset=True)
+
+# Theme for terminal colors
+theme = {
+    "info": Fore.WHITE + Style.DIM,
+    "success": Fore.GREEN,
+    "warning": Fore.YELLOW,
+    "error": Fore.RED,
+    "highlight": Fore.CYAN,
+}
 
 
 def remove_readonly(func, path, excinfo):
@@ -129,13 +142,13 @@ class BinaryManager:
             required_mb = required_bytes / (1024 * 1024)
 
             if stat.free < required_bytes:
-                print(f"ERROR: Insufficient disk space")
-                print(f"  Required: {required_mb:.1f} MB")
-                print(f"  Available: {available_mb:.1f} MB")
+                print(f"{theme['error']}ERROR: Insufficient disk space{Style.RESET_ALL}")
+                print(f"{theme['error']}  Required: {required_mb:.1f} MB{Style.RESET_ALL}")
+                print(f"{theme['error']}  Available: {available_mb:.1f} MB{Style.RESET_ALL}")
                 return False
             return True
         except Exception as e:
-            print(f"Warning: Could not check disk space: {e}")
+            print(f"{theme['warning']}Warning: Could not check disk space: {e}{Style.RESET_ALL}")
             return True  # Proceed anyway if check fails
 
     def get_latest_version(self) -> str:
@@ -151,8 +164,8 @@ class BinaryManager:
                 data = json.loads(response.read().decode())
                 return data['tag_name']
         except Exception as e:
-            print(f"Warning: Could not fetch latest version: {e}")
-            print(f"Falling back to recommended version: {self.LLAMA_CPP_VERSION}")
+            print(f"{theme['warning']}Warning: Could not fetch latest version: {e}{Style.RESET_ALL}")
+            print(f"{theme['info']}Falling back to recommended version: {self.LLAMA_CPP_VERSION}{Style.RESET_ALL}")
             return self.LLAMA_CPP_VERSION
 
     def download_binaries(self, force: bool = False, version: Optional[str] = None) -> Path:
@@ -167,7 +180,7 @@ class BinaryManager:
             Path to bin directory containing executables
         """
         if not force and self._binaries_exist():
-            print(f"Binaries already exist in {self.bin_dir}")
+            print(f"{theme['info']}Binaries already exist in {self.bin_dir}{Style.RESET_ALL}")
             return self.bin_dir
 
         # Use specified version or default to recommended
@@ -192,8 +205,8 @@ class BinaryManager:
 
         url = self.RELEASE_URL_TEMPLATE.format(tag=tag, filename=filename)
 
-        print(f"Downloading llama.cpp {tag} for {os_name}-{arch}...")
-        print(f"URL: {url}")
+        print(f"{theme['info']}Downloading llama.cpp {tag} for {os_name}-{arch}...{Style.RESET_ALL}")
+        print(f"{theme['highlight']}{url}{Style.RESET_ALL}")
 
         # Check disk space before download (estimate 1 GB needed for download + extraction)
         required_space = 1024 * 1024 * 1024  # 1 GB
@@ -212,28 +225,28 @@ class BinaryManager:
         try:
             urlretrieve(url, download_path, reporthook=self._progress_hook)
             print()  # New line after progress
-            print(f"Downloaded to {download_path}")
+            print(f"{theme['success']}Downloaded to {download_path}{Style.RESET_ALL}")
         except Exception as e:
-            print(f"\nERROR: Failed to download binaries: {e}")
+            print(f"\n{theme['error']}ERROR: Failed to download binaries: {e}{Style.RESET_ALL}")
             raise RuntimeError(
                 f"Failed to download llama.cpp binaries from {url}. "
                 f"Please check your internet connection or download manually."
             )
 
         # Extract archive
-        print(f"Extracting {filename}...")
+        print(f"{theme['info']}Extracting {filename}...{Style.RESET_ALL}")
         self._extract_archive(download_path)
 
         # Clean up archive
         download_path.unlink()
-        print(f"Extraction complete")
+        print(f"{theme['success']}Extraction complete{Style.RESET_ALL}")
 
         # Verify binaries exist
         if not self._check_binary_files_exist():
             raise RuntimeError("Binary extraction succeeded but executables not found")
 
-        print(f"Installed binary version: {tag}")
-        print(f"Binaries ready in {self.bin_dir}")
+        print(f"{theme['success']}Installed binary version: {tag}{Style.RESET_ALL}")
+        print(f"{theme['success']}Binaries ready in {self.bin_dir}{Style.RESET_ALL}")
         return self.bin_dir
 
     def _cleanup_old_binaries(self):
@@ -243,7 +256,7 @@ class BinaryManager:
         if not self.bin_dir.exists():
             return
 
-        print("Removing old binaries...")
+        print(f"{theme['info']}Removing old binaries...{Style.RESET_ALL}")
         # Remove everything in bin_dir (files and directories)
         for item in self.bin_dir.iterdir():
             if item.is_dir():
@@ -267,7 +280,7 @@ class BinaryManager:
         if len(subdirs) == 1:
             # Single subdirectory - likely the llama-* folder
             subdir = subdirs[0]
-            print(f"Flattening extracted directory: {subdir.name}")
+            print(f"{theme['info']}Flattening extracted directory: {subdir.name}{Style.RESET_ALL}")
 
             # Move all files from subdirectory to bin root
             for item in subdir.iterdir():
@@ -300,7 +313,7 @@ class BinaryManager:
                     # Add execute permission for owner, group, and others
                     path.chmod(path.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
                 except Exception as e:
-                    print(f"Warning: Could not set execute permission on {path}: {e}")
+                    print(f"{theme['warning']}Warning: Could not set execute permission on {path}: {e}{Style.RESET_ALL}")
 
     def _check_binary_files_exist(self) -> bool:
         """
@@ -358,15 +371,15 @@ class BinaryManager:
             self.download_binaries()
             return True
         except Exception as e:
-            print(f"Binary download failed: {e}")
+            print(f"{theme['error']}Binary download failed: {e}{Style.RESET_ALL}")
 
             if not fallback_to_system:
                 return False
 
             # Fallback: check if binaries are in system PATH
-            print("Checking system PATH for llama.cpp binaries...")
+            print(f"{theme['info']}Checking system PATH for llama.cpp binaries...{Style.RESET_ALL}")
             if self._check_system_binaries():
-                print("Found llama.cpp binaries in system PATH")
+                print(f"{theme['success']}Found llama.cpp binaries in system PATH{Style.RESET_ALL}")
                 return True
 
             return False
@@ -499,7 +512,7 @@ class BinaryManager:
             if use_recommended:
                 # Checkout the recommended version
                 target_version = self.LLAMA_CPP_VERSION
-                print(f"Updating conversion scripts to recommended version: {target_version}")
+                print(f"{theme['info']}Updating conversion scripts to recommended version: {target_version}{Style.RESET_ALL}")
 
                 # Fetch latest tags
                 fetch_result = subprocess.run(
@@ -528,7 +541,7 @@ class BinaryManager:
                 current_version = current_result.stdout.strip() if current_result.returncode == 0 else "unknown"
 
                 if target_version in current_version:
-                    print(f"Conversion scripts already at version {target_version}")
+                    print(f"{theme['success']}Conversion scripts already at version {target_version}{Style.RESET_ALL}")
                     return {
                         'status': 'already_updated',
                         'message': f'Conversion scripts already at recommended version: {target_version}'
@@ -544,7 +557,7 @@ class BinaryManager:
                 )
 
                 if checkout_result.returncode == 0:
-                    print(f"Conversion scripts updated to version {target_version}")
+                    print(f"{theme['success']}Conversion scripts updated to version {target_version}{Style.RESET_ALL}")
                     return {
                         'status': 'success',
                         'message': f'Conversion scripts updated to recommended version: {target_version}'
@@ -556,9 +569,9 @@ class BinaryManager:
                     }
             else:
                 # Get latest tagged release and re-clone
-                print("Fetching latest release version...")
+                print(f"{theme['info']}Fetching latest release version...{Style.RESET_ALL}")
                 latest_version = self.get_latest_version()
-                print(f"Latest release: {latest_version}")
+                print(f"{theme['info']}Latest release: {latest_version}{Style.RESET_ALL}")
 
                 # Check current version
                 current_result = subprocess.run(
@@ -572,18 +585,18 @@ class BinaryManager:
                 current_version = current_result.stdout.strip() if current_result.returncode == 0 else "unknown"
 
                 if latest_version in current_version:
-                    print(f"Conversion scripts already at latest version: {latest_version}")
+                    print(f"{theme['success']}Conversion scripts already at latest version: {latest_version}{Style.RESET_ALL}")
                     return {
                         'status': 'already_updated',
                         'message': f'Conversion scripts already at latest version: {latest_version}'
                     }
 
                 # Delete and re-clone with latest version
-                print(f"Updating to latest version {latest_version}...")
-                print("Removing existing llama.cpp repository...")
+                print(f"{theme['info']}Updating to latest version {latest_version}...{Style.RESET_ALL}")
+                print(f"{theme['info']}Removing existing llama.cpp repository...{Style.RESET_ALL}")
                 shutil.rmtree(llama_cpp_dir, onerror=remove_readonly)
 
-                print(f"Cloning llama.cpp repository at version {latest_version}...")
+                print(f"{theme['info']}Cloning llama.cpp repository at version {latest_version}...{Style.RESET_ALL}")
                 clone_result = subprocess.run(
                     [
                         "git", "clone",
@@ -598,7 +611,7 @@ class BinaryManager:
                 )
 
                 if clone_result.returncode == 0:
-                    print(f"Conversion scripts updated to latest version: {latest_version}")
+                    print(f"{theme['success']}Conversion scripts updated to latest version: {latest_version}{Style.RESET_ALL}")
                     return {
                         'status': 'success',
                         'message': f'Conversion scripts updated to latest version: {latest_version}'
@@ -610,14 +623,14 @@ class BinaryManager:
                     }
         except subprocess.TimeoutExpired:
             error_msg = "Update timed out"
-            print(error_msg)
+            print(f"{theme['error']}{error_msg}{Style.RESET_ALL}")
             return {
                 'status': 'error',
                 'message': error_msg
             }
         except Exception as e:
             error_msg = f"Could not update conversion scripts: {e}"
-            print(error_msg)
+            print(f"{theme['error']}{error_msg}{Style.RESET_ALL}")
             return {
                 'status': 'error',
                 'message': error_msg

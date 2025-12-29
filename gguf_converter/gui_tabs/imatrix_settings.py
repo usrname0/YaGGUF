@@ -139,6 +139,14 @@ def render_imatrix_settings_tab(converter: Any, config: Dict[str, Any]) -> None:
                 key=f"imatrix_cal_selection_{st.session_state.reset_count}",
                 on_change=save_calibration_file
             )
+
+            # Sync dropdown value with config if they don't match
+            # This handles the case where the dropdown defaults to a different value
+            # but the user hasn't manually changed it (so on_change doesn't fire)
+            if calibration_selection != saved_calibration:
+                config["imatrix_calibration_file"] = calibration_selection
+                save_config(config)
+
         with col_cal_btn:
             st.markdown("<br>", unsafe_allow_html=True)  # Align with selectbox
             if st.button(
@@ -147,9 +155,21 @@ def render_imatrix_settings_tab(converter: Any, config: Dict[str, Any]) -> None:
                 use_container_width=True,
                 help="Rescan directory for calibration files"
             ):
-                # Trigger a rerun to rescan the directory
-                st.toast("Updated calibration file list")
+                # Save the currently selected value before rerunning
+                current_selection = st.session_state.get(f"imatrix_cal_selection_{st.session_state.reset_count}")
+                if current_selection:
+                    config["imatrix_calibration_file"] = current_selection
+                    save_config(config)
+                    # Store toast message in session state to show after rerun
+                    st.session_state.calibration_refresh_toast = f"Refreshed - calibration file: {current_selection}"
+                else:
+                    st.session_state.calibration_refresh_toast = "Updated calibration file list"
                 st.rerun()
+
+        # Show toast message after refresh (if flag is set)
+        if "calibration_refresh_toast" in st.session_state:
+            st.toast(st.session_state.calibration_refresh_toast)
+            del st.session_state.calibration_refresh_toast
 
         # --- File Information Section ---
 

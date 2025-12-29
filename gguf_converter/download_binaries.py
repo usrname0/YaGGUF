@@ -7,6 +7,19 @@ import sys
 import argparse
 from pathlib import Path
 from .binary_manager import BinaryManager
+from colorama import Fore, Style, init as colorama_init
+
+# Initialize colorama for cross-platform color support
+colorama_init(autoreset=True)
+
+# Theme for terminal colors
+theme = {
+    "info": Fore.WHITE + Style.DIM,
+    "success": Fore.GREEN,
+    "warning": Fore.YELLOW,
+    "error": Fore.RED,
+    "highlight": Fore.CYAN,
+}
 
 
 def main() -> int:
@@ -29,9 +42,9 @@ def main() -> int:
 
     args = parser.parse_args()
 
-    print("=" * 50)
-    print("GGUF Converter - Binary Download")
-    print("=" * 50)
+    print(f"{theme['highlight']}{'=' * 50}{Style.RESET_ALL}")
+    print(f"{theme['highlight']}GGUF Converter - Binary Download{Style.RESET_ALL}")
+    print(f"{theme['highlight']}{'=' * 50}{Style.RESET_ALL}")
     print()
 
     try:
@@ -40,35 +53,35 @@ def main() -> int:
         # Ensure binaries are available
         if manager.ensure_binaries(fallback_to_system=not args.no_fallback):
             print()
-            print("=" * 50)
-            print("Binaries ready!")
-            print("=" * 50)
+            print(f"{theme['success']}{'=' * 50}{Style.RESET_ALL}")
+            print(f"{theme['success']}Binaries ready!{Style.RESET_ALL}")
+            print(f"{theme['success']}{'=' * 50}{Style.RESET_ALL}")
             print()
-            print(f"llama-quantize: {manager.get_quantize_path()}")
-            print(f"llama-imatrix:  {manager.get_imatrix_path()}")
+            print(f"{theme['info']}llama-quantize: {theme['highlight']}{manager.get_quantize_path()}{Style.RESET_ALL}")
+            print(f"{theme['info']}llama-imatrix:  {theme['highlight']}{manager.get_imatrix_path()}{Style.RESET_ALL}")
             print()
             return 0
         else:
             print()
-            print("=" * 50)
-            print("ERROR: Failed to get binaries")
-            print("=" * 50)
+            print(f"{theme['error']}{'=' * 50}{Style.RESET_ALL}")
+            print(f"{theme['error']}ERROR: Failed to get binaries{Style.RESET_ALL}")
+            print(f"{theme['error']}{'=' * 50}{Style.RESET_ALL}")
             print()
-            print("Could not download or find llama.cpp binaries.")
-            print("Please check your internet connection or install llama.cpp manually.")
+            print(f"{theme['error']}Could not download or find llama.cpp binaries.{Style.RESET_ALL}")
+            print(f"{theme['error']}Please check your internet connection or install llama.cpp manually.{Style.RESET_ALL}")
             print()
             return 1
 
     except KeyboardInterrupt:
-        print("\n\nDownload cancelled by user")
+        print(f"\n\n{theme['warning']}Download cancelled by user{Style.RESET_ALL}")
         return 1
     except Exception as e:
         print()
-        print("=" * 50)
-        print("ERROR")
-        print("=" * 50)
+        print(f"{theme['error']}{'=' * 50}{Style.RESET_ALL}")
+        print(f"{theme['error']}ERROR{Style.RESET_ALL}")
+        print(f"{theme['error']}{'=' * 50}{Style.RESET_ALL}")
         print()
-        print(f"An error occurred: {e}")
+        print(f"{theme['error']}An error occurred: {e}{Style.RESET_ALL}")
         print()
         return 1
 

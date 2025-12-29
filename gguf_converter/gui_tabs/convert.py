@@ -5,11 +5,24 @@ Convert & Quantize tab for GGUF Converter GUI
 import streamlit as st
 from pathlib import Path
 from typing import Dict, Any, Optional
+from colorama import Fore, Style, init as colorama_init
 
 from ..gui_utils import (
     strip_quotes, open_folder, browse_folder,
     save_config, make_config_saver, path_input_columns
 )
+
+# Initialize colorama for cross-platform color support
+colorama_init(autoreset=True)
+
+# Theme for terminal colors
+theme = {
+    "info": Fore.WHITE + Style.DIM,
+    "success": Fore.GREEN,
+    "warning": Fore.YELLOW,
+    "error": Fore.RED,
+    "highlight": Fore.CYAN,
+}
 
 
 def render_convert_tab(
@@ -311,6 +324,7 @@ def render_convert_tab(
                 saved_mode = config.get("imatrix_mode", "")
                 saved_reuse_path = config.get("imatrix_reuse_path", "")
                 default_index = 0
+                fallback_happened = False
 
                 if saved_mode == "generate_custom":
                     default_index = len(dropdown_options) - 1
@@ -318,6 +332,15 @@ def render_convert_tab(
                     default_index = len(imatrix_files)
                 elif saved_mode == "reuse" and saved_reuse_path and saved_reuse_path in imatrix_files:
                     default_index = imatrix_files.index(saved_reuse_path)
+                elif saved_mode == "reuse" and saved_reuse_path:
+                    # Saved file not found - falling back
+                    fallback_happened = True
+                    if imatrix_files:
+                        # Auto-select newest existing file
+                        default_index = 0
+                    else:
+                        # No files - select generate default
+                        default_index = len(imatrix_files)
                 elif imatrix_files:
                     # Auto-select newest existing file
                     default_index = 0
@@ -332,10 +355,74 @@ def render_convert_tab(
                     help="Choose an existing imatrix file, generate with default name, or generate with custom name",
                     key=f"imatrix_dropdown_{st.session_state.reset_count}"
                 )
+
+                # Auto-sync dropdown value with config if they don't match
+                # This handles the case where the dropdown defaults to a different value
+                # but the user hasn't manually changed it (so no manual save has happened)
+                if imatrix_selection in imatrix_files:
+                    # It's a reuse selection - sync it
+                    if saved_mode != "reuse" or saved_reuse_path != imatrix_selection:
+                        config["imatrix_mode"] = "reuse"
+                        config["imatrix_reuse_path"] = imatrix_selection
+                        save_config(config)
+
+                # Track fallback for warning display later
+                if fallback_happened:
+                    st.session_state.imatrix_fallback_warning = {
+                        "previous": saved_reuse_path,
+                        "current": imatrix_selection,
+                        "is_file": imatrix_selection in imatrix_files
+                    }
+                    # Print to terminal immediately
+                    if imatrix_selection in imatrix_files:
+                        print(f"\n{theme['warning']}Warning: Imatrix file auto-switched{Style.RESET_ALL}")
+                        print(f"{theme['warning']}  Previous: {saved_reuse_path} (not found){Style.RESET_ALL}")
+                        print(f"{theme['warning']}  Now using: {imatrix_selection}{Style.RESET_ALL}\n")
+                    else:
+                        print(f"\n{theme['warning']}Warning: Imatrix mode auto-switched{Style.RESET_ALL}")
+                        print(f"{theme['warning']}  Previous: {saved_reuse_path} (not found){Style.RESET_ALL}")
+                        print(f"{theme['warning']}  Now using: {imatrix_selection}{Style.RESET_ALL}\n")
+                else:
+                    # Clear warning if no fallback
+                    if "imatrix_fallback_warning" in st.session_state:
+                        del st.session_state.imatrix_fallback_warning
+
             with col_imatrix_update:
                 st.markdown("<br>", unsafe_allow_html=True)  # Align with selectbox
                 if st.button("Refresh File List", key="update_imatrix_file_list", use_container_width=True):
+                    # Save the current selection before rerunning
+                    current_selection = st.session_state.get(f"imatrix_dropdown_{st.session_state.reset_count}")
+                    if current_selection:
+                        if current_selection == generate_custom_option:
+                            config["imatrix_mode"] = "generate_custom"
+                            st.session_state.imatrix_refresh_toast = "Refreshed - mode: GENERATE (custom name)"
+                        elif current_selection == generate_default_option:
+                            config["imatrix_mode"] = "generate"
+                            st.session_state.imatrix_refresh_toast = "Refreshed - mode: GENERATE (default name)"
+                        elif current_selection in imatrix_files:
+                            config["imatrix_mode"] = "reuse"
+                            config["imatrix_reuse_path"] = current_selection
+                            st.session_state.imatrix_refresh_toast = f"Refreshed - imatrix: {current_selection}"
+                        save_config(config)
+                    # Clear the fallback warning since user is confirming their selection
+                    if "imatrix_fallback_warning" in st.session_state:
+                        del st.session_state.imatrix_fallback_warning
                     st.rerun()
+
+            # Show toast message after refresh (if flag is set)
+            if "imatrix_refresh_toast" in st.session_state:
+                st.toast(st.session_state.imatrix_refresh_toast)
+                del st.session_state.imatrix_refresh_toast
+
+            # Show imatrix fallback warning right below the dropdown (if applicable)
+            if "imatrix_fallback_warning" in st.session_state:
+                warning_data = st.session_state.imatrix_fallback_warning
+                if warning_data["is_file"]:
+                    st.warning(f"`{warning_data['previous']}` not found.  "
+                             f"Auto-selected newest file: `{warning_data['current']}`.  ")
+                else:
+                    st.warning(f"**Imatrix mode changed:** Previously selected `{warning_data['previous']}` not found.  "
+                             f"Switched to: `{warning_data['current']}`.")
 
             # Handle selection
             if imatrix_selection == generate_custom_option:
@@ -625,6 +712,17 @@ def render_convert_tab(
     # Convert button
     st.markdown("---")
     if st.button("Start Conversion", type="primary", use_container_width=True):
+        # Check if there's an imatrix auto-switch warning - block conversion if so
+        if "imatrix_fallback_warning" in st.session_state:
+            warning_data = st.session_state.imatrix_fallback_warning
+            st.error(f"`{warning_data['previous']}` not found.  `{warning_data['current']}` auto-selected. "
+                   f"Please confirm your selection, then try again.")
+            print(f"\n{theme['error']}Conversion blocked: Imatrix auto-switch detected{Style.RESET_ALL}")
+            print(f"{theme['error']}  User must confirm selection before proceeding{Style.RESET_ALL}\n")
+            # Clear the warning since user has now seen the blocking error
+            del st.session_state.imatrix_fallback_warning
+            return
+
         # Strip quotes from paths
         model_path_clean = strip_quotes(model_path)
         output_dir_clean = strip_quotes(output_dir)
@@ -678,6 +776,22 @@ def render_convert_tab(
                         generate_imatrix_flag = False
                         if imatrix_reuse_path:
                             imatrix_path_to_use = Path(output_dir_clean) / imatrix_reuse_path
+
+                            # Validate that the imatrix file actually exists
+                            if not imatrix_path_to_use.exists():
+                                # Print detailed error to terminal
+                                print(f"\n{theme['error']}Imatrix file not found:{Style.RESET_ALL}")
+                                print(f"{theme['error']}  Looking for: {imatrix_path_to_use}{Style.RESET_ALL}")
+                                print(f"{theme['error']}  Config has: {imatrix_reuse_path}{Style.RESET_ALL}")
+                                print(f"{theme['error']}  In directory: {output_dir_clean}{Style.RESET_ALL}")
+                                print(f"{theme['warning']}  Tip: Click 'Refresh File List' to update the imatrix dropdown{Style.RESET_ALL}\n")
+
+                                # Show detailed error in GUI
+                                st.error(f"**Imatrix file not found:** `{imatrix_reuse_path}`\n\n"
+                                       f"Expected path: `{imatrix_path_to_use}`\n\n"
+                                       f"**Fix:** Click **Refresh File List** to update the imatrix dropdown, "
+                                       f"generate a new imatrix, or turn off imatrix.")
+                                return  # Stop processing but keep UI working
                         config["imatrix_mode"] = "reuse"
                         config["imatrix_reuse_path"] = imatrix_reuse_path
                     elif imatrix_mode == "GENERATE (default name)":
@@ -699,7 +813,19 @@ def render_convert_tab(
 
                         # Validate calibration file exists
                         if not calibration_file_path.exists():
-                            st.error("**Calibration file not available:** Add a file to the calibration_data folder, use an existing imatrix or turn off imatrix.")
+                            # Print detailed error to terminal
+                            print(f"\n{theme['error']}Calibration file not found:{Style.RESET_ALL}")
+                            print(f"{theme['error']}  Looking for: {calibration_file_path}{Style.RESET_ALL}")
+                            print(f"{theme['error']}  Config has: {cal_file}{Style.RESET_ALL}")
+                            if cal_dir:
+                                print(f"{theme['error']}  In directory: {cal_dir}{Style.RESET_ALL}")
+                            print(f"{theme['warning']}  Tip: Go to Imatrix Settings tab and reselect your calibration file{Style.RESET_ALL}\n")
+
+                            # Show detailed error in GUI
+                            st.error(f"**Calibration file not found:** `{cal_file}`\n\n"
+                                   f"Expected path: `{calibration_file_path}`\n\n"
+                                   f"**Fix:** Go to the **Imatrix Settings** tab and select a valid calibration file, "
+                                   f"use an existing imatrix, or turn off imatrix generation.")
                             return  # Stop processing but keep UI working
                     elif imatrix_mode == "GENERATE (custom name)":
                         # Generate with custom name
@@ -729,7 +855,19 @@ def render_convert_tab(
 
                         # Validate calibration file exists
                         if not calibration_file_path.exists():
-                            st.error("**Calibration file not available:** Add a file to the calibration_data folder, use an existing imatrix or turn off imatrix.")
+                            # Print detailed error to terminal
+                            print(f"\n{theme['error']}Calibration file not found:{Style.RESET_ALL}")
+                            print(f"{theme['error']}  Looking for: {calibration_file_path}{Style.RESET_ALL}")
+                            print(f"{theme['error']}  Config has: {cal_file}{Style.RESET_ALL}")
+                            if cal_dir:
+                                print(f"{theme['error']}  In directory: {cal_dir}{Style.RESET_ALL}")
+                            print(f"{theme['warning']}  Tip: Go to Imatrix Settings tab and reselect your calibration file{Style.RESET_ALL}\n")
+
+                            # Show detailed error in GUI
+                            st.error(f"**Calibration file not found:** `{cal_file}`\n\n"
+                                   f"Expected path: `{calibration_file_path}`\n\n"
+                                   f"**Fix:** Go to the **Imatrix Settings** tab and select a valid calibration file, "
+                                   f"use an existing imatrix, or turn off imatrix generation.")
                             return  # Stop processing but keep UI working
 
                     save_config(config)
@@ -810,6 +948,6 @@ def render_convert_tab(
                     st.exception(e)
 
                 # ALSO print to terminal so user sees it
-                print(f"\nError: {e}", flush=True)
+                print(f"\n{theme['error']}Error: {e}{Style.RESET_ALL}", flush=True)
                 import traceback
                 traceback.print_exc()
