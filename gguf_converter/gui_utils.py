@@ -348,39 +348,15 @@ def get_binary_version(converter: Any) -> Dict[str, Any]:
         dict: Binary version info
     """
     try:
-        # Try to get version from llama-cli
-        try:
-            cli_path = converter.binary_manager.get_binary_path('llama-cli')
-            result = subprocess.run(
-                [str(cli_path), "--version"],
-                capture_output=True,
-                text=True,
-                timeout=5
-            )
+        # Use binary_manager method to get version info
+        version_info = converter.binary_manager.get_installed_version_info()
 
-            if result.returncode == 0:
-                # Parse version from output (llama-cli outputs to stderr)
-                output = result.stderr if result.stderr else result.stdout
-                if output:
-                    # Extract just the version line
-                    for line in output.split('\n'):
-                        if line.startswith('version:'):
-                            version_line = line.strip()
-                            return {
-                                "status": "ok",
-                                "version": version_line,
-                                "message": "Binaries are installed"
-                            }
-                    # If no version line found, return full output
-                    version_line = output.strip().split('\n')[0]
-                    return {
-                        "status": "ok",
-                        "version": version_line,
-                        "message": "Binaries are installed"
-                    }
-        except (FileNotFoundError, subprocess.SubprocessError, OSError, PermissionError):
-            # llama-cli not found or not executable - that's fine, we'll check bin_dir existence next
-            pass
+        if version_info['full_version']:
+            return {
+                "status": "ok",
+                "version": version_info['full_version'],
+                "message": "Binaries are installed"
+            }
 
         # Check if binaries exist
         bin_dir = converter.binary_manager.bin_dir

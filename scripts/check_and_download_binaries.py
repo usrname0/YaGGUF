@@ -114,7 +114,7 @@ def main() -> int:
         print()
 
         try:
-            manager.download_binaries(force=True)
+            manager.update_binaries(force=True)
             print()
             print("Binaries updated successfully!")
         except Exception as e:

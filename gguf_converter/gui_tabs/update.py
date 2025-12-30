@@ -58,9 +58,9 @@ def render_update_tab(converter: "GGUFConverter", config: Dict[str, Any]) -> Non
 
     with col1:
         st.subheader("Update YaGUFF")
-        st.markdown("Check for the latest version of YaGUFF from GitHub.")
+        st.markdown("Update to the latest version of YaGUFF from GitHub.")
         st.markdown("[View YaGUFF on GitHub](https://github.com/usrname0/YaGUFF)")
-        if st.button("Pull Latest YaGUFF Version & Restart"):
+        if st.button("Update YaGUFF & Restart"):
             # Check what version is available
             update_status = check_git_updates_available()
 
@@ -151,10 +151,10 @@ def render_update_tab(converter: "GGUFConverter", config: Dict[str, Any]) -> Non
     col_bin1, col_bin2 = st.columns(2)
     with col_bin1:
         st.subheader("Update YaGUFF: Llama.cpp Binaries")
-        st.markdown("Force a re-download of the `llama.cpp` binaries. Choose **Recommended** for the tested version bundled with YaGUFF, or **Latest** for the newest llama.cpp release.")
+        st.markdown("Update the `llama.cpp` binaries. Choose **Recommended** for the tested version bundled with YaGUFF, or **Latest** for the newest llama.cpp release.")
         st.markdown("[View llama.cpp on GitHub](https://github.com/ggml-org/llama.cpp)")
 
-        if st.button("Force Binary Update - Recommended Version"):
+        if st.button("Update Binaries - Recommended Version"):
             output_container = st.empty()
             output_container.code("Starting binary update (Recommended version)...\nThis may take a moment.", language='bash')
 
@@ -162,7 +162,7 @@ def render_update_tab(converter: "GGUFConverter", config: Dict[str, Any]) -> Non
             tee = TeeOutput(f)
             with redirect_stdout(tee):  # type: ignore[arg-type]
                 try:
-                    st.session_state.converter.binary_manager.download_binaries(force=True)
+                    st.session_state.converter.binary_manager.update_binaries()
                     st.toast("Binaries updated successfully!")
                     success = True
                 except Exception as e:
@@ -176,7 +176,7 @@ def render_update_tab(converter: "GGUFConverter", config: Dict[str, Any]) -> Non
             if success:
                 st.rerun()
 
-        if st.button("Force Binary Update - Latest Version"):
+        if st.button("Update Binaries - Latest Version"):
             output_container = st.empty()
             output_container.code("Fetching latest llama.cpp version...\nThis may take a moment.", language='bash')
 
@@ -186,7 +186,7 @@ def render_update_tab(converter: "GGUFConverter", config: Dict[str, Any]) -> Non
                 try:
                     latest_version = st.session_state.converter.binary_manager.get_latest_version()
                     print(f"{theme['info']}Latest version: {latest_version}{Style.RESET_ALL}")
-                    st.session_state.converter.binary_manager.download_binaries(force=True, version=latest_version)
+                    st.session_state.converter.binary_manager.update_binaries(version=latest_version)
                     st.toast("Binaries updated successfully!")
                     success = True
                 except Exception as e:
@@ -220,7 +220,7 @@ def render_update_tab(converter: "GGUFConverter", config: Dict[str, Any]) -> Non
         st.markdown("Update the `llama.cpp` repository that contains the `convert_hf_to_gguf.py` script. Choose **Recommended** for the tested version matching YaGUFF binaries, or **Latest** for the newest conversion scripts.")
         st.markdown("[View llama.cpp on GitHub](https://github.com/ggml-org/llama.cpp)")
 
-        if st.button("Force Conversion Scripts Update - Recommended Version"):
+        if st.button("Update Conversion Scripts - Recommended Version"):
             output_container = st.empty()
             output_container.code("Updating conversion scripts (Recommended version)...\nThis may take a moment.", language='bash')
 
@@ -228,7 +228,7 @@ def render_update_tab(converter: "GGUFConverter", config: Dict[str, Any]) -> Non
             tee = TeeOutput(f)
             with redirect_stdout(tee):  # type: ignore[arg-type]
                 try:
-                    result = st.session_state.converter.binary_manager.update_conversion_scripts(use_recommended=True)
+                    result = st.session_state.converter.binary_manager.update_conversion_scripts()
                     if result['status'] in ['success', 'already_updated']:
                         st.toast("Conversion scripts updated successfully!")
                         success = True
@@ -247,15 +247,17 @@ def render_update_tab(converter: "GGUFConverter", config: Dict[str, Any]) -> Non
             if success:
                 st.rerun()
 
-        if st.button("Force Conversion Scripts Update - Latest Version"):
+        if st.button("Update Conversion Scripts - Latest Version"):
             output_container = st.empty()
-            output_container.code("Updating conversion scripts to latest version...\nThis may take a moment.", language='bash')
+            output_container.code("Fetching latest llama.cpp version...\nThis may take a moment.", language='bash')
 
             f = io.StringIO()
             tee = TeeOutput(f)
             with redirect_stdout(tee):  # type: ignore[arg-type]
                 try:
-                    result = st.session_state.converter.binary_manager.update_conversion_scripts(use_recommended=False)
+                    latest_version = st.session_state.converter.binary_manager.get_latest_version()
+                    print(f"{theme['info']}Latest version: {latest_version}{Style.RESET_ALL}")
+                    result = st.session_state.converter.binary_manager.update_conversion_scripts(version=latest_version)
                     if result['status'] in ['success', 'already_updated']:
                         st.toast("Conversion scripts updated successfully!")
                         success = True

@@ -161,23 +161,31 @@ class BinaryManager:
             print(f"{theme['info']}Falling back to recommended version: {self.LLAMA_CPP_VERSION}{Style.RESET_ALL}")
             return self.LLAMA_CPP_VERSION
 
-    def download_binaries(self, force: bool = False, version: Optional[str] = None) -> Path:
+    def update_binaries(self, force: bool = False, version: Optional[str] = None) -> Path:
         """
-        Download llama.cpp binaries if not already present
+        Update llama.cpp binaries to recommended or specific version
 
         Args:
-            force: Force re-download even if binaries exist
+            force: Force re-download even if binaries exist at target version
             version: Specific version to download (None = use recommended LLAMA_CPP_VERSION)
 
         Returns:
             Path to bin directory containing executables
         """
-        if not force and self._binaries_exist():
-            print(f"{theme['info']}Binaries already exist in {self.bin_dir}{Style.RESET_ALL}")
-            return self.bin_dir
-
         # Use specified version or default to recommended
         tag = version if version else self.LLAMA_CPP_VERSION
+
+        # Check if binaries exist and match the requested version
+        if not force and self._binaries_exist():
+            installed_version = self.get_installed_version_tag()
+            if installed_version == tag:
+                print(f"{theme['info']}Binaries already at version {tag} in {self.bin_dir}{Style.RESET_ALL}")
+                return self.bin_dir
+            elif installed_version:
+                print(f"{theme['info']}Installed version {installed_version} differs from requested {tag}{Style.RESET_ALL}")
+                print(f"{theme['info']}Downloading new version...{Style.RESET_ALL}")
+            else:
+                print(f"{theme['info']}Unable to determine installed version, downloading {tag}...{Style.RESET_ALL}")
 
         # Update filename to use the specified version
         os_name = self.platform_info['os']
@@ -326,6 +334,65 @@ class BinaryManager:
         # Only check if required binary files exist
         return self._check_binary_files_exist()
 
+    def get_installed_version_info(self) -> Dict[str, Optional[str]]:
+        """
+        Get version information of currently installed binaries by running llama-cli --version
+
+        Returns:
+            Dict with 'full_version' (complete version string) and 'tag' (e.g., 'b7574')
+            Returns None values if unable to determine
+        """
+        import subprocess
+        import re
+
+        try:
+            cli_path = self.get_binary_path('llama-cli')
+            if not cli_path.exists():
+                return {'full_version': None, 'tag': None}
+
+            result = subprocess.run(
+                [str(cli_path), "--version"],
+                capture_output=True,
+                text=True,
+                timeout=5
+            )
+
+            if result.returncode == 0:
+                # Parse version from output (may be in stdout or stderr)
+                output = result.stderr if result.stderr else result.stdout
+                if output:
+                    # Get the full version line
+                    full_version = None
+                    for line in output.split('\n'):
+                        if line.startswith('version:'):
+                            full_version = line.strip()
+                            break
+                    if not full_version:
+                        full_version = output.strip().split('\n')[0]
+
+                    # Extract version tag pattern like "b7574" or just "7574"
+                    tag = None
+                    match = re.search(r'\b(b?\d{4,5})\b', output)
+                    if match:
+                        version = match.group(1)
+                        # Ensure it has the 'b' prefix
+                        tag = version if version.startswith('b') else f'b{version}'
+
+                    return {'full_version': full_version, 'tag': tag}
+        except Exception:
+            pass
+
+        return {'full_version': None, 'tag': None}
+
+    def get_installed_version_tag(self) -> Optional[str]:
+        """
+        Get the version tag of currently installed binaries
+
+        Returns:
+            Version tag (e.g., 'b7574') or None if unable to determine
+        """
+        return self.get_installed_version_info()['tag']
+
     def get_binary_path(self, name: str) -> Path:
         """
         Get path to a specific binary
@@ -359,7 +426,7 @@ class BinaryManager:
 
         # Try to download
         try:
-            self.download_binaries()
+            self.update_binaries()
             return True
         except Exception as e:
             print(f"{theme['error']}Binary download failed: {e}{Style.RESET_ALL}")
@@ -469,13 +536,13 @@ class BinaryManager:
         """Get path to llama-imatrix executable"""
         return self._get_binary_path_with_fallback('llama-imatrix')
 
-    def update_conversion_scripts(self, use_recommended: bool = True) -> Dict[str, str]:
+    def update_conversion_scripts(self, force: bool = False, version: Optional[str] = None) -> Dict[str, str]:
         """
-        Update llama.cpp conversion scripts to recommended or latest version
+        Update llama.cpp conversion scripts to recommended or specific version
 
         Args:
-            use_recommended: If True, checkout the recommended version (LLAMA_CPP_VERSION).
-                           If False, get the latest tagged release and re-clone.
+            force: Force update even if already at target version
+            version: Specific version to checkout (None = use recommended LLAMA_CPP_VERSION)
 
         Returns:
             Dict with 'status' ('success', 'already_updated', 'not_found', 'error')
@@ -487,6 +554,10 @@ class BinaryManager:
         project_root = Path(__file__).parent.parent
         llama_cpp_dir = project_root / "llama.cpp"
 
+        # Determine target version
+        target_version = version if version else self.LLAMA_CPP_VERSION
+
+        # Check if llama.cpp directory exists
         if not llama_cpp_dir.exists():
             return {
                 'status': 'not_found',
@@ -500,27 +571,8 @@ class BinaryManager:
             }
 
         try:
-            if use_recommended:
-                # Checkout the recommended version
-                target_version = self.LLAMA_CPP_VERSION
-                print(f"{theme['info']}Updating conversion scripts to recommended version: {target_version}{Style.RESET_ALL}")
-
-                # Fetch latest tags
-                fetch_result = subprocess.run(
-                    ["git", "fetch", "--tags", "origin"],
-                    cwd=llama_cpp_dir,
-                    capture_output=True,
-                    text=True,
-                    timeout=60
-                )
-
-                if fetch_result.returncode != 0:
-                    return {
-                        'status': 'error',
-                        'message': f"Failed to fetch tags: {fetch_result.stderr}"
-                    }
-
-                # Check current version
+            # Check current version if not forcing update
+            if not force:
                 current_result = subprocess.run(
                     ["git", "describe", "--tags", "--always"],
                     cwd=llama_cpp_dir,
@@ -532,86 +584,53 @@ class BinaryManager:
                 current_version = current_result.stdout.strip() if current_result.returncode == 0 else "unknown"
 
                 if target_version in current_version:
-                    print(f"{theme['success']}Conversion scripts already at version {target_version}{Style.RESET_ALL}")
+                    print(f"{theme['info']}Conversion scripts already at version {target_version}{Style.RESET_ALL}")
                     return {
                         'status': 'already_updated',
-                        'message': f'Conversion scripts already at recommended version: {target_version}'
+                        'message': f'Conversion scripts already at version {target_version}'
                     }
+                elif current_version != "unknown":
+                    print(f"{theme['info']}Current version {current_version} differs from requested {target_version}{Style.RESET_ALL}")
+                    print(f"{theme['info']}Updating to {target_version}...{Style.RESET_ALL}")
 
-                # Checkout the target version
-                checkout_result = subprocess.run(
-                    ["git", "checkout", target_version],
-                    cwd=llama_cpp_dir,
-                    capture_output=True,
-                    text=True,
-                    timeout=30
-                )
+            # Fetch latest tags
+            print(f"{theme['info']}Fetching latest tags...{Style.RESET_ALL}")
+            fetch_result = subprocess.run(
+                ["git", "fetch", "--tags", "origin"],
+                cwd=llama_cpp_dir,
+                capture_output=True,
+                text=True,
+                timeout=60
+            )
 
-                if checkout_result.returncode == 0:
-                    print(f"{theme['success']}Conversion scripts updated to version {target_version}{Style.RESET_ALL}")
-                    return {
-                        'status': 'success',
-                        'message': f'Conversion scripts updated to recommended version: {target_version}'
-                    }
-                else:
-                    return {
-                        'status': 'error',
-                        'message': f"Failed to checkout version {target_version}: {checkout_result.stderr}"
-                    }
+            if fetch_result.returncode != 0:
+                return {
+                    'status': 'error',
+                    'message': f"Failed to fetch tags: {fetch_result.stderr}"
+                }
+
+            # Checkout the target version
+            print(f"{theme['info']}Checking out version {target_version}...{Style.RESET_ALL}")
+            checkout_result = subprocess.run(
+                ["git", "checkout", target_version],
+                cwd=llama_cpp_dir,
+                capture_output=True,
+                text=True,
+                timeout=30
+            )
+
+            if checkout_result.returncode == 0:
+                print(f"{theme['success']}Conversion scripts updated to version {target_version}{Style.RESET_ALL}")
+                return {
+                    'status': 'success',
+                    'message': f'Conversion scripts updated to version {target_version}'
+                }
             else:
-                # Get latest tagged release and re-clone
-                print(f"{theme['info']}Fetching latest release version...{Style.RESET_ALL}")
-                latest_version = self.get_latest_version()
-                print(f"{theme['info']}Latest release: {latest_version}{Style.RESET_ALL}")
+                return {
+                    'status': 'error',
+                    'message': f"Failed to checkout version {target_version}: {checkout_result.stderr}"
+                }
 
-                # Check current version
-                current_result = subprocess.run(
-                    ["git", "describe", "--tags", "--always"],
-                    cwd=llama_cpp_dir,
-                    capture_output=True,
-                    text=True,
-                    timeout=5
-                )
-
-                current_version = current_result.stdout.strip() if current_result.returncode == 0 else "unknown"
-
-                if latest_version in current_version:
-                    print(f"{theme['success']}Conversion scripts already at latest version: {latest_version}{Style.RESET_ALL}")
-                    return {
-                        'status': 'already_updated',
-                        'message': f'Conversion scripts already at latest version: {latest_version}'
-                    }
-
-                # Delete and re-clone with latest version
-                print(f"{theme['info']}Updating to latest version {latest_version}...{Style.RESET_ALL}")
-                print(f"{theme['info']}Removing existing llama.cpp repository...{Style.RESET_ALL}")
-                shutil.rmtree(llama_cpp_dir, onerror=remove_readonly)
-
-                print(f"{theme['info']}Cloning llama.cpp repository at version {latest_version}...{Style.RESET_ALL}")
-                clone_result = subprocess.run(
-                    [
-                        "git", "clone",
-                        "https://github.com/ggml-org/llama.cpp.git",
-                        "--depth=1",
-                        "--branch", latest_version,
-                        str(llama_cpp_dir)
-                    ],
-                    capture_output=True,
-                    text=True,
-                    timeout=120
-                )
-
-                if clone_result.returncode == 0:
-                    print(f"{theme['success']}Conversion scripts updated to latest version: {latest_version}{Style.RESET_ALL}")
-                    return {
-                        'status': 'success',
-                        'message': f'Conversion scripts updated to latest version: {latest_version}'
-                    }
-                else:
-                    return {
-                        'status': 'error',
-                        'message': f"Failed to clone latest version: {clone_result.stderr}"
-                    }
         except subprocess.TimeoutExpired:
             error_msg = "Update timed out"
             print(f"{theme['error']}{error_msg}{Style.RESET_ALL}")
