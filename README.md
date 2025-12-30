@@ -63,7 +63,7 @@ All quantization types from llama.cpp are supported. Choose based on your size/q
 ## Requirements
 
 - [Python](https://www.python.org/downloads/) 3.8 or higher
-- [Git](https://git-scm.com/downloads) 2.20 or higher 
+- [Git](https://git-scm.com/downloads) 2.20 or higher (if you want the update tab to work)
 
 ## Installation - Windows
 
