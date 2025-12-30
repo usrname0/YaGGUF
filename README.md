@@ -2,9 +2,10 @@
 
 There are simultaneously too many and not enough GGUF converters in the world.
 
- ![dark mode](./docs/convert_and_quantize.png)
-(dark mode)
- 
+ ![convert and quantize](./docs/convert_and_quantize.png)
+ ![downloader](./docs/huggingface_downloader.png)
+ ![imatrix statistics](./docs/imatrix_statistics.png)
+  
 ## Features
 
 - **[llama.cpp](https://github.com/ggerganov/llama.cpp) under the hood** - so that part works
