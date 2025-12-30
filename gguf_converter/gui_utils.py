@@ -40,7 +40,7 @@ def get_default_config() -> Dict[str, Any]:
         # Sidebar settings
         "verbose": True,
         "use_imatrix": True,
-        "nthreads": None,  # None = auto-detect
+        "num_threads": None,  # None = auto-detect
         "ignore_imatrix_warnings": False,  # Allow IQ quants without imatrix
 
         # Imatrix mode (on Convert & Quantize tab)
@@ -58,7 +58,7 @@ def get_default_config() -> Dict[str, Any]:
         "imatrix_no_ppl": False,  # Disable perplexity
         "imatrix_parse_special": False,  # Parse special tokens
         "imatrix_output_frequency": 10,  # Save interval
-        "imatrix_ngl": 0,  # GPU layers (0 = CPU only)
+        "imatrix_num_gpu_layers": 0,  # GPU layers (0 = CPU only)
         "imatrix_stats_model": "",  # Model for statistics utility
         "imatrix_stats_path": "",  # Imatrix file for statistics
         "max_preview_lines": 1000,  # Maximum lines to show in calibration preview
@@ -348,8 +348,8 @@ def get_binary_version(converter: Any) -> Dict[str, Any]:
         dict: Binary version info
     """
     try:
-        # Use binary_manager method to get version info
-        version_info = converter.binary_manager.get_installed_version_info()
+        # Use llama_cpp_manager method to get version info
+        version_info = converter.llama_cpp_manager.get_installed_version_info()
 
         if version_info['full_version']:
             return {
@@ -359,7 +359,7 @@ def get_binary_version(converter: Any) -> Dict[str, Any]:
             }
 
         # Check if binaries exist
-        bin_dir = converter.binary_manager.bin_dir
+        bin_dir = converter.llama_cpp_manager.bin_dir
         if bin_dir.exists() and any(bin_dir.iterdir()):
             return {
                 "status": "ok",
@@ -432,7 +432,7 @@ def display_binary_version_status(converter: Any) -> None:
         None (displays directly using Streamlit)
     """
     binary_info = get_binary_version(converter)
-    expected_version = converter.binary_manager.LLAMA_CPP_VERSION
+    expected_version = converter.llama_cpp_manager.LLAMA_CPP_VERSION
 
     if binary_info["status"] == "ok" and binary_info["version"]:
         st.code(binary_info["version"], language=None)
@@ -460,40 +460,35 @@ def get_conversion_scripts_info(converter: Any) -> Dict[str, Any]:
         dict: Conversion scripts info with status and message
     """
     from pathlib import Path
-    import subprocess
-
-    project_root = Path(__file__).parent.parent
-    llama_cpp_dir = project_root / "llama.cpp"
-
-    if not llama_cpp_dir.exists() or not (llama_cpp_dir / ".git").exists():
-        return {
-            "status": "missing",
-            "version": None,
-            "message": "Conversion scripts repository not found"
-        }
 
     try:
-        # Get current commit info
-        result = subprocess.run(
-            ["git", "log", "-1", "--format=%h - %s (%cr)"],
-            cwd=llama_cpp_dir,
-            capture_output=True,
-            text=True,
-            timeout=5
-        )
+        # Use llama_cpp_manager method to get version info
+        version_info = converter.llama_cpp_manager.get_installed_conversion_scripts_version_info()
 
-        if result.returncode == 0 and result.stdout.strip():
+        if version_info['full_version']:
             return {
                 "status": "ok",
-                "version": result.stdout.strip(),
+                "version": version_info['full_version'],
                 "message": "Conversion scripts repository found"
+            }
+
+        # Check if directory exists
+        project_root = Path(__file__).parent.parent
+        llama_cpp_dir = project_root / "llama.cpp"
+
+        if llama_cpp_dir.exists():
+            return {
+                "status": "ok",
+                "version": "unknown",
+                "message": "Conversion scripts installed (version check unavailable)"
             }
         else:
             return {
-                "status": "error",
+                "status": "missing",
                 "version": None,
-                "message": "Could not read conversion scripts version"
+                "message": "Conversion scripts repository not found"
             }
+
     except Exception as e:
         return {
             "status": "error",
@@ -514,42 +509,18 @@ def display_conversion_scripts_version_status(converter: Any) -> None:
     Returns:
         None (displays directly using Streamlit)
     """
-    from pathlib import Path
-    import subprocess
-
     scripts_info = get_conversion_scripts_info(converter)
-    expected_version = converter.binary_manager.LLAMA_CPP_VERSION
+    expected_version = converter.llama_cpp_manager.LLAMA_CPP_VERSION
 
-    if scripts_info["status"] == "ok":
-        # Check and display current tag/version
-        try:
-            project_root = Path(__file__).parent.parent
-            llama_cpp_dir = project_root / "llama.cpp"
+    if scripts_info["status"] == "ok" and scripts_info["version"]:
+        st.code(f"version: {scripts_info['version']}", language=None)
 
-            result = subprocess.run(
-                ["git", "describe", "--tags", "--always"],
-                cwd=llama_cpp_dir,
-                capture_output=True,
-                text=True,
-                timeout=5
-            )
-
-            if result.returncode == 0:
-                current_version = result.stdout.strip()
-                expected_numeric = expected_version.lstrip('b')
-
-                # Show version tag in code block
-                st.code(f"version: {current_version}", language=None)
-
-                # Show status message
-                if expected_numeric in current_version:
-                    st.info("You are on the latest YaGUFF-tested conversion scripts")
-                else:
-                    st.warning(f"Expected conversion scripts version: **{expected_version}**")
-            else:
-                st.info(f"Expected conversion scripts version: **{expected_version}**")
-        except Exception:
-            st.info(f"Expected conversion scripts version: **{expected_version}**")
+        # Show version match status
+        expected_numeric = expected_version.lstrip('b')
+        if expected_numeric in scripts_info["version"]:
+            st.info("You are on the latest YaGUFF-tested conversion scripts")
+        else:
+            st.warning(f"Expected conversion scripts version: **{expected_version}**")
     elif scripts_info["status"] == "missing":
         st.info(f"Expected conversion scripts version: **{expected_version}**")
 

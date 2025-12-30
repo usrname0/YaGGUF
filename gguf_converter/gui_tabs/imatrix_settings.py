@@ -353,20 +353,20 @@ def render_imatrix_settings_tab(converter: "GGUFConverter", config: Dict[str, An
         with col_proc2:
             # GPU offloading (only show if custom binaries enabled)
             if config.get("use_custom_binaries", False):
-                # Auto-save callback for ngl
-                def save_ngl():
-                    config["imatrix_ngl"] = int(st.session_state[f"imatrix_ngl_{st.session_state.reset_count}"])
+                # Auto-save callback for num_gpu_layers
+                def save_num_gpu_layers():
+                    config["imatrix_num_gpu_layers"] = int(st.session_state[f"imatrix_num_gpu_layers_{st.session_state.reset_count}"])
                     save_config(config)
 
-                imatrix_ngl_input = st.number_input(
+                imatrix_num_gpu_layers_input = st.number_input(
                     "GPU layers (-ngl)",
                     min_value=0,
                     max_value=999,
-                    value=int(config.get("imatrix_ngl", 0)),
+                    value=int(config.get("imatrix_num_gpu_layers", 0)),
                     step=1,
                     help="Number of model layers to offload to GPU. 0 = CPU only, 99 = fully offload. Requires GPU-enabled llama.cpp build.",
-                    key=f"imatrix_ngl_{st.session_state.reset_count}",
-                    on_change=save_ngl
+                    key=f"imatrix_num_gpu_layers_{st.session_state.reset_count}",
+                    on_change=save_num_gpu_layers
                 )
 
         with col_proc3:
@@ -408,7 +408,7 @@ def render_imatrix_settings_tab(converter: "GGUFConverter", config: Dict[str, An
             config["imatrix_parse_special"] = defaults["imatrix_parse_special"]
             config["imatrix_collect_output_weight"] = defaults["imatrix_collect_output_weight"]
             config["imatrix_output_frequency"] = defaults["imatrix_output_frequency"]
-            config["imatrix_ngl"] = defaults["imatrix_ngl"]
+            config["imatrix_num_gpu_layers"] = defaults["imatrix_num_gpu_layers"]
             config["max_preview_lines"] = defaults["max_preview_lines"]
             config["preview_height"] = defaults["preview_height"]
             save_config(config)

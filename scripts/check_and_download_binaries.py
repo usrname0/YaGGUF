@@ -14,7 +14,7 @@ from typing import Any
 project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
-from gguf_converter.binary_manager import BinaryManager, remove_readonly
+from gguf_converter.llama_cpp_manager import LlamaCppManager, remove_readonly
 
 
 def check_git_available() -> bool:
@@ -36,7 +36,7 @@ def check_git_available() -> bool:
         return False
 
 
-def ensure_llama_cpp_repo(binary_manager: Any) -> bool:
+def ensure_llama_cpp_repo(llama_cpp_manager: Any) -> bool:
     """
     Ensure llama.cpp repository exists (clone if missing)
     Does NOT auto-update - use Update tab in GUI for updates
@@ -65,7 +65,7 @@ def ensure_llama_cpp_repo(binary_manager: Any) -> bool:
             shutil.rmtree(llama_cpp_dir, onerror=remove_readonly)
 
         # Clone fresh copy
-        expected_version = binary_manager.LLAMA_CPP_VERSION
+        expected_version = llama_cpp_manager.LLAMA_CPP_VERSION
         print(f"Cloning llama.cpp repository (version {expected_version})...")
         print("This may take a minute...")
         print()
@@ -102,7 +102,7 @@ def main() -> int:
     print("Checking llama.cpp binaries and conversion scripts...")
     print()
 
-    manager = BinaryManager()
+    manager = LlamaCppManager()
 
     # Check if binaries exist
     if manager._binaries_exist():

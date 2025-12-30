@@ -12,7 +12,7 @@ from pathlib import Path
 from typing import Optional, Union, List
 from huggingface_hub import snapshot_download, HfApi
 from colorama import init as colorama_init, Style
-from .binary_manager import BinaryManager
+from .llama_cpp_manager import LlamaCppManager
 from . import imatrix_stats
 from .theme import THEME as theme
 
@@ -99,7 +99,7 @@ class GGUFConverter:
 
     def __init__(self, custom_binaries_folder=None, custom_llama_cpp_repo=None):
         """
-        Initialize the converter and binary manager
+        Initialize the converter and llama.cpp manager
 
         Args:
             custom_binaries_folder: Optional path to folder containing custom llama.cpp binaries.
@@ -108,10 +108,10 @@ class GGUFConverter:
             custom_llama_cpp_repo: Optional path to custom llama.cpp repository.
                                    If None, will use auto-cloned repository.
         """
-        self.binary_manager = BinaryManager(custom_binaries_folder=custom_binaries_folder)
+        self.llama_cpp_manager = LlamaCppManager(custom_binaries_folder=custom_binaries_folder)
         self.custom_llama_cpp_repo = custom_llama_cpp_repo
         if custom_binaries_folder is None:
-            if not self.binary_manager.ensure_binaries():
+            if not self.llama_cpp_manager.ensure_binaries():
                 raise RuntimeError(
                     "Failed to get llama.cpp binaries.\n"
                     "Please check your internet connection or install llama.cpp manually."
@@ -357,7 +357,7 @@ class GGUFConverter:
         output_path: Union[str, Path],
         quantization_type: str = "Q4_K_M",
         imatrix_path: Optional[Union[str, Path]] = None,
-        nthreads: Optional[int] = None,
+        num_threads: Optional[int] = None,
         verbose: bool = True,
         parallel: bool = True,
         num_workers: Optional[int] = None,
@@ -377,7 +377,7 @@ class GGUFConverter:
             output_path: Path for quantized output file
             quantization_type: Quantization type (e.g., Q4_0, Q4_K_M, IQ3_XXS, etc.)
             imatrix_path: Optional importance matrix file for better quality
-            nthreads: Number of threads to use (passed to llama-quantize)
+            num_threads: Number of threads to use (passed to llama-quantize)
             verbose: Enable verbose output
             parallel: Ignored (kept for API compatibility)
             num_workers: Ignored (kept for API compatibility)
@@ -412,12 +412,12 @@ class GGUFConverter:
         start_time = time.time()
 
         # Build llama-quantize command
-        quantize_bin = self.binary_manager.get_quantize_path()
+        quantize_bin = self.llama_cpp_manager.get_quantize_path()
         cmd = [str(quantize_bin), str(input_path), str(output_path), quantization_type]
 
-        # Add nthreads (positional argument, comes before optional flags)
-        if nthreads:
-            cmd.append(str(nthreads))
+        # Add num_threads (positional argument, comes before optional flags)
+        if num_threads:
+            cmd.append(str(num_threads))
 
         # Add optional flags (must come after positional arguments)
         if allow_requantize:
@@ -501,11 +501,11 @@ class GGUFConverter:
         output_path: Union[str, Path],
         calibration_file: Union[str, Path],
         ctx_size: int = 512,
-        nthreads: Optional[int] = None,
+        num_threads: Optional[int] = None,
         verbose: bool = True,
         chunks: Optional[int] = None,
         collect_output_weight: bool = False,
-        ngl: Optional[int] = None,
+        num_gpu_layers: Optional[int] = None,
         verbosity: Optional[int] = None,
         from_chunk: Optional[int] = None,
         no_ppl: bool = False,
@@ -520,11 +520,11 @@ class GGUFConverter:
             output_path: Path for output imatrix file
             calibration_file: Text file with calibration data (required)
             ctx_size: Context window size for processing (default: 512)
-            nthreads: Number of threads to use
+            num_threads: Number of threads to use
             verbose: Verbosity control (False=normal/1, True=debug/2)
             chunks: Number of chunks to process (None = process all)
             collect_output_weight: Collect importance matrix for output.weight tensor (required for IQ quantizations)
-            ngl: Number of GPU layers to offload (None = CPU only)
+            num_gpu_layers: Number of GPU layers to offload (None = CPU only)
             verbosity: Verbosity level (0=quiet, 1=normal, 2+=debug, overrides verbose if set)
             from_chunk: Skip first N chunks (useful for resuming)
             no_ppl: Disable perplexity calculation (speeds up processing)
@@ -553,7 +553,7 @@ class GGUFConverter:
         start_time = time.time()
 
         # Build llama-imatrix command
-        imatrix_bin = self.binary_manager.get_imatrix_path()
+        imatrix_bin = self.llama_cpp_manager.get_imatrix_path()
         cmd = [
             str(imatrix_bin),
             "-m", str(model_path),
@@ -573,11 +573,11 @@ class GGUFConverter:
         if collect_output_weight:
             cmd.append("--process-output")
 
-        if nthreads:
-            cmd.extend(["-t", str(nthreads)])
+        if num_threads:
+            cmd.extend(["-t", str(num_threads)])
 
-        if ngl is not None:
-            cmd.extend(["-ngl", str(ngl)])
+        if num_gpu_layers is not None:
+            cmd.extend(["-ngl", str(num_gpu_layers)])
 
         # Handle verbosity - new verbosity param overrides old verbose bool
         if verbosity is not None:
@@ -686,14 +686,14 @@ class GGUFConverter:
         num_workers: Optional[int] = None,
         scalar_optimization: bool = False,
         imatrix_path: Optional[Union[str, Path]] = None,
-        nthreads: Optional[int] = None,
+        num_threads: Optional[int] = None,
         generate_imatrix: bool = False,
         imatrix_ctx_size: int = 512,
         imatrix_chunks: Optional[int] = None,
         imatrix_collect_output: bool = False,
         imatrix_calibration_file: Optional[Union[str, Path]] = None,
         imatrix_output_name: Optional[str] = None,
-        imatrix_ngl: Optional[int] = None,
+        imatrix_num_gpu_layers: Optional[int] = None,
         ignore_imatrix_warnings: bool = False,
         allow_requantize: bool = False,
         leave_output_tensor: bool = False,
@@ -715,7 +715,7 @@ class GGUFConverter:
             num_workers: Ignored (kept for API compatibility)
             scalar_optimization: Ignored (kept for API compatibility)
             imatrix_path: Optional importance matrix file for low-bit quants (deprecated, use generate_imatrix)
-            nthreads: Number of threads for llama.cpp (None = auto)
+            num_threads: Number of threads for llama.cpp (None = auto)
             generate_imatrix: Auto-generate importance matrix in output directory
             imatrix_ctx_size: Context window size for imatrix generation (default: 512)
             imatrix_chunks: Number of chunks to process for imatrix (None = all)
@@ -826,11 +826,11 @@ class GGUFConverter:
                 output_path=imatrix_file,
                 calibration_file=calibration_file,
                 ctx_size=imatrix_ctx_size,
-                nthreads=nthreads,
+                num_threads=num_threads,
                 verbose=verbose,
                 chunks=imatrix_chunks,
                 collect_output_weight=imatrix_collect_output,
-                ngl=imatrix_ngl
+                num_gpu_layers=imatrix_num_gpu_layers
             )
 
             # Use the generated imatrix
@@ -869,7 +869,7 @@ class GGUFConverter:
                     quantization_type=quant_type,
                     verbose=verbose,
                     imatrix_path=imatrix_path,
-                    nthreads=nthreads,
+                    num_threads=num_threads,
                     allow_requantize=allow_requantize,
                     leave_output_tensor=leave_output_tensor,
                     pure_quantization=pure_quantization,

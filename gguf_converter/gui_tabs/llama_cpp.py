@@ -177,14 +177,14 @@ def render_llama_cpp_tab(converter: "GGUFConverter", config: Dict[str, Any]) -> 
             imatrix_path = None
 
             try:
-                quantize_path = st.session_state.converter.binary_manager.get_quantize_path()
+                quantize_path = st.session_state.converter.llama_cpp_manager.get_quantize_path()
                 quantize_found = quantize_path.exists()
             except (RuntimeError, OSError, FileNotFoundError):
                 # Binary not found - quantize_found stays False, UI will show appropriate status
                 pass
 
             try:
-                imatrix_path = st.session_state.converter.binary_manager.get_imatrix_path()
+                imatrix_path = st.session_state.converter.llama_cpp_manager.get_imatrix_path()
                 imatrix_found = imatrix_path.exists()
             except (RuntimeError, OSError, FileNotFoundError):
                 # Binary not found - imatrix_found stays False, UI will show appropriate status

@@ -1,5 +1,5 @@
 """
-Binary manager for downloading and managing llama.cpp executables
+Manager for llama.cpp resources including binaries and conversion scripts
 """
 
 import os
@@ -34,9 +34,9 @@ def remove_readonly(func, path, excinfo):
     func(path)
 
 
-class BinaryManager:
+class LlamaCppManager:
     """
-    Manages llama.cpp binary downloads and locations
+    Manages llama.cpp resources including binaries and conversion scripts
     """
 
     LLAMA_CPP_VERSION = "b7574"
@@ -44,7 +44,7 @@ class BinaryManager:
 
     def __init__(self, bin_dir: Optional[Path] = None, custom_binaries_folder: Optional[str] = None):
         """
-        Initialize binary manager
+        Initialize llama.cpp manager
 
         Args:
             bin_dir: Directory to store binaries (default: ./bin/)
@@ -393,6 +393,53 @@ class BinaryManager:
         """
         return self.get_installed_version_info()['tag']
 
+    def get_installed_conversion_scripts_version_info(self) -> Dict[str, Optional[str]]:
+        """
+        Get version information of currently installed conversion scripts by checking git
+
+        Returns:
+            Dict with 'full_version' (git describe output) and 'tag' (version tag like 'b7574')
+            Returns None values if unable to determine
+        """
+        import subprocess
+
+        project_root = Path(__file__).parent.parent
+        llama_cpp_dir = project_root / "llama.cpp"
+
+        if not llama_cpp_dir.exists() or not (llama_cpp_dir / ".git").exists():
+            return {'full_version': None, 'tag': None}
+
+        try:
+            # Get the version tag using git describe
+            result = subprocess.run(
+                ["git", "describe", "--tags", "--always"],
+                cwd=llama_cpp_dir,
+                capture_output=True,
+                text=True,
+                timeout=5
+            )
+
+            if result.returncode == 0 and result.stdout.strip():
+                full_version = result.stdout.strip()
+
+                # Extract just the tag portion (e.g., "b7574" from "b7574-123-gabcdef")
+                tag = full_version.split('-')[0] if full_version else None
+
+                return {'full_version': full_version, 'tag': tag}
+        except Exception:
+            pass
+
+        return {'full_version': None, 'tag': None}
+
+    def get_installed_conversion_scripts_version_tag(self) -> Optional[str]:
+        """
+        Get the version tag of currently installed conversion scripts
+
+        Returns:
+            Version tag (e.g., 'b7574') or None if unable to determine
+        """
+        return self.get_installed_conversion_scripts_version_info()['tag']
+
     def get_binary_path(self, name: str) -> Path:
         """
         Get path to a specific binary
@@ -573,23 +620,16 @@ class BinaryManager:
         try:
             # Check current version if not forcing update
             if not force:
-                current_result = subprocess.run(
-                    ["git", "describe", "--tags", "--always"],
-                    cwd=llama_cpp_dir,
-                    capture_output=True,
-                    text=True,
-                    timeout=5
-                )
+                version_info = self.get_installed_conversion_scripts_version_info()
+                current_version = version_info['full_version']
 
-                current_version = current_result.stdout.strip() if current_result.returncode == 0 else "unknown"
-
-                if target_version in current_version:
+                if current_version and target_version in current_version:
                     print(f"{theme['info']}Conversion scripts already at version {target_version}{Style.RESET_ALL}")
                     return {
                         'status': 'already_updated',
                         'message': f'Conversion scripts already at version {target_version}'
                     }
-                elif current_version != "unknown":
+                elif current_version:
                     print(f"{theme['info']}Current version {current_version} differs from requested {target_version}{Style.RESET_ALL}")
                     print(f"{theme['info']}Updating to {target_version}...{Style.RESET_ALL}")
 

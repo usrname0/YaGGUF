@@ -1,5 +1,5 @@
 """
-Tests for binary manager functionality
+Tests for llama.cpp manager functionality
 
 These tests ensure binary path resolution and detection works correctly.
 This is critical because:
@@ -12,29 +12,29 @@ import pytest
 import platform as platform_module
 from pathlib import Path
 from unittest.mock import patch, Mock
-from gguf_converter.binary_manager import BinaryManager
+from gguf_converter.llama_cpp_manager import LlamaCppManager
 
 
 @pytest.fixture
-def mock_binary_manager(tmp_path, monkeypatch):
+def mock_llama_cpp_manager(tmp_path, monkeypatch):
     """
-    Create a binary manager without downloading binaries
+    Create a llama.cpp manager without downloading binaries
     """
     # Set bin_dir to a temporary directory
     bin_dir = tmp_path / "bin"
     bin_dir.mkdir()
 
-    manager = BinaryManager()
+    manager = LlamaCppManager()
     monkeypatch.setattr(manager, 'bin_dir', bin_dir)
 
     return manager, bin_dir
 
 
-def test_binary_manager_initialization():
+def test_llama_cpp_manager_initialization():
     """
-    Test that BinaryManager initializes without crashing
+    Test that LlamaCppManager initializes without crashing
     """
-    manager = BinaryManager()
+    manager = LlamaCppManager()
 
     # Should have platform info
     assert hasattr(manager, 'platform_info')
@@ -46,7 +46,7 @@ def test_platform_detection():
     """
     Test that platform is correctly detected
     """
-    manager = BinaryManager()
+    manager = LlamaCppManager()
 
     # Platform should be one of supported values
     assert manager.platform_info['os'] in ['win', 'ubuntu', 'macos']
@@ -59,7 +59,7 @@ def test_binary_paths_format():
     """
     Test that binary paths are correctly formatted for the platform
     """
-    manager = BinaryManager()
+    manager = LlamaCppManager()
 
     # Get paths
     quantize_path = manager.get_binary_path('llama-quantize')
@@ -87,7 +87,7 @@ def test_binary_names():
     """
     Test that binary names are correct
     """
-    manager = BinaryManager()
+    manager = LlamaCppManager()
 
     # Get binary names (without .exe)
     quantize_name = manager.get_binary_path('llama-quantize').stem
@@ -105,7 +105,7 @@ def test_custom_binaries_folder():
     Test that custom_binaries_folder parameter is stored
     """
     custom_folder = "/custom/path/to/binaries"
-    manager = BinaryManager(custom_binaries_folder=custom_folder)
+    manager = LlamaCppManager(custom_binaries_folder=custom_folder)
 
     # Should store the custom folder setting
     assert manager.custom_binaries_folder == custom_folder
@@ -115,7 +115,7 @@ def test_system_path_fallback():
     """
     Test that empty string for custom binaries is stored
     """
-    manager = BinaryManager(custom_binaries_folder="")
+    manager = LlamaCppManager(custom_binaries_folder="")
 
     # Should store the empty string (signals system PATH usage)
     assert manager.custom_binaries_folder == ""
@@ -125,7 +125,7 @@ def test_llama_cpp_version_defined():
     """
     Test that LLAMA_CPP_VERSION is defined and has expected format
     """
-    manager = BinaryManager()
+    manager = LlamaCppManager()
 
     # Should have version constant
     assert hasattr(manager, 'LLAMA_CPP_VERSION')
@@ -140,7 +140,7 @@ def test_get_quantize_path():
     """
     Test get_quantize_path convenience method
     """
-    manager = BinaryManager()
+    manager = LlamaCppManager()
 
     path = manager.get_quantize_path()
 
@@ -155,7 +155,7 @@ def test_get_imatrix_path():
     """
     Test get_imatrix_path convenience method
     """
-    manager = BinaryManager()
+    manager = LlamaCppManager()
 
     path = manager.get_imatrix_path()
 
@@ -173,7 +173,7 @@ def test_windows_platform_detection(mock_system):
     """
     mock_system.return_value = 'Windows'
 
-    manager = BinaryManager()
+    manager = LlamaCppManager()
 
     assert manager.platform_info['os'] == 'win'
 
@@ -185,7 +185,7 @@ def test_linux_platform_detection(mock_system):
     """
     mock_system.return_value = 'Linux'
 
-    manager = BinaryManager()
+    manager = LlamaCppManager()
 
     assert manager.platform_info['os'] == 'ubuntu'
 
@@ -197,7 +197,7 @@ def test_macos_platform_detection(mock_system):
     """
     mock_system.return_value = 'Darwin'
 
-    manager = BinaryManager()
+    manager = LlamaCppManager()
 
     assert manager.platform_info['os'] == 'macos'
 
@@ -209,7 +209,7 @@ def test_x64_architecture_detection(mock_machine):
     """
     mock_machine.return_value = 'x86_64'
 
-    manager = BinaryManager()
+    manager = LlamaCppManager()
 
     assert manager.platform_info['arch'] == 'x64'
 
@@ -221,7 +221,7 @@ def test_arm64_architecture_detection(mock_machine):
     """
     mock_machine.return_value = 'arm64'
 
-    manager = BinaryManager()
+    manager = LlamaCppManager()
 
     assert manager.platform_info['arch'] == 'arm64'
 
@@ -230,17 +230,17 @@ def test_bin_dir_is_absolute_path():
     """
     Test that bin_dir is always an absolute path
     """
-    manager = BinaryManager()
+    manager = LlamaCppManager()
 
     if manager.bin_dir is not None:
         assert manager.bin_dir.is_absolute()
 
 
-def test_binary_path_construction(mock_binary_manager):
+def test_binary_path_construction(mock_llama_cpp_manager):
     """
     Test that binary paths are correctly constructed
     """
-    manager, bin_dir = mock_binary_manager
+    manager, bin_dir = mock_llama_cpp_manager
 
     path = manager.get_binary_path('llama-quantize')
 
@@ -251,11 +251,11 @@ def test_binary_path_construction(mock_binary_manager):
     assert 'llama-quantize' in path.name
 
 
-def test_unknown_binary_name(mock_binary_manager):
+def test_unknown_binary_name(mock_llama_cpp_manager):
     """
     Test handling of unknown binary name
     """
-    manager, bin_dir = mock_binary_manager
+    manager, bin_dir = mock_llama_cpp_manager
 
     # Should still return a path (even if binary doesn't exist)
     path = manager.get_binary_path('nonexistent-binary')
@@ -264,11 +264,11 @@ def test_unknown_binary_name(mock_binary_manager):
     assert 'nonexistent-binary' in path.name
 
 
-def test_binaries_exist_check(mock_binary_manager):
+def test_binaries_exist_check(mock_llama_cpp_manager):
     """
     Test _binaries_exist method
     """
-    manager, bin_dir = mock_binary_manager
+    manager, bin_dir = mock_llama_cpp_manager
 
     # Initially should not exist (no binaries in temp dir)
     assert not manager._binaries_exist()
@@ -287,7 +287,7 @@ def test_github_release_url_format():
 
     This is important because the URL format might change
     """
-    manager = BinaryManager()
+    manager = LlamaCppManager()
 
     # The URL construction is internal, but we can check the version format
     # that would be used in the URL
@@ -301,10 +301,10 @@ def test_github_release_url_format():
 
 def test_multiple_managers_independent():
     """
-    Test that multiple BinaryManager instances can exist with different settings
+    Test that multiple LlamaCppManager instances can exist with different settings
     """
-    manager1 = BinaryManager()
-    manager2 = BinaryManager(custom_binaries_folder="/custom/path")
+    manager1 = LlamaCppManager()
+    manager2 = LlamaCppManager(custom_binaries_folder="/custom/path")
 
     # Should have different custom_binaries_folder settings
     assert manager1.custom_binaries_folder != manager2.custom_binaries_folder
@@ -314,7 +314,7 @@ def test_platform_info_structure():
     """
     Test that platform_info has expected structure
     """
-    manager = BinaryManager()
+    manager = LlamaCppManager()
 
     # Should have required keys
     assert 'os' in manager.platform_info
@@ -331,7 +331,7 @@ def test_download_url_construction():
 
     This doesn't test actual downloads, just URL construction logic
     """
-    manager = BinaryManager()
+    manager = LlamaCppManager()
 
     # Should be able to construct URL for current platform
     # (We don't call this directly, but test that platform_info is sufficient)

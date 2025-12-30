@@ -6,7 +6,7 @@ Can be run as: python -m gguf_converter.download_binaries
 import sys
 import argparse
 from pathlib import Path
-from .binary_manager import BinaryManager
+from .llama_cpp_manager import LlamaCppManager
 from .theme import THEME as theme
 from colorama import init as colorama_init, Style
 
@@ -40,7 +40,7 @@ def main() -> int:
     print()
 
     try:
-        manager = BinaryManager()
+        manager = LlamaCppManager()
 
         # Ensure binaries are available
         if manager.ensure_binaries(fallback_to_system=not args.no_fallback):

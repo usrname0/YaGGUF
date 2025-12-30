@@ -133,19 +133,19 @@ def main() -> None:
         max_workers = multiprocessing.cpu_count()
         default_threads = max(1, max_workers - 1)
 
-        def save_nthreads():
-            config["nthreads"] = int(st.session_state.nthreads_input)
+        def save_num_threads():
+            config["num_threads"] = int(st.session_state.num_threads_input)
             save_config(config)
 
-        nthreads = st.number_input(
+        num_threads = st.number_input(
             "Thread count",
             min_value=1,
             max_value=max_workers,
-            value=int(config.get("nthreads") or default_threads),
+            value=int(config.get("num_threads") or default_threads),
             step=1,
             help=f"Number of threads for llama.cpp (logical processors: {max_workers}, default: {default_threads} to keep system responsive)",
-            key="nthreads_input",
-            on_change=save_nthreads
+            key="num_threads_input",
+            on_change=save_num_threads
         )
 
         st.markdown("---")
@@ -177,7 +177,7 @@ def main() -> None:
     ])
 
     with tab1:
-        render_convert_tab(converter, config, verbose, nthreads, ignore_imatrix_warnings)
+        render_convert_tab(converter, config, verbose, num_threads, ignore_imatrix_warnings)
 
     with tab2:
         render_imatrix_settings_tab(converter, config)

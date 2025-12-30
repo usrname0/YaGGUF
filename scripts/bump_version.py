@@ -70,9 +70,9 @@ def get_current_yaguff_version():
 
 
 def get_current_llama_version():
-    """Read current llama.cpp version from binary_manager.py"""
-    binary_manager = get_project_root() / "gguf_converter" / "binary_manager.py"
-    content = binary_manager.read_text()
+    """Read current llama.cpp version from llama_cpp_manager.py"""
+    llama_cpp_manager = get_project_root() / "gguf_converter" / "llama_cpp_manager.py"
+    content = llama_cpp_manager.read_text()
     match = re.search(r'LLAMA_CPP_VERSION\s*=\s*["\']([^"\']+)["\']', content)
     if match:
         return match.group(1)
@@ -234,9 +234,9 @@ def increment_version(version_str):
 
 
 def update_llama_version(new_llama_version):
-    """Update LLAMA_CPP_VERSION in binary_manager.py"""
-    binary_manager = get_project_root() / "gguf_converter" / "binary_manager.py"
-    content = binary_manager.read_text()
+    """Update LLAMA_CPP_VERSION in llama_cpp_manager.py"""
+    llama_cpp_manager = get_project_root() / "gguf_converter" / "llama_cpp_manager.py"
+    content = llama_cpp_manager.read_text()
 
     # Replace LLAMA_CPP_VERSION
     new_content = re.sub(
@@ -245,7 +245,7 @@ def update_llama_version(new_llama_version):
         content
     )
 
-    binary_manager.write_text(new_content)
+    llama_cpp_manager.write_text(new_content)
     print(Colors.green(f"Updated LLAMA_CPP_VERSION to {new_llama_version}"))
 
 
@@ -270,7 +270,7 @@ def git_commit_and_tag(yaguff_version, llama_version):
     try:
         # Stage the changed files
         subprocess.run(
-            ["git", "add", "gguf_converter/__init__.py", "gguf_converter/binary_manager.py"],
+            ["git", "add", "gguf_converter/__init__.py", "gguf_converter/llama_cpp_manager.py"],
             check=True,
             cwd=get_project_root()
         )
@@ -528,7 +528,7 @@ def main():
         print(Colors.yellow("DRY RUN - No changes made"))
         print(Colors.yellow("=" * 60))
         print()
-        print(f"Would update binary_manager.py: {current_llama} -> {new_llama}")
+        print(f"Would update llama_cpp_manager.py: {current_llama} -> {new_llama}")
         print(f"Would update __init__.py: {current_yaguff} -> {new_yaguff}")
         print(f"Would create commit: 'Bump to v{new_yaguff} (llama.cpp {new_llama})'")
         print(f"Would create tag: v{new_yaguff}")

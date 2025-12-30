@@ -66,7 +66,7 @@ def render_convert_tab(
     converter: "GGUFConverter",
     config: Dict[str, Any],
     verbose: bool,
-    nthreads: Optional[int],
+    num_threads: Optional[int],
     ignore_imatrix_warnings: bool
 ) -> None:
     """Render the Convert & Quantize tab"""
@@ -582,11 +582,11 @@ def render_convert_tab(
                     checkbox_disabled = False
 
                 def save_full_selection(qt, inter_type):
-                    def callback():
+                    def save_to_config():
                         if not st.session_state[f"full_{qt}_{inter_type}"]:
                             config["other_quants"][qt] = False
                             save_config(config)
-                    return callback
+                    return save_to_config
 
                 full_checkboxes[qtype] = st.checkbox(
                     qtype,
@@ -627,10 +627,10 @@ def render_convert_tab(
 
         st.markdown("**Legacy Quants:**")
         def save_trad_selection(qtype, widget_key):
-            def callback():
+            def save_to_config():
                 config["other_quants"][qtype] = st.session_state[widget_key]
                 save_config(config)
-            return callback
+            return save_to_config
 
         trad_cols = st.columns(3)
         trad_quants = {
@@ -655,10 +655,10 @@ def render_convert_tab(
                 )
 
         def save_quant_selection(qtype, widget_key):
-            def callback():
+            def save_to_config():
                 config["other_quants"][qtype] = st.session_state[widget_key]
                 save_config(config)
-            return callback
+            return save_to_config
 
         st.markdown("**K Quants (Recommended):**")
         k_quants = {
@@ -778,7 +778,7 @@ def render_convert_tab(
         else:
             # Update config with current values
             config["verbose"] = verbose
-            config["nthreads"] = nthreads
+            config["num_threads"] = num_threads
             config["use_imatrix"] = use_imatrix
             config["model_path"] = model_path_clean
             config["output_dir"] = output_dir_clean
@@ -871,10 +871,10 @@ def render_convert_tab(
                 with st.spinner("Converting and quantizing... This may take a while."):
                     # Only use GPU offloading if custom binaries are enabled
                     # YaGUFF binaries are CPU-only and don't support -ngl
-                    use_ngl = None
+                    use_num_gpu_layers = None
                     if config.get("use_custom_binaries", False):
-                        ngl_value = int(config.get("imatrix_ngl", 0))
-                        use_ngl = ngl_value if ngl_value > 0 else None
+                        num_gpu_layers_value = int(config.get("imatrix_num_gpu_layers", 0))
+                        use_num_gpu_layers = num_gpu_layers_value if num_gpu_layers_value > 0 else None
 
                     output_files = converter.convert_and_quantize(
                         model_path=model_path_clean,
@@ -884,13 +884,13 @@ def render_convert_tab(
                         verbose=verbose,
                         generate_imatrix=generate_imatrix_flag,
                         imatrix_path=imatrix_path_to_use,
-                        nthreads=nthreads,
+                        num_threads=num_threads,
                         imatrix_ctx_size=int(config.get("imatrix_ctx_size", 512)),
                         imatrix_chunks=int(config.get("imatrix_chunks", 100)) if config.get("imatrix_chunks", 100) > 0 else None,
                         imatrix_collect_output=config.get("imatrix_collect_output_weight", False),
                         imatrix_calibration_file=calibration_file_path,
                         imatrix_output_name=imatrix_output_filename,
-                        imatrix_ngl=use_ngl,
+                        imatrix_num_gpu_layers=use_num_gpu_layers,
                         ignore_imatrix_warnings=ignore_imatrix_warnings,
                         allow_requantize=allow_requantize,
                         leave_output_tensor=leave_output_tensor,

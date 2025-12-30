@@ -33,14 +33,14 @@ def test_get_default_config():
     # Check essential keys exist
     assert "verbose" in config
     assert "use_imatrix" in config
-    assert "nthreads" in config
+    assert "num_threads" in config
     assert "model_path" in config
     assert "output_dir" in config
 
     # Check default values
     assert config["verbose"] is True
     assert config["use_imatrix"] is True
-    assert config["nthreads"] is None  # Auto-detect
+    assert config["num_threads"] is None  # Auto-detect
     assert config["model_path"] == ""
     assert config["output_dir"] == ""
 
@@ -56,7 +56,7 @@ def test_save_and_load_config(temp_config_file):
     # Create a custom config
     config = {
         "verbose": False,
-        "nthreads": 8,
+        "num_threads": 8,
         "model_path": "/path/to/model",
         "output_dir": "/path/to/output"
     }
@@ -72,7 +72,7 @@ def test_save_and_load_config(temp_config_file):
 
     # Verify values
     assert loaded_config["verbose"] is False
-    assert loaded_config["nthreads"] == 8
+    assert loaded_config["num_threads"] == 8
     assert loaded_config["model_path"] == "/path/to/model"
     assert loaded_config["output_dir"] == "/path/to/output"
 
@@ -100,7 +100,7 @@ def test_load_config_merges_with_defaults(temp_config_file):
     # Save a partial config (simulating old config format)
     partial_config = {
         "verbose": False,
-        "nthreads": 4
+        "num_threads": 4
     }
 
     with open(temp_config_file, 'w') as f:
@@ -111,7 +111,7 @@ def test_load_config_merges_with_defaults(temp_config_file):
 
     # Should have saved values
     assert loaded["verbose"] is False
-    assert loaded["nthreads"] == 4
+    assert loaded["num_threads"] == 4
 
     # Should also have default values for missing keys
     assert "model_path" in loaded
@@ -142,7 +142,7 @@ def test_reset_config(temp_config_file):
     # Save a custom config
     custom_config = {
         "verbose": False,
-        "nthreads": 16,
+        "num_threads": 16,
         "model_path": "/custom/path"
     }
     save_config(custom_config)
@@ -155,7 +155,7 @@ def test_reset_config(temp_config_file):
 
     # Should be back to defaults
     assert loaded["verbose"] is True  # Default
-    assert loaded["nthreads"] is None  # Default
+    assert loaded["num_threads"] is None  # Default
     assert loaded["model_path"] == ""  # Default
 
 
@@ -168,7 +168,7 @@ def test_config_roundtrip(temp_config_file):
 
     # Modify it
     original["verbose"] = False
-    original["nthreads"] = 12
+    original["num_threads"] = 12
     original["model_path"] = "/test/path"
 
     # Save -> Load -> Save -> Load
@@ -179,5 +179,5 @@ def test_config_roundtrip(temp_config_file):
 
     # Should be identical
     assert second_load["verbose"] == original["verbose"]
-    assert second_load["nthreads"] == original["nthreads"]
+    assert second_load["num_threads"] == original["num_threads"]
     assert second_load["model_path"] == original["model_path"]

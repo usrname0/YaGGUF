@@ -162,7 +162,7 @@ def render_update_tab(converter: "GGUFConverter", config: Dict[str, Any]) -> Non
             tee = TeeOutput(f)
             with redirect_stdout(tee):  # type: ignore[arg-type]
                 try:
-                    st.session_state.converter.binary_manager.update_binaries()
+                    st.session_state.converter.llama_cpp_manager.update_binaries()
                     st.toast("Binaries updated successfully!")
                     success = True
                 except Exception as e:
@@ -184,9 +184,9 @@ def render_update_tab(converter: "GGUFConverter", config: Dict[str, Any]) -> Non
             tee = TeeOutput(f)
             with redirect_stdout(tee):  # type: ignore[arg-type]
                 try:
-                    latest_version = st.session_state.converter.binary_manager.get_latest_version()
+                    latest_version = st.session_state.converter.llama_cpp_manager.get_latest_version()
                     print(f"{theme['info']}Latest version: {latest_version}{Style.RESET_ALL}")
-                    st.session_state.converter.binary_manager.update_binaries(version=latest_version)
+                    st.session_state.converter.llama_cpp_manager.update_binaries(version=latest_version)
                     st.toast("Binaries updated successfully!")
                     success = True
                 except Exception as e:
@@ -228,7 +228,7 @@ def render_update_tab(converter: "GGUFConverter", config: Dict[str, Any]) -> Non
             tee = TeeOutput(f)
             with redirect_stdout(tee):  # type: ignore[arg-type]
                 try:
-                    result = st.session_state.converter.binary_manager.update_conversion_scripts()
+                    result = st.session_state.converter.llama_cpp_manager.update_conversion_scripts()
                     if result['status'] in ['success', 'already_updated']:
                         st.toast("Conversion scripts updated successfully!")
                         success = True
@@ -255,9 +255,9 @@ def render_update_tab(converter: "GGUFConverter", config: Dict[str, Any]) -> Non
             tee = TeeOutput(f)
             with redirect_stdout(tee):  # type: ignore[arg-type]
                 try:
-                    latest_version = st.session_state.converter.binary_manager.get_latest_version()
+                    latest_version = st.session_state.converter.llama_cpp_manager.get_latest_version()
                     print(f"{theme['info']}Latest version: {latest_version}{Style.RESET_ALL}")
-                    result = st.session_state.converter.binary_manager.update_conversion_scripts(version=latest_version)
+                    result = st.session_state.converter.llama_cpp_manager.update_conversion_scripts(version=latest_version)
                     if result['status'] in ['success', 'already_updated']:
                         st.toast("Conversion scripts updated successfully!")
                         success = True
