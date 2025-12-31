@@ -10,7 +10,7 @@ from ..gui_utils import (
     strip_quotes, open_folder, browse_folder,
     save_config, get_binary_version,
     get_binary_version_from_path,
-    TKINTER_AVAILABLE
+    TKINTER_AVAILABLE, get_platform_path
 )
 
 if TYPE_CHECKING:
@@ -91,7 +91,10 @@ def render_llama_cpp_tab(converter: "GGUFConverter", config: Dict[str, Any]) -> 
             # Only set value if key not in session state (prevents warning)
             binaries_folder_kwargs = {
                 "label": "llama.cpp binaries folder",
-                "placeholder": "/path/to/llama.cpp/bin or leave blank for PATH",
+                "placeholder": get_platform_path(
+                    "C:\\path\\to\\llama.cpp\\bin or leave blank for PATH",
+                    "/path/to/llama.cpp/bin or leave blank for PATH"
+                ),
                 "help": "Path to folder containing llama-quantize and llama-imatrix. Leave blank to use system PATH.",
                 "key": "custom_binaries_folder_input_update",
                 "label_visibility": "collapsed",
@@ -222,17 +225,17 @@ def render_llama_cpp_tab(converter: "GGUFConverter", config: Dict[str, Any]) -> 
                     st.info("Version: Unable to detect (click Refresh to retry)")
 
                 # Show binary paths
-                st.markdown(f"- `llama-quantize`: {quantize_path.as_posix()}")
-                st.markdown(f"- `llama-imatrix`: {imatrix_path.as_posix()}")
+                st.markdown(f"- `llama-quantize`: {quantize_path}")
+                st.markdown(f"- `llama-imatrix`: {imatrix_path}")
             elif quantize_found or imatrix_found:
                 st.warning("Some binaries missing")
                 if quantize_found:
-                    st.markdown(f"- `llama-quantize`: {quantize_path.as_posix()}")
+                    st.markdown(f"- `llama-quantize`: {quantize_path}")
                 else:
                     st.markdown("- `llama-quantize`: Not found")
 
                 if imatrix_found:
-                    st.markdown(f"- `llama-imatrix`: {imatrix_path.as_posix()}")
+                    st.markdown(f"- `llama-imatrix`: {imatrix_path}")
 
                     # Get version from cache or fetch it
                     if cache_key not in st.session_state.custom_binary_versions:
@@ -311,7 +314,10 @@ def render_llama_cpp_tab(converter: "GGUFConverter", config: Dict[str, Any]) -> 
             # Only set value if key not in session state (prevents warning)
             repo_path_kwargs = {
                 "label": "llama.cpp repository path",
-                "placeholder": "/path/to/llama.cpp or leave blank for YaGGUF's repo",
+                "placeholder": get_platform_path(
+                    "C:\\path\\to\\llama.cpp or leave blank for YaGGUF's repo",
+                    "/path/to/llama.cpp or leave blank for YaGGUF's repo"
+                ),
                 "help": "Path to llama.cpp repository containing convert_hf_to_gguf.py. Leave blank to use YaGGUF's auto-cloned repository.",
                 "key": "custom_llama_cpp_repo_input",
                 "label_visibility": "collapsed",
@@ -407,11 +413,11 @@ def render_llama_cpp_tab(converter: "GGUFConverter", config: Dict[str, Any]) -> 
                     except Exception:
                         st.info("Version: Unable to detect")
 
-                    st.markdown(f"- `convert_hf_to_gguf.py`: {script_path.as_posix()}")
+                    st.markdown(f"- `convert_hf_to_gguf.py`: {script_path}")
                 else:
                     st.error("Conversion script not found")
                     st.markdown("- `convert_hf_to_gguf.py`: Not found")
-                    st.warning(f"Expected location: `{(Path(custom_repo) / 'convert_hf_to_gguf.py').as_posix()}`")
+                    st.warning(f"Expected location: `{Path(custom_repo) / 'convert_hf_to_gguf.py'}`")
             else:
                 # No custom path specified, using YaGGUF's repo
                 st.info("Using YaGGUF's auto-cloned llama.cpp repository")
@@ -442,7 +448,7 @@ def render_llama_cpp_tab(converter: "GGUFConverter", config: Dict[str, Any]) -> 
                     except Exception:
                         st.info("Version: Unable to detect")
 
-                    st.markdown(f"- `convert_hf_to_gguf.py`: {script_path.as_posix()}")
+                    st.markdown(f"- `convert_hf_to_gguf.py`: {script_path}")
                 else:
                     st.warning("Conversion script not found in YaGGUF's llama.cpp repository")
         else:

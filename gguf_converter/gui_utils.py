@@ -27,7 +27,7 @@ except ImportError:
 # Export TKINTER_AVAILABLE for use in other modules
 __all__ = ['TKINTER_AVAILABLE', 'browse_folder', 'open_folder', 'strip_quotes',
            'save_config', 'load_config', 'make_config_saver', 'path_input_columns',
-           'extract_repo_id_from_url', 'check_disk_space_sufficient']
+           'extract_repo_id_from_url', 'get_platform_path']
 
 
 # Config file location
@@ -169,6 +169,23 @@ def strip_quotes(path_str: str | None) -> str:
     if not path_str:
         return ""
     return path_str.strip().strip('"').strip("'")
+
+
+def get_platform_path(windows_path: str, unix_path: str) -> str:
+    """
+    Return platform-appropriate path string for placeholders
+
+    Args:
+        windows_path: Path string with Windows-style separators (backslashes)
+        unix_path: Path string with Unix-style separators (forward slashes)
+
+    Returns:
+        The appropriate path string for the current platform
+
+    Example:
+        >>> placeholder = get_platform_path("C:\\Models\\output", "/home/user/Models/output")
+    """
+    return windows_path if platform.system() == "Windows" else unix_path
 
 
 def open_folder(folder_path: str) -> None:
@@ -335,7 +352,10 @@ def browse_folder(initial_dir: Optional[str] = None) -> Optional[str]:
         )
 
         root.destroy()
-        return folder_path if folder_path else None
+        # Convert to OS-native path separators (tkinter returns forward slashes on all platforms)
+        if folder_path:
+            return str(Path(folder_path))
+        return None
     except Exception as e:
         print(f"{theme['error']}Error opening folder picker: {e}{Style.RESET_ALL}")
         return None
@@ -571,39 +591,6 @@ def extract_repo_id_from_url(url_or_repo_id: str) -> Optional[str]:
         return url_or_repo_id
 
     return None
-
-
-def check_disk_space_sufficient(path: Path, required_bytes: int, buffer_bytes: int = 500 * 1024 * 1024) -> Tuple[bool, int]:
-    """
-    Check if there is sufficient disk space at the given path
-
-    Args:
-        path: Path to check disk space for
-        required_bytes: Required space in bytes
-        buffer_bytes: Additional buffer space in bytes (default: 500MB)
-
-    Returns:
-        tuple: (is_sufficient, free_bytes)
-            - is_sufficient: True if enough space available
-            - free_bytes: Available free space in bytes
-
-    Examples:
-        >>> sufficient, free = check_disk_space_sufficient(Path("/tmp"), 1024 * 1024 * 1024)  # 1GB
-        >>> print(f"Sufficient: {sufficient}, Free: {free / (1024**3):.2f} GB")
-    """
-    import shutil
-
-    if not path.exists():
-        # If path doesn't exist, we can't check disk space
-        return False, 0
-
-    try:
-        stat = shutil.disk_usage(path)
-        total_required = required_bytes + buffer_bytes
-        return stat.free >= total_required, stat.free
-    except Exception:
-        # If we can't check, assume insufficient
-        return False, 0
 
 
 def run_and_stream_command(command: List[str]) -> None:

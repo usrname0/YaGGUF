@@ -13,7 +13,8 @@ from ..theme import THEME as theme
 
 from ..gui_utils import (
     strip_quotes, open_folder, browse_folder,
-    save_config, TKINTER_AVAILABLE, extract_repo_id_from_url
+    save_config, TKINTER_AVAILABLE, extract_repo_id_from_url,
+    get_platform_path
 )
 
 if TYPE_CHECKING:
@@ -151,7 +152,7 @@ def render_downloader_tab(converter: "GGUFConverter", config: Dict[str, Any]) ->
         download_dir = st.text_input(
             download_dir_label,
             value=config.get("download_dir", ""),
-            placeholder="C:/Models or /home/user/Models"
+            placeholder=get_platform_path("C:\\Models", "/home/user/Models")
         )
 
     # Save download_dir to config if it changed
@@ -204,9 +205,9 @@ def render_downloader_tab(converter: "GGUFConverter", config: Dict[str, Any]) ->
                     insufficient_space = True
 
             if insufficient_space:
-                st.warning(f"{full_path.as_posix()}\n\nInsufficient free space: {free_gb:.2f} GB")
+                st.warning(f"{full_path}\n\nInsufficient free space: {free_gb:.2f} GB")
             else:
-                st.info(f"{full_path.as_posix()}\n\nFree space: {free_gb:.2f} GB")
+                st.info(f"{full_path}\n\nFree space: {free_gb:.2f} GB")
         else:
             st.code("Select a download directory.\n\nFree space: unknown", language=None)
 
@@ -360,7 +361,7 @@ def render_downloader_tab(converter: "GGUFConverter", config: Dict[str, Any]) ->
                 print(f"\n{theme['success']}Download complete: {model_path}{Style.RESET_ALL}\n")
 
                 # Store in session state and mark as just completed
-                st.session_state.downloaded_model_path = model_path.as_posix()
+                st.session_state.downloaded_model_path = str(model_path)
                 st.session_state.download_just_completed = True
                 st.rerun()
 

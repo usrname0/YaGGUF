@@ -8,7 +8,7 @@ from typing import Dict, Any, TYPE_CHECKING
 
 from ..gui_utils import (
     strip_quotes, open_folder, browse_folder,
-    save_config, TKINTER_AVAILABLE
+    save_config, TKINTER_AVAILABLE, get_platform_path
 )
 
 if TYPE_CHECKING:
@@ -35,9 +35,9 @@ def render_imatrix_stats_tab(converter: "GGUFConverter", config: Dict[str, Any])
     with col_stats_dir:
         stats_output_dir = st.text_input(
             "Output directory to analyze",
-            value=config.get("output_dir", ""),
-            placeholder="C:/Models/output or /home/user/Models/output",
-            help="Directory containing imatrix and GGUF files to analyze (uses output directory from Convert & Quantize tab)"
+            value=config.get("imatrix_stats_output_dir", ""),
+            placeholder=get_platform_path("C:\\Models\\output", "/home/user/Models/output"),
+            help="Directory containing imatrix and GGUF files to analyze (defaults to most recent conversion output directory)"
         )
 
     if TKINTER_AVAILABLE:
@@ -53,7 +53,7 @@ def render_imatrix_stats_tab(converter: "GGUFConverter", config: Dict[str, Any])
                 initial_dir = stats_dir_clean if stats_dir_clean and Path(stats_dir_clean).exists() else None
                 selected_folder = browse_folder(initial_dir)
                 if selected_folder:
-                    config["output_dir"] = selected_folder
+                    config["imatrix_stats_output_dir"] = selected_folder
                     save_config(config)
                     st.rerun()
 
@@ -81,7 +81,7 @@ def render_imatrix_stats_tab(converter: "GGUFConverter", config: Dict[str, Any])
     # Scan directory for imatrix files
     imatrix_files = []
     if stats_dir_clean and Path(stats_dir_clean).exists() and Path(stats_dir_clean).is_dir():
-        imatrix_files = sorted([f.as_posix() for f in Path(stats_dir_clean).glob("*.imatrix")])
+        imatrix_files = sorted([str(f) for f in Path(stats_dir_clean).glob("*.imatrix")])
 
     if not imatrix_files:
         imatrix_files = ["(no .imatrix files found)"]
@@ -116,7 +116,7 @@ def render_imatrix_stats_tab(converter: "GGUFConverter", config: Dict[str, Any])
     # Scan directory for GGUF model files
     gguf_files = []
     if stats_dir_clean and Path(stats_dir_clean).exists() and Path(stats_dir_clean).is_dir():
-        gguf_files = sorted([f.as_posix() for f in Path(stats_dir_clean).glob("*.gguf")])
+        gguf_files = sorted([str(f) for f in Path(stats_dir_clean).glob("*.gguf")])
 
     if not gguf_files:
         gguf_files = ["(no .gguf files found)"]

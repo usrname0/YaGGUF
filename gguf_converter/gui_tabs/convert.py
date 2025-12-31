@@ -11,7 +11,8 @@ from ..theme import THEME as theme
 
 from ..gui_utils import (
     strip_quotes, open_folder, browse_folder,
-    save_config, make_config_saver, path_input_columns
+    save_config, make_config_saver, path_input_columns,
+    get_platform_path
 )
 
 if TYPE_CHECKING:
@@ -119,7 +120,7 @@ def render_convert_tab(
             # Only set value if key not in session state (prevents warning)
             model_path_kwargs = {
                 "label": "Model path",
-                "placeholder": "C:/Models/my-model or /home/user/Models/my-model",
+                "placeholder": get_platform_path("C:\\Models\\my-model", "/home/user/Models/my-model"),
                 "help": "Local model directory containing config.json and model files.",
                 "key": "model_path_input"
             }
@@ -173,7 +174,7 @@ def render_convert_tab(
             output_dir = st.text_input(
                 "Output directory",
                 value=config.get("output_dir", ""),
-                placeholder="C:/Models/output or /home/user/Models/output",
+                placeholder=get_platform_path("C:\\Models\\output", "/home/user/Models/output"),
                 help="Where to save the converted files"
             )
 
@@ -1010,6 +1011,9 @@ def render_convert_tab(
 
                 st.success(f"Successfully processed {len(output_files)} files!")
 
+                # Update imatrix statistics tab with this conversion's output directory
+                config["imatrix_stats_output_dir"] = output_dir_clean
+
                 # If imatrix was used, save paths for statistics tab
                 if use_imatrix:
                     # Determine which imatrix file was used
@@ -1033,16 +1037,16 @@ def render_convert_tab(
                     intermediate_path = Path(output_dir_clean) / f"{Path(model_path_clean).name}_{intermediate_type.upper()}.gguf"
 
                     if actual_imatrix_path and actual_imatrix_path.exists():
-                        config["imatrix_stats_path"] = actual_imatrix_path.as_posix()
+                        config["imatrix_stats_path"] = str(actual_imatrix_path)
                     if intermediate_path.exists():
-                        config["imatrix_stats_model"] = intermediate_path.as_posix()
+                        config["imatrix_stats_model"] = str(intermediate_path)
                     save_config(config)
 
                 st.subheader("Output Files")
                 for file_path in output_files:
                     file_size = file_path.stat().st_size / (1024**3)  # GB
                     st.write(f"`{file_path.name}` ({file_size:.2f} GB)")
-                    st.code(file_path.as_posix(), language=None)
+                    st.code(str(file_path), language=None)
 
             except Exception as e:
                 # Show in Streamlit UI
