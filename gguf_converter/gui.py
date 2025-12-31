@@ -57,7 +57,7 @@ def main() -> None:
         </style>
     """, unsafe_allow_html=True)
 
-    st.title("YaGUFF - Yet Another GGUF Converter")
+    st.title("YaGGUF - Yet Another GGUF Converter")
 
     # Initialize converter with custom settings if specified
     if 'converter' not in st.session_state:
@@ -93,7 +93,7 @@ def main() -> None:
 
     with st.sidebar:
         st.header("Settings")
-        st.markdown("[YaGUFF (GitHub)](https://github.com/usrname0/YaGUFF)")
+        st.markdown("[YaGGUF (GitHub)](https://github.com/usrname0/YaGGUF)")
         st.markdown("---")
 
         def save_verbose():

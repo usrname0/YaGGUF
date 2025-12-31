@@ -225,7 +225,7 @@ def check_git_updates_available() -> Dict[str, Any]:
         current_version = get_current_version()
 
         # Check GitHub Releases API for latest release
-        url = "https://api.github.com/repos/usrname0/YaGUFF/releases/latest"
+        url = "https://api.github.com/repos/usrname0/YaGGUF/releases/latest"
         req = urllib.request.Request(url)
         req.add_header('Accept', 'application/vnd.github.v3+json')
 
@@ -252,7 +252,7 @@ def check_git_updates_available() -> Dict[str, Any]:
                 else:
                     return {
                         "status": "up_to_date",
-                        "message": "You are on the latest version of YaGUFF",
+                        "message": "You are on the latest version of YaGGUF",
                         "latest_version": current_version
                     }
             else:
@@ -444,7 +444,7 @@ def display_binary_version_status(converter: Any) -> None:
             st.warning(f"Expected binary version: **{expected_version}**")
         else:
             # Show positive confirmation when versions match
-            st.info("You are on the latest YaGUFF-tested llama.cpp binary")
+            st.info("You are on the latest YaGGUF-tested llama.cpp binary")
     elif binary_info["status"] == "missing":
         st.info(f"Expected binary version: **{expected_version}**")
 
@@ -518,7 +518,7 @@ def display_conversion_scripts_version_status(converter: Any) -> None:
         # Show version match status
         expected_numeric = expected_version.lstrip('b')
         if expected_numeric in scripts_info["version"]:
-            st.info("You are on the latest YaGUFF-tested conversion scripts")
+            st.info("You are on the latest YaGGUF-tested conversion scripts")
         else:
             st.warning(f"Expected conversion scripts version: **{expected_version}**")
     elif scripts_info["status"] == "missing":

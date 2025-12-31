@@ -1,5 +1,5 @@
 @echo off
-REM Update YaGUFF to latest version and restart Streamlit
+REM Update YaGGUF to latest version and restart Streamlit
 
 REM Change to project root
 cd /d "%~dp0.."
@@ -13,7 +13,7 @@ set VERSION=%2
 
 echo.
 echo ========================================
-echo Updating YaGUFF and Restarting
+echo Updating YaGGUF and Restarting
 echo ========================================
 echo.
 
@@ -28,8 +28,8 @@ for /f "tokens=5" %%a in ('netstat -ano ^| findstr ":%PORT% " ^| findstr "LISTEN
 REM Give the OS a moment to release the port
 timeout /t 2 /nobreak >nul
 
-REM Update YaGUFF
-echo Fetching latest YaGUFF version...
+REM Update YaGGUF
+echo Fetching latest YaGGUF version...
 git fetch --tags 2>nul
 
 if "%VERSION%"=="" (

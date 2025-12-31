@@ -6,7 +6,8 @@ import streamlit as st
 from pathlib import Path
 import webbrowser
 from typing import Dict, Any, TYPE_CHECKING
-from huggingface_hub import HfApi
+from huggingface_hub import HfApi, login as hf_login, get_token, logout as hf_logout
+from huggingface_hub.errors import GatedRepoError
 from colorama import init as colorama_init, Style
 from ..theme import THEME as theme
 
@@ -35,6 +36,16 @@ def render_downloader_tab(converter: "GGUFConverter", config: Dict[str, Any]) ->
     # Initialize session state for repo size data
     if "repo_size_data" not in st.session_state:
         st.session_state.repo_size_data = None
+
+    # Initialize session state for gated repo handling
+    if "show_hf_login" not in st.session_state:
+        st.session_state.show_hf_login = False
+    if "gated_repo_id" not in st.session_state:
+        st.session_state.gated_repo_id = None
+    if "hf_auth_message" not in st.session_state:
+        st.session_state.hf_auth_message = None
+    if "download_error" not in st.session_state:
+        st.session_state.download_error = None
 
     # Repository ID with View Repo button
     col_repo, col_repo_view = st.columns([5, 1])
@@ -68,7 +79,7 @@ def render_downloader_tab(converter: "GGUFConverter", config: Dict[str, Any]) ->
         if not st.session_state.repo_size_data or st.session_state.repo_size_data.get("repo_id") != repo_id.strip():
             try:
                 api = HfApi()
-                repo_info = api.repo_info(repo_id=repo_id.strip(), files_metadata=True)
+                repo_info = api.repo_info(repo_id=repo_id.strip(), files_metadata=True, timeout=10.0)
 
                 # Calculate total size from all files
                 total_size_bytes = 0
@@ -106,48 +117,14 @@ def render_downloader_tab(converter: "GGUFConverter", config: Dict[str, Any]) ->
                 webbrowser.open(url)
                 st.toast(f"Opened {url}")
 
-    # Show repo size info or placeholder with Check Size button
-    col_info1, col_info2 = st.columns([5, 1])
-    with col_info1:
+    # Show repo size info
+    col_info = st.columns([5, 1])[0]
+    with col_info:
         if st.session_state.repo_size_data:
             repo_size_gb = st.session_state.repo_size_data["size_gb"]
             st.info(f"Repository size: {repo_size_gb:.2f} GB")
         else:
             st.code("Enter Repository ID to see repository size", language=None)
-
-    with col_info2:
-        if st.button(
-            "Check Size",
-            key="check_repo_size_btn",
-            use_container_width=True,
-            disabled=not repo_id_populated,
-            help="Check repository size on HuggingFace" if repo_id_populated else "Enter a repo ID first"
-        ):
-            if repo_id_populated:
-                try:
-                    with st.spinner("Checking repository size..."):
-                        api = HfApi()
-                        repo_info = api.repo_info(repo_id=repo_id.strip(), files_metadata=True)
-
-                        # Calculate total size from all files
-                        total_size_bytes = 0
-                        if hasattr(repo_info, 'siblings') and repo_info.siblings:
-                            for file in repo_info.siblings:
-                                if hasattr(file, 'size') and file.size:
-                                    total_size_bytes += file.size
-
-                        if total_size_bytes > 0:
-                            total_size_gb = total_size_bytes / (1024 * 1024 * 1024)
-                            st.session_state.repo_size_data = {
-                                "repo_id": repo_id.strip(),
-                                "size_gb": total_size_gb
-                            }
-                        else:
-                            st.session_state.repo_size_data = None
-                            st.warning("Could not determine repository size")
-                except Exception as e:
-                    st.session_state.repo_size_data = None
-                    st.error(f"Error checking repository: {e}")
 
     # Download directory with Select Folder button
     if TKINTER_AVAILABLE:
@@ -259,7 +236,108 @@ def render_downloader_tab(converter: "GGUFConverter", config: Dict[str, Any]) ->
                 except Exception as e:
                     st.toast(f"Could not open folder: {e}")
 
+    # HuggingFace Authorization section (always available, auto-expands on auth errors)
+    gated_repo = st.session_state.get("gated_repo_id", repo_id if repo_id else "")
+    repo_url = f"https://huggingface.co/{gated_repo}" if gated_repo else "https://huggingface.co"
+
+    col_auth = st.columns([5, 1])[0]
+    with col_auth:
+        with st.expander("HuggingFace Authorization", expanded=st.session_state.get("show_hf_login", False)):
+            # Check if user already has a token
+            existing_token = get_token()
+
+            if existing_token:
+                # User has a token but may need to accept terms for gated models
+                if st.session_state.get("show_hf_login", False) and gated_repo:
+                    col_msg = st.columns([5, 1])[0]
+                    with col_msg:
+                        st.warning(
+                            f"The model **{gated_repo}** requires you to accept its terms.\n\n"
+                            f"Visit [{gated_repo}]({repo_url}) and click **'Agree and access repository'**, then try downloading again."
+                        )
+
+                col_token, col_buttons = st.columns([5, 1])
+                with col_token:
+                    st.text_input(
+                        "HuggingFace Token",
+                        key="hf_token_saved",
+                        value="",
+                        placeholder="Token saved",
+                        disabled=True,
+                        help="Your token is saved on this system"
+                    )
+
+                with col_buttons:
+                    st.markdown("<br>", unsafe_allow_html=True)  # Spacer to align with input
+                    if st.button("Logout", key="hf_logout_btn", use_container_width=True):
+                        hf_logout()
+                        # Keep expander open to show login UI
+                        st.session_state.show_hf_login = True
+                        st.session_state.gated_repo_id = None
+                        st.session_state.hf_auth_message = None
+                        print(f"{theme['info']}Logged out from HuggingFace{Style.RESET_ALL}")
+                        st.rerun()
+
+                # Always show login status below token field
+                col_status = st.columns([5, 1])[0]
+                with col_status:
+                    st.info("You are logged in to HuggingFace")
+            else:
+                # User needs to login
+                col_msg = st.columns([5, 1])[0]
+                with col_msg:
+                    if st.session_state.get("show_hf_login", False) and gated_repo:
+                        st.warning(
+                            f"The model **{gated_repo}** requires authorization.\n\n"
+                            f"1. Visit [{gated_repo}]({repo_url}) and click **'Agree and access repository'**\n"
+                            f"2. Get a token from [HuggingFace Settings](https://huggingface.co/settings/tokens) (type: **Read**)\n"
+                            f"3. Paste your token below and click Login"
+                        )
+                    else:
+                        st.info(
+                            "Login to access gated models (like Llama, Gemma, etc.)\n\n"
+                            "Get a token from [HuggingFace Settings](https://huggingface.co/settings/tokens) (type: **Read**)"
+                        )
+
+                col_token, col_buttons = st.columns([5, 1])
+                with col_token:
+                    hf_token = st.text_input(
+                        "HuggingFace Token",
+                        key="hf_token_input",
+                        placeholder="hf_...",
+                        help="Paste your token here (plain text field)"
+                    )
+
+                with col_buttons:
+                    st.markdown("<br>", unsafe_allow_html=True)  # Spacer to align with input
+                    if st.button("Login", key="hf_login_btn", use_container_width=True, disabled=not hf_token):
+                        try:
+                            with st.spinner("Logging in to HuggingFace..."):
+                                hf_login(token=hf_token)
+                            # Keep expander open to show "token already saved" state
+                            st.session_state.show_hf_login = True
+                            st.session_state.gated_repo_id = None
+                            st.session_state.hf_auth_message = None
+                            print(f"{theme['success']}Logged in to HuggingFace{Style.RESET_ALL}")
+                            st.rerun()
+                        except Exception as e:
+                            st.session_state.hf_auth_message = ("error", f"Login failed: {e}")
+                            print(f"{theme['error']}HuggingFace login failed: {e}{Style.RESET_ALL}")
+
+            # Display error messages only
+            if st.session_state.hf_auth_message:
+                msg_type, msg_text = st.session_state.hf_auth_message
+                if msg_type == "error":
+                    st.error(msg_text)
+
     if st.button("Download", use_container_width=True):
+        # Clear any previous download info and auth UI
+        st.session_state.downloaded_model_path = None
+        st.session_state.show_hf_login = False
+        st.session_state.gated_repo_id = None
+        st.session_state.hf_auth_message = None
+        st.session_state.download_error = None
+
         # Strip quotes from paths
         repo_id_clean = strip_quotes(repo_id)
         download_dir_clean = strip_quotes(download_dir)
@@ -286,6 +364,15 @@ def render_downloader_tab(converter: "GGUFConverter", config: Dict[str, Any]) ->
                 st.session_state.download_just_completed = True
                 st.rerun()
 
+            except GatedRepoError as e:
+                # Handle gated repository - show login UI and error below Download button
+                st.session_state.show_hf_login = True
+                st.session_state.gated_repo_id = repo_id_clean
+                st.session_state.hf_auth_message = None
+                st.session_state.download_error = "This model requires HuggingFace authorization. See the HuggingFace Authorization section above."
+                print(f"\n{theme['error']}GatedRepoError: {e}{Style.RESET_ALL}\n")
+                st.rerun()
+
             except Exception as e:
                 # Show in Streamlit UI
                 st.error(f"Error: {e}")
@@ -302,6 +389,10 @@ def render_downloader_tab(converter: "GGUFConverter", config: Dict[str, Any]) ->
                     # Unexpected errors - print full traceback for debugging
                     traceback.print_tb(exc_tb)
                     print(f"{theme['error']}{exc_type.__name__}: {exc_value}{Style.RESET_ALL}")
+
+    # Show download error if one exists
+    if st.session_state.get("download_error"):
+        st.error(st.session_state.download_error)
 
     # Show downloaded model path if one exists (persistent)
     if st.session_state.get("downloaded_model_path"):
@@ -324,9 +415,13 @@ def render_downloader_tab(converter: "GGUFConverter", config: Dict[str, Any]) ->
 
     # Show temporary success messages
     if st.session_state.get("download_just_completed", False):
-        st.success(f"Model ready!")
+        col_msg = st.columns([5, 1])[0]
+        with col_msg:
+            st.success(f"Model ready!")
         st.session_state.download_just_completed = False
 
     if st.session_state.get("model_path_set", False):
-        st.success("Model path set in Convert & Quantize tab")
+        col_msg = st.columns([5, 1])[0]
+        with col_msg:
+            st.success("Model path set in Convert & Quantize tab")
         st.session_state.model_path_set = False

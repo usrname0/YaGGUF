@@ -1,4 +1,4 @@
-# YaGUFF - Yet Another GGUF Converter
+# YaGGUF - Yet Another GGUF Converter
 
 There are simultaneously too many and not enough GGUF converters in the world.
 
@@ -68,8 +68,8 @@ All quantization types from llama.cpp are supported. Choose based on your size/q
 
 ```bash
 # Clone the repository
-    git clone https://github.com/usrname0/YaGUFF.git
-    cd YaGUFF
+    git clone https://github.com/usrname0/YaGGUF.git
+    cd YaGGUF
 # Run the launcher script for Windows (runs a setup script if no venv detected):
     run_gui.bat
 ```
@@ -83,8 +83,8 @@ All quantization types from llama.cpp are supported. Choose based on your size/q
     sudo pacman -S tk                # Arch
 
 # Clone the repository
-    git clone https://github.com/usrname0/YaGUFF.git
-    cd YaGUFF
+    git clone https://github.com/usrname0/YaGGUF.git
+    cd YaGGUF
 
 # Run the launcher script for Linux (runs a setup script if no venv detected):
     ./run_gui.sh

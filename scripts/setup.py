@@ -22,7 +22,7 @@ setup(
     description="Pure Python GGUF converter - easy installation, easy use",
     long_description=long_description,
     long_description_content_type="text/markdown",
-    url="https://github.com/usrname0/YaGUFF",
+    url="https://github.com/usrname0/YaGGUF",
     packages=find_packages(),
     classifiers=[
         "Development Status :: 3 - Alpha",
@@ -57,7 +57,7 @@ setup(
     },
     entry_points={
         "console_scripts": [
-            "yaguff=gguf_converter.gui:main",
+            "yagguf=gguf_converter.gui:main",
         ],
     },
 )

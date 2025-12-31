@@ -32,9 +32,9 @@ def render_llama_cpp_tab(converter: "GGUFConverter", config: Dict[str, Any]) -> 
     st.header("llama.cpp Custom Install")
 
     st.markdown("""
-    YaGUFF automatically downloads a repo for model conversion scripts and CPU binaries (good for most cases).  
-    You can opt to use specific [llama.cpp](https://github.com/ggml-org/llama.cpp) resources below.  
-    You can easily update to the newest versions (or roll back) on the Update tab.  
+    YaGGUF automatically downloads CPU binaries (good for most cases) and a repo for model conversion scripts.
+    Those can be managed on the "Update" tab.  
+    You can also opt to use your own specific [llama.cpp](https://github.com/ggml-org/llama.cpp) resources below.  
     """)
 
     # Local/Custom Binary Settings Section
@@ -61,7 +61,7 @@ def render_llama_cpp_tab(converter: "GGUFConverter", config: Dict[str, Any]) -> 
         use_custom_binaries = st.checkbox(
             "Use local/custom binaries",
             value=config.get("use_custom_binaries", False),
-            help="Use local or system llama.cpp binaries instead of YaGUFF's auto-downloaded ones. Leave path blank to use system PATH.",
+            help="Use local or system llama.cpp binaries instead of YaGGUF's auto-downloaded ones. Leave path blank to use system PATH.",
             key="use_custom_binaries_checkbox_update",
             on_change=save_use_custom_binaries
         )
@@ -255,7 +255,7 @@ def render_llama_cpp_tab(converter: "GGUFConverter", config: Dict[str, Any]) -> 
                 st.markdown("- `llama-quantize`: Not found")
                 st.markdown("- `llama-imatrix`: Not found")
         else:
-            st.info("Disabled - Using YaGUFF's llama.cpp binaries")
+            st.info("Disabled - Using YaGGUF's llama.cpp binaries")
 
     st.markdown("---")
 
@@ -280,12 +280,12 @@ def render_llama_cpp_tab(converter: "GGUFConverter", config: Dict[str, Any]) -> 
         use_custom_conversion_script = st.checkbox(
             "Use custom llama.cpp repository",
             value=config.get("use_custom_conversion_script", False),
-            help="Use a custom llama.cpp repository for model conversion. Leave path blank to use YaGUFF's repository.",
+            help="Use a custom llama.cpp repository for model conversion. Leave path blank to use YaGGUF's repository.",
             key="use_custom_conversion_script_checkbox",
             on_change=save_use_custom_conversion_script
         )
 
-        st.markdown("**Repository Path** (blank defaults back to YaGUFF's auto-cloned repo):")
+        st.markdown("**Repository Path** (blank defaults back to YaGGUF's auto-cloned repo):")
 
         # Repository path input with Select Folder and Open Folder buttons
         if TKINTER_AVAILABLE:
@@ -311,8 +311,8 @@ def render_llama_cpp_tab(converter: "GGUFConverter", config: Dict[str, Any]) -> 
             # Only set value if key not in session state (prevents warning)
             repo_path_kwargs = {
                 "label": "llama.cpp repository path",
-                "placeholder": "/path/to/llama.cpp or leave blank for default repo",
-                "help": "Path to llama.cpp repository containing convert_hf_to_gguf.py. Leave blank to use YaGUFF's auto-cloned repository.",
+                "placeholder": "/path/to/llama.cpp or leave blank for YaGGUF's repo",
+                "help": "Path to llama.cpp repository containing convert_hf_to_gguf.py. Leave blank to use YaGGUF's auto-cloned repository.",
                 "key": "custom_llama_cpp_repo_input",
                 "label_visibility": "collapsed",
                 "disabled": not use_custom_conversion_script,
@@ -413,8 +413,8 @@ def render_llama_cpp_tab(converter: "GGUFConverter", config: Dict[str, Any]) -> 
                     st.markdown("- `convert_hf_to_gguf.py`: Not found")
                     st.warning(f"Expected location: `{(Path(custom_repo) / 'convert_hf_to_gguf.py').as_posix()}`")
             else:
-                # No custom path specified, using YaGUFF's repo
-                st.info("Using YaGUFF's auto-cloned llama.cpp repository")
+                # No custom path specified, using YaGGUF's repo
+                st.info("Using YaGGUF's auto-cloned llama.cpp repository")
 
                 # Check if script exists
                 project_root = Path(__file__).parent.parent.parent
@@ -444,16 +444,16 @@ def render_llama_cpp_tab(converter: "GGUFConverter", config: Dict[str, Any]) -> 
 
                     st.markdown(f"- `convert_hf_to_gguf.py`: {script_path.as_posix()}")
                 else:
-                    st.warning("Conversion script not found in YaGUFF's llama.cpp repository")
+                    st.warning("Conversion script not found in YaGGUF's llama.cpp repository")
         else:
-            st.info("Disabled - Using YaGUFF's auto-cloned llama.cpp repository")
+            st.info("Disabled - Using YaGGUF's auto-cloned llama.cpp repository")
 
     st.markdown("---")
 
-    # YaGUFF Binary Information (Reference)
+    # YaGGUF Binary Information (Reference)
     col_info1, col_info2 = st.columns(2)
     with col_info1:
-        st.subheader("YaGUFF Binary Information (for comparison)")
+        st.subheader("YaGGUF Binary Information (for comparison)")
 
     with col_info2:
         binary_info = get_binary_version(st.session_state.converter)

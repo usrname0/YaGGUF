@@ -1,5 +1,5 @@
 #!/bin/bash
-# Update YaGUFF to latest version and restart Streamlit
+# Update YaGGUF to latest version and restart Streamlit
 
 # Change to project root
 cd "$(dirname "$0")/.."
@@ -12,7 +12,7 @@ VERSION=$2
 
 echo ""
 echo "========================================"
-echo "Updating YaGUFF and Restarting"
+echo "Updating YaGGUF and Restarting"
 echo "========================================"
 echo ""
 
@@ -24,8 +24,8 @@ if [ ! -z "$PID" ]; then
     sleep 2
 fi
 
-# Update YaGUFF
-echo "Fetching latest YaGUFF version..."
+# Update YaGGUF
+echo "Fetching latest YaGGUF version..."
 git fetch --tags 2>/dev/null
 
 if [ -z "$VERSION" ]; then

@@ -51,16 +51,16 @@ def render_update_tab(converter: "GGUFConverter", config: Dict[str, Any]) -> Non
     st.header("Update")
 
     # Initialize update message in session state if not present
-    if 'yaguff_update_message' not in st.session_state:
-        st.session_state.yaguff_update_message = None
+    if 'yagguf_update_message' not in st.session_state:
+        st.session_state.yagguf_update_message = None
 
     col1, col2 = st.columns(2)
 
     with col1:
-        st.subheader("Update YaGUFF")
-        st.markdown("Update to the latest version of YaGUFF from GitHub.")
-        st.markdown("[View YaGUFF on GitHub](https://github.com/usrname0/YaGUFF)")
-        if st.button("Update YaGUFF & Restart"):
+        st.subheader("Update YaGGUF")
+        st.markdown("Update to the latest version of YaGGUF from GitHub.")
+        st.markdown("[View YaGGUF on GitHub](https://github.com/usrname0/YaGGUF)")
+        if st.button("Update YaGGUF & Restart"):
             # Check what version is available
             update_status = check_git_updates_available()
 
@@ -77,14 +77,14 @@ def render_update_tab(converter: "GGUFConverter", config: Dict[str, Any]) -> Non
                 # Determine platform-specific restart script
                 is_windows = platform.system() == "Windows"
                 if is_windows:
-                    restart_script = Path(__file__).parent.parent.parent / "scripts" / "update_yaguff_and_restart.bat"
+                    restart_script = Path(__file__).parent.parent.parent / "scripts" / "update_yagguf_and_restart.bat"
                 else:
-                    restart_script = Path(__file__).parent.parent.parent / "scripts" / "update_yaguff_and_restart.sh"
+                    restart_script = Path(__file__).parent.parent.parent / "scripts" / "update_yagguf_and_restart.sh"
 
                 if restart_script.exists():
                     # Store the update message in session state and force a rerun to display it
                     update_msg = f"Updating to {update_status['latest_version']}... See terminal for progress. Please wait."
-                    st.session_state.yaguff_update_message = update_msg
+                    st.session_state.yagguf_update_message = update_msg
                     st.session_state.pending_update = {
                         'script': str(restart_script),
                         'port': port,
@@ -102,13 +102,13 @@ def render_update_tab(converter: "GGUFConverter", config: Dict[str, Any]) -> Non
                 st.toast("Could not check for updates")
 
     with col2:
-        st.subheader("YaGUFF Version Information")
+        st.subheader("YaGGUF Version Information")
         current_version = get_current_version()
         st.code(f"version: {current_version}", language=None)
 
         # Display update message if present, otherwise show version comparison
-        if st.session_state.yaguff_update_message:
-            st.info(st.session_state.yaguff_update_message)
+        if st.session_state.yagguf_update_message:
+            st.info(st.session_state.yagguf_update_message)
 
             # If there's a pending update, execute it after displaying the message
             if 'pending_update' in st.session_state:
@@ -147,11 +147,11 @@ def render_update_tab(converter: "GGUFConverter", config: Dict[str, Any]) -> Non
 
     st.markdown("---")
 
-    # Update YaGUFF Binaries Section
+    # Update YaGGUF Binaries Section
     col_bin1, col_bin2 = st.columns(2)
     with col_bin1:
-        st.subheader("Update YaGUFF: Llama.cpp Binaries")
-        st.markdown("Update the `llama.cpp` binaries. Choose **Recommended** for the tested version bundled with YaGUFF, or **Latest** for the newest llama.cpp release.")
+        st.subheader("Update YaGGUF: Llama.cpp Binaries")
+        st.markdown("Update the `llama.cpp` binaries. Choose **Recommended** for the tested version bundled with YaGGUF, or **Latest** for the newest llama.cpp release.")
         st.markdown("[View llama.cpp on GitHub](https://github.com/ggml-org/llama.cpp)")
 
         if st.button("Update Binaries - Recommended Version"):
@@ -216,8 +216,8 @@ def render_update_tab(converter: "GGUFConverter", config: Dict[str, Any]) -> Non
     # Update Conversion Scripts Section
     col_scripts1, col_scripts2 = st.columns(2)
     with col_scripts1:
-        st.subheader("Update YaGUFF: Llama.cpp Conversion Scripts")
-        st.markdown("Update the `llama.cpp` repository that contains the `convert_hf_to_gguf.py` script. Choose **Recommended** for the tested version matching YaGUFF binaries, or **Latest** for the newest conversion scripts.")
+        st.subheader("Update YaGGUF: Llama.cpp Conversion Scripts")
+        st.markdown("Update the `llama.cpp` repository that contains the `convert_hf_to_gguf.py` script. Choose **Recommended** for the tested version matching YaGGUF binaries, or **Latest** for the newest conversion scripts.")
         st.markdown("[View llama.cpp on GitHub](https://github.com/ggml-org/llama.cpp)")
 
         if st.button("Update Conversion Scripts - Recommended Version"):

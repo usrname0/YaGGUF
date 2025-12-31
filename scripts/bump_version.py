@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 """
-Interactive script to bump version numbers for YaGUFF releases
+Interactive script to bump version numbers for YaGGUF releases
 
 Workflow:
 1. Shows recent version history
 2. Prompts for new llama.cpp version (default: latest from GitHub)
-3. Prompts for new YaGUFF version (default: auto-increment patch)
+3. Prompts for new YaGGUF version (default: auto-increment patch)
 4. Verifies llama.cpp version exists on GitHub
 5. Choose action: dry run, commit locally, or commit and push
 
@@ -59,7 +59,7 @@ def get_project_root():
     return Path(__file__).parent.parent
 
 
-def get_current_yaguff_version():
+def get_current_yagguf_version():
     """Read current version from __init__.py"""
     init_file = get_project_root() / "gguf_converter" / "__init__.py"
     content = init_file.read_text()
@@ -101,13 +101,13 @@ def get_current_branch():
 
 def get_recent_versions(count=3):
     """
-    Get recent YaGUFF version tags from git
+    Get recent YaGGUF version tags from git
 
     Args:
         count: Number of recent versions to retrieve
 
     Returns:
-        List of (tag, yaguff_version, llama_version) tuples
+        List of (tag, yagguf_version, llama_version) tuples
     """
     try:
         # Get recent tags sorted by version
@@ -141,10 +141,10 @@ def get_recent_versions(count=3):
             llama_match = re.search(r'\(llama\.cpp\s+([^)]+)\)', commit_msg)
             llama_version = llama_match.group(1) if llama_match else "unknown"
 
-            # Extract YaGUFF version from tag
-            yaguff_version = tag[1:] if tag.startswith('v') else tag
+            # Extract YaGGUF version from tag
+            yagguf_version = tag[1:] if tag.startswith('v') else tag
 
-            versions.append((tag, yaguff_version, llama_version))
+            versions.append((tag, yagguf_version, llama_version))
 
         return versions
 
@@ -249,7 +249,7 @@ def update_llama_version(new_llama_version):
     print(Colors.green(f"Updated LLAMA_CPP_VERSION to {new_llama_version}"))
 
 
-def update_yaguff_version(new_version):
+def update_yagguf_version(new_version):
     """Update __version__ in __init__.py"""
     init_file = get_project_root() / "gguf_converter" / "__init__.py"
     content = init_file.read_text()
@@ -262,10 +262,10 @@ def update_yaguff_version(new_version):
     )
 
     init_file.write_text(new_content)
-    print(Colors.green(f"Updated YaGUFF version to {new_version}"))
+    print(Colors.green(f"Updated YaGGUF version to {new_version}"))
 
 
-def git_commit_and_tag(yaguff_version, llama_version):
+def git_commit_and_tag(yagguf_version, llama_version):
     """Create git commit and tag"""
     try:
         # Stage the changed files
@@ -276,7 +276,7 @@ def git_commit_and_tag(yaguff_version, llama_version):
         )
 
         # Create commit
-        commit_msg = f"Bump to v{yaguff_version} (llama.cpp {llama_version})"
+        commit_msg = f"Bump to v{yagguf_version} (llama.cpp {llama_version})"
         subprocess.run(
             ["git", "commit", "-m", commit_msg],
             check=True,
@@ -285,7 +285,7 @@ def git_commit_and_tag(yaguff_version, llama_version):
         print(Colors.green(f"Created commit: {commit_msg}"))
 
         # Create tag
-        tag_name = f"v{yaguff_version}"
+        tag_name = f"v{yagguf_version}"
         subprocess.run(
             ["git", "tag", tag_name],
             check=True,
@@ -396,7 +396,7 @@ def run_tests():
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Bump version numbers for YaGUFF releases (interactive mode)",
+        description="Bump version numbers for YaGGUF releases (interactive mode)",
         formatter_class=argparse.RawDescriptionHelpFormatter
     )
 
@@ -418,23 +418,23 @@ def main():
 
     # Show recent versions
     print()
-    print(Colors.bold("Recent YaGUFF Versions:"))
+    print(Colors.bold("Recent YaGGUF Versions:"))
     print("-" * 60)
 
     recent = get_recent_versions(3)
     if recent:
-        for tag, yaguff_ver, llama_ver in recent:
-            print(f"  {Colors.blue(tag):12} - YaGUFF {yaguff_ver:8} - llama.cpp {llama_ver}")
+        for tag, yagguf_ver, llama_ver in recent:
+            print(f"  {Colors.blue(tag):12} - YaGGUF {yagguf_ver:8} - llama.cpp {llama_ver}")
     else:
         print(Colors.yellow("  No version tags found"))
 
     # Get current versions
-    current_yaguff = get_current_yaguff_version()
+    current_yagguf = get_current_yagguf_version()
     current_llama = get_current_llama_version()
 
     print()
     print(Colors.bold("Current versions:"))
-    print(f"  YaGUFF:      {Colors.green(current_yaguff)}")
+    print(f"  YaGGUF:      {Colors.green(current_yagguf)}")
     print(f"  llama.cpp:   {Colors.green(current_llama)}")
 
     # Fetch latest llama.cpp version from GitHub
@@ -467,17 +467,17 @@ def main():
         print(Colors.red("Error: llama.cpp version required"))
         return
 
-    # Prompt for YaGUFF version
-    suggested_yaguff = increment_version(current_yaguff)
-    yaguff_prompt = f"New YaGUFF version [Enter={Colors.green(suggested_yaguff)}]: "
-    yaguff_input = input(yaguff_prompt).strip()
-    new_yaguff = yaguff_input if yaguff_input else suggested_yaguff
+    # Prompt for YaGGUF version
+    suggested_yagguf = increment_version(current_yagguf)
+    yagguf_prompt = f"New YaGGUF version [Enter={Colors.green(suggested_yagguf)}]: "
+    yagguf_input = input(yagguf_prompt).strip()
+    new_yagguf = yagguf_input if yagguf_input else suggested_yagguf
 
     # Summary
     print()
     print("=" * 60)
     print(Colors.bold("Summary:"))
-    print(f"  YaGUFF:      {current_yaguff} -> {Colors.green(new_yaguff)}")
+    print(f"  YaGGUF:      {current_yagguf} -> {Colors.green(new_yagguf)}")
     print(f"  llama.cpp:   {current_llama} -> {Colors.green(new_llama)}")
     print("=" * 60)
     print()
@@ -529,9 +529,9 @@ def main():
         print(Colors.yellow("=" * 60))
         print()
         print(f"Would update llama_cpp_manager.py: {current_llama} -> {new_llama}")
-        print(f"Would update __init__.py: {current_yaguff} -> {new_yaguff}")
-        print(f"Would create commit: 'Bump to v{new_yaguff} (llama.cpp {new_llama})'")
-        print(f"Would create tag: v{new_yaguff}")
+        print(f"Would update __init__.py: {current_yagguf} -> {new_yagguf}")
+        print(f"Would create commit: 'Bump to v{new_yagguf} (llama.cpp {new_llama})'")
+        print(f"Would create tag: v{new_yagguf}")
         if action == '3':
             print(f"Would push to origin/{current_branch}")
         return
@@ -550,10 +550,10 @@ def main():
     # Update versions
     print()
     update_llama_version(new_llama)
-    update_yaguff_version(new_yaguff)
+    update_yagguf_version(new_yagguf)
 
     # Create commit and tag
-    tag_name = git_commit_and_tag(new_yaguff, new_llama)
+    tag_name = git_commit_and_tag(new_yagguf, new_llama)
 
     if not tag_name:
         return
@@ -568,15 +568,15 @@ def main():
     print(Colors.green("Version bump complete!"))
     print(Colors.green("=" * 60))
     print()
-    print(f"YaGUFF version: {current_yaguff} -> {Colors.bold(new_yaguff)}")
+    print(f"YaGGUF version: {current_yagguf} -> {Colors.bold(new_yagguf)}")
     print(f"llama.cpp version: {current_llama} -> {Colors.bold(new_llama)}")
-    print(f"Git tag: {Colors.bold(f'v{new_yaguff}')}")
+    print(f"Git tag: {Colors.bold(f'v{new_yagguf}')}")
     print()
 
     if action == '2':
         print(Colors.yellow("To push to remote, run:"))
         print(f"  git push origin {current_branch}")
-        print(f"  git push origin v{new_yaguff}")
+        print(f"  git push origin v{new_yagguf}")
 
 
 if __name__ == "__main__":

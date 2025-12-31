@@ -870,7 +870,7 @@ def render_convert_tab(
 
                 with st.spinner("Converting and quantizing... This may take a while."):
                     # Only use GPU offloading if custom binaries are enabled
-                    # YaGUFF binaries are CPU-only and don't support -ngl
+                    # YaGGUF binaries are CPU-only and don't support -ngl
                     use_num_gpu_layers = None
                     if config.get("use_custom_binaries", False):
                         num_gpu_layers_value = int(config.get("imatrix_num_gpu_layers", 0))

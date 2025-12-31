@@ -15,7 +15,7 @@ def render_info_tab(converter: "GGUFConverter", config: Dict[str, Any]) -> None:
     """Render the Info tab"""
     st.header("About")
     st.markdown(f"""
-    ### YaGUFF - Yet Another GGUF Converter
+    ### YaGGUF - Yet Another GGUF Converter
 
     A user-friendly GGUF converter that sits on top of llama.cpp.  
     Intended for anyone who prefers a GUI or wants a quant without going down the whole rabbithole.
@@ -38,7 +38,7 @@ def render_info_tab(converter: "GGUFConverter", config: Dict[str, Any]) -> None:
     4. **HuggingFace Downloader** - Download models from HuggingFace
     5. **Info** - This tab
     6. **llama.cpp** - Customize llama.cpp setup
-    7. **Update** - Update YaGUFF, llama.cpp and dependencies
+    7. **Update** - Update YaGGUF, llama.cpp and dependencies
 
     **Settings:**
     - Your settings are automatically saved as you change them

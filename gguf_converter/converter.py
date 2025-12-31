@@ -139,11 +139,20 @@ class GGUFConverter:
         output_dir = Path(output_dir)
         output_dir.mkdir(parents=True, exist_ok=True)
 
-        # Get actual repository size from HuggingFace before downloading
-        print(f"{theme['info']}Checking repository size...{Style.RESET_ALL}")
+        # First, quickly verify repository exists (fast failure on 404)
+        print(f"{theme['info']}Verifying repository exists...{Style.RESET_ALL}")
         try:
             api = HfApi()
-            repo_info = api.repo_info(repo_id=repo_id, revision=revision, files_metadata=True)
+            # Quick check without files_metadata - fails fast on non-existent repos
+            api.repo_info(repo_id=repo_id, revision=revision, timeout=10.0)
+        except Exception as e:
+            # Let the error bubble up - repo doesn't exist or network issue
+            raise RuntimeError(f"Repository not found or inaccessible: {repo_id}") from e
+
+        # Now check repository size and disk space
+        print(f"{theme['info']}Checking repository size...{Style.RESET_ALL}")
+        try:
+            repo_info = api.repo_info(repo_id=repo_id, revision=revision, files_metadata=True, timeout=10.0)
 
             # Calculate total size from all files
             total_size_bytes = 0
