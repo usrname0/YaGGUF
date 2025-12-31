@@ -3,6 +3,7 @@ Convert & Quantize tab for GGUF Converter GUI
 """
 
 import streamlit as st
+import re
 from pathlib import Path
 from typing import Dict, Any, Optional, TYPE_CHECKING
 from colorama import init as colorama_init, Style
@@ -18,6 +19,41 @@ if TYPE_CHECKING:
 
 # Initialize colorama for cross-platform color support
 colorama_init(autoreset=True)
+
+
+def sanitize_filename(filename: str) -> str:
+    """
+    Sanitize filename by removing or replacing problematic characters.
+
+    Removes:
+    - Leading/trailing whitespace
+    - Invalid Windows filename characters: < > : " / \\ | ? *
+    - Control characters
+    - Collapses multiple spaces to single space
+
+    Args:
+        filename: The filename to sanitize
+
+    Returns:
+        Sanitized filename safe for all platforms
+    """
+    if not filename:
+        return filename
+
+    # Strip leading/trailing whitespace
+    clean = filename.strip()
+
+    # Remove invalid filename characters (Windows is most restrictive)
+    # < > : " / \ | ? * and control characters
+    clean = re.sub(r'[<>:"/\\|?*\x00-\x1f]', '', clean)
+
+    # Collapse multiple spaces to single space
+    clean = re.sub(r'\s+', ' ', clean)
+
+    # Strip again in case we created leading/trailing spaces
+    clean = clean.strip()
+
+    return clean
 
 
 def validate_calibration_file(config: Dict[str, Any]) -> Optional[Path]:
@@ -535,19 +571,46 @@ def render_convert_tab(
                         st.session_state.reset_count += 1
                         st.rerun()
 
-                # Auto-append .imatrix extension
+                # Auto-append .imatrix extension and sanitize
                 if imatrix_generate_name:
-                    if not imatrix_generate_name.endswith('.imatrix'):
-                        final_name = f"{imatrix_generate_name}.imatrix"
+                    # Sanitize the filename
+                    sanitized_name = sanitize_filename(imatrix_generate_name)
+
+                    # Show if sanitization changed the name
+                    if sanitized_name != imatrix_generate_name:
+                        st.warning(f"Filename cleaned: `{imatrix_generate_name}` → `{sanitized_name}`")
+
+                    # Add .imatrix extension if needed
+                    if sanitized_name and not sanitized_name.endswith('.imatrix'):
+                        final_name = f"{sanitized_name}.imatrix"
+                        st.info(f"Will be saved as: `{final_name}`")
+                    elif sanitized_name:
+                        final_name = sanitized_name
                         st.info(f"Will be saved as: `{final_name}`")
                     else:
-                        final_name = imatrix_generate_name
+                        # Sanitization resulted in empty string - fall back to default
+                        if model_path_clean:
+                            final_name = f"{Path(model_path_clean).name}.imatrix"
+                            st.warning(f"Invalid filename - using default: `{final_name}`")
+                        else:
+                            final_name = None
 
                     # Warn if file exists
-                    if output_dir_clean:
+                    if final_name and output_dir_clean:
                         imatrix_file_path = Path(output_dir_clean) / final_name
                         if imatrix_file_path.exists():
                             st.warning(f"WARNING: File already exists and will be overwritten: `{final_name}`")
+                else:
+                    # Show default name when field is blank
+                    if model_path_clean:
+                        default_name = f"{Path(model_path_clean).name}.imatrix"
+                        st.info(f"Will use default name: `{default_name}`")
+
+                        # Warn if default file exists
+                        if output_dir_clean:
+                            imatrix_file_path = Path(output_dir_clean) / default_name
+                            if imatrix_file_path.exists():
+                                st.warning(f"WARNING: File already exists and will be overwritten: `{default_name}`")
 
                 imatrix_reuse_path = None
                 imatrix_mode = "GENERATE (custom name)"
@@ -889,13 +952,18 @@ def render_convert_tab(
                         generate_imatrix_flag = True
                         config["imatrix_mode"] = "generate_custom"
 
-                        # Normalize filename to ensure .imatrix extension
+                        # Sanitize and normalize filename to ensure .imatrix extension
                         if imatrix_generate_name:
-                            if not imatrix_generate_name.endswith('.imatrix'):
-                                imatrix_output_filename = f"{imatrix_generate_name}.imatrix"
+                            sanitized_name = sanitize_filename(imatrix_generate_name)
+                            if sanitized_name:
+                                if not sanitized_name.endswith('.imatrix'):
+                                    imatrix_output_filename = f"{sanitized_name}.imatrix"
+                                else:
+                                    imatrix_output_filename = sanitized_name
+                                config["imatrix_generate_name"] = imatrix_generate_name
                             else:
-                                imatrix_output_filename = imatrix_generate_name
-                            config["imatrix_generate_name"] = imatrix_generate_name
+                                # Sanitization resulted in empty string - use default
+                                imatrix_output_filename = None
                         else:
                             imatrix_output_filename = None
 

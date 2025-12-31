@@ -219,7 +219,6 @@ def render_imatrix_settings_tab(converter: "GGUFConverter", config: Dict[str, An
 
                 with col_empty:
                     st.markdown(f"""**File Information:**
-- {calibration_selection}
 - {file_size_mb:.2f} MB""")
 
                 with col_full:

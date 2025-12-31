@@ -671,14 +671,18 @@ class GGUFConverter:
             # Get the output
             output = buffer.getvalue()
 
-            # If verbose, also print to terminal
+            # If verbose, also print to terminal (with colors)
             if verbose:
                 print(output, file=old_stdout, end='')
 
             if not success:
                 raise RuntimeError("Failed to compute statistics")
 
-            return output if output.strip() else "No statistics output (file may be empty or incompatible)"
+            # Strip ANSI color codes for GUI display
+            import re
+            clean_output = re.sub(r'\x1b\[[0-9;]*m', '', output)
+
+            return clean_output if clean_output.strip() else "No statistics output (file may be empty or incompatible)"
 
         finally:
             # Restore stdout
