@@ -709,7 +709,9 @@ class GGUFConverter:
         pure_quantization: bool = False,
         keep_split: bool = False,
         output_tensor_type: Optional[str] = None,
-        token_embedding_type: Optional[str] = None
+        token_embedding_type: Optional[str] = None,
+        overwrite_intermediates: bool = False,
+        overwrite_quants: bool = True
     ) -> List[Path]:
         """
         Convert to GGUF and quantize in one go
@@ -737,6 +739,8 @@ class GGUFConverter:
             keep_split: Keep model in same shards as input (for multi-file models)
             output_tensor_type: Override quantization type for output.weight tensor (e.g., "Q8_0", "F16")
             token_embedding_type: Override quantization type for token embeddings (e.g., "Q8_0", "F16")
+            overwrite_intermediates: Regenerate intermediate formats (F32/F16/BF16) even if they exist
+            overwrite_quants: Regenerate quantized formats even if they exist
 
         Returns:
             List of paths to created quantized files
@@ -762,7 +766,7 @@ class GGUFConverter:
         elif not model_path.is_file():
             raise ValueError(f"Model path does not exist: {model_path}")
 
-        # Check for imatrix warnings
+        # Check if imatrix enforcement is disabled for IQ quants
         IMATRIX_REQUIRED_TYPES = [
             "IQ1_S", "IQ1_M",
             "IQ2_XXS", "IQ2_XS", "IQ2_S", "IQ2_M",
@@ -773,10 +777,10 @@ class GGUFConverter:
         requested_iq_quants = [q for q in quantization_types if q in IMATRIX_REQUIRED_TYPES]
 
         if requested_iq_quants and not using_imatrix and ignore_imatrix_warnings:
-            print(f"\n{theme['warning']}WARNING: Imatrix warnings override enabled!{Style.RESET_ALL}")
+            print(f"\n{theme['warning']}WARNING: Enforce imatrix disabled!{Style.RESET_ALL}")
             print(f"\n{theme['warning']}These quantizations require an importance matrix for best quality:{Style.RESET_ALL}")
             print(f"  {', '.join(requested_iq_quants)}")
-            print(f"\n{theme['warning']}Proceeding without imatrix as requested (ignore_imatrix_warnings=True){Style.RESET_ALL}")
+            print(f"\n{theme['warning']}Proceeding without imatrix (enforce imatrix unchecked){Style.RESET_ALL}")
             print(f"{theme['warning']}Results may have significantly degraded quality. Consider enabling imatrix generation.{Style.RESET_ALL}")
 
         is_already_gguf = False
@@ -787,8 +791,18 @@ class GGUFConverter:
 
         # Check if intermediate file already exists
         if intermediate_file.exists():
-            print(f"{theme['info']}\nIntermediate file already exists: {intermediate_file.name}{Style.RESET_ALL}")
-            print(f"{theme['info']}Skipping conversion, using existing file...{Style.RESET_ALL}")
+            if overwrite_intermediates:
+                print(f"{theme['info']}\nIntermediate file exists: {intermediate_file.name}{Style.RESET_ALL}")
+                print(f"{theme['info']}Overwriting (overwrite_intermediates=True)...{Style.RESET_ALL}")
+                self.convert_to_gguf(
+                    model_path=model_path,
+                    output_path=intermediate_file,
+                    output_type=intermediate_type,
+                    verbose=verbose
+                )
+            else:
+                print(f"{theme['info']}\nIntermediate file already exists: {intermediate_file.name}{Style.RESET_ALL}")
+                print(f"{theme['info']}Skipping conversion, using existing file...{Style.RESET_ALL}")
         else:
             print(f"{theme['info']}Converting {model_name} to GGUF...{Style.RESET_ALL}")
             self.convert_to_gguf(
@@ -858,9 +872,20 @@ class GGUFConverter:
                     quantized_files.append(intermediate_file)
                 # Check if output already exists
                 elif output_file.exists():
-                    print(f"{theme['info']}{quant_type} file already exists: {output_file.name}{Style.RESET_ALL}")
-                    print(f"{theme['info']}Skipping conversion, using existing file...{Style.RESET_ALL}")
-                    quantized_files.append(output_file)
+                    if overwrite_intermediates:
+                        print(f"{theme['info']}{quant_type} file exists: {output_file.name}{Style.RESET_ALL}")
+                        print(f"{theme['info']}Overwriting (overwrite_intermediates=True)...{Style.RESET_ALL}")
+                        self.convert_to_gguf(
+                            model_path=model_path,
+                            output_path=output_file,
+                            output_type=quant_type.lower(),
+                            verbose=verbose
+                        )
+                        quantized_files.append(output_file)
+                    else:
+                        print(f"{theme['info']}{quant_type} file already exists: {output_file.name}{Style.RESET_ALL}")
+                        print(f"{theme['info']}Skipping conversion, using existing file...{Style.RESET_ALL}")
+                        quantized_files.append(output_file)
                 # Generate from source
                 else:
                     print(f"{theme['info']}Converting {model_name} to {quant_type} from source...{Style.RESET_ALL}")
@@ -872,20 +897,30 @@ class GGUFConverter:
                     )
                     quantized_files.append(output_file)
             else:
-                self.quantize(
-                    input_path=intermediate_file,
-                    output_path=output_file,
-                    quantization_type=quant_type,
-                    verbose=verbose,
-                    imatrix_path=imatrix_path,
-                    num_threads=num_threads,
-                    allow_requantize=allow_requantize,
-                    leave_output_tensor=leave_output_tensor,
-                    pure_quantization=pure_quantization,
-                    keep_split=keep_split,
-                    output_tensor_type=output_tensor_type,
-                    token_embedding_type=token_embedding_type
-                )
-                quantized_files.append(output_file)
+                # Check if quantized file already exists
+                if output_file.exists() and not overwrite_quants:
+                    print(f"{theme['info']}{quant_type} file already exists: {output_file.name}{Style.RESET_ALL}")
+                    print(f"{theme['info']}Skipping quantization, using existing file...{Style.RESET_ALL}")
+                    quantized_files.append(output_file)
+                else:
+                    if output_file.exists():
+                        print(f"{theme['info']}{quant_type} file exists: {output_file.name}{Style.RESET_ALL}")
+                        print(f"{theme['info']}Overwriting (overwrite_quants=True)...{Style.RESET_ALL}")
+
+                    self.quantize(
+                        input_path=intermediate_file,
+                        output_path=output_file,
+                        quantization_type=quant_type,
+                        verbose=verbose,
+                        imatrix_path=imatrix_path,
+                        num_threads=num_threads,
+                        allow_requantize=allow_requantize,
+                        leave_output_tensor=leave_output_tensor,
+                        pure_quantization=pure_quantization,
+                        keep_split=keep_split,
+                        output_tensor_type=output_tensor_type,
+                        token_embedding_type=token_embedding_type
+                    )
+                    quantized_files.append(output_file)
 
         return quantized_files

@@ -66,8 +66,7 @@ def render_convert_tab(
     converter: "GGUFConverter",
     config: Dict[str, Any],
     verbose: bool,
-    num_threads: Optional[int],
-    ignore_imatrix_warnings: bool
+    num_threads: Optional[int]
 ) -> None:
     """Render the Convert & Quantize tab"""
     st.header("Convert and Quantize Model")
@@ -182,6 +181,24 @@ def render_convert_tab(
         # Strip quotes from paths
         model_path_clean = strip_quotes(model_path)
         output_dir_clean = strip_quotes(output_dir)
+
+        # File Handling section
+        with st.expander("File Handling"):
+            overwrite_intermediates = st.checkbox(
+                "Overwrite intermediates (F32, F16, BF16)",
+                value=config.get("overwrite_intermediates", False),
+                help="If enabled, regenerate intermediate formats even if they exist. If disabled (default), reuse existing intermediate files to save time.",
+                key="overwrite_intermediates_checkbox",
+                on_change=make_config_saver(config, "overwrite_intermediates", "overwrite_intermediates_checkbox")
+            )
+
+            overwrite_quants = st.checkbox(
+                "Overwrite quants",
+                value=config.get("overwrite_quants", True),
+                help="If enabled (default), regenerate quantized formats even if they exist. If disabled, skip quantization for files that already exist.",
+                key="overwrite_quants_checkbox",
+                on_change=make_config_saver(config, "overwrite_quants", "overwrite_quants_checkbox")
+            )
 
         # Advanced quantization options
         with st.expander("Advanced Quantization Options"):
@@ -305,20 +322,41 @@ def render_convert_tab(
 
         st.subheader("Importance Matrix (imatrix)")
 
-        def save_use_imatrix():
-            """Save imatrix checkbox state and custom name"""
-            if f"imatrix_custom_name_{st.session_state.reset_count}" in st.session_state:
-                config["imatrix_generate_name"] = st.session_state[f"imatrix_custom_name_{st.session_state.reset_count}"]
-            config["use_imatrix"] = st.session_state[f"use_imatrix_checkbox_{st.session_state.reset_count}"]
-            save_config(config)
+        # Create columns for checkboxes
+        imatrix_col1, imatrix_col2 = st.columns(2)
 
-        use_imatrix = st.checkbox(
-            "Use importance matrix",
-            value=config.get("use_imatrix", False),
-            help="Use importance matrix for better low-bit quantization (IQ2, IQ3).  \nRequired for best IQ2/IQ3 quality.",
-            key=f"use_imatrix_checkbox_{st.session_state.reset_count}",
-            on_change=save_use_imatrix
-        )
+        with imatrix_col1:
+            def save_use_imatrix():
+                """Save imatrix checkbox state and custom name"""
+                if f"imatrix_custom_name_{st.session_state.reset_count}" in st.session_state:
+                    config["imatrix_generate_name"] = st.session_state[f"imatrix_custom_name_{st.session_state.reset_count}"]
+                config["use_imatrix"] = st.session_state[f"use_imatrix_checkbox_{st.session_state.reset_count}"]
+                save_config(config)
+
+            use_imatrix = st.checkbox(
+                "Use imatrix",
+                value=config.get("use_imatrix", False),
+                help="Use importance matrix for better low-bit quantization (IQ2, IQ3).  \nRequired for best IQ2/IQ3 quality.",
+                key=f"use_imatrix_checkbox_{st.session_state.reset_count}",
+                on_change=save_use_imatrix
+            )
+
+        with imatrix_col2:
+            def save_enforce_imatrix():
+                """Save enforce imatrix checkbox state"""
+                config["ignore_imatrix_warnings"] = not st.session_state[f"enforce_imatrix_checkbox_{st.session_state.reset_count}"]
+                save_config(config)
+
+            enforce_imatrix = st.checkbox(
+                "Enforce imatrix",
+                value=not config.get("ignore_imatrix_warnings", False),
+                help="Require importance matrix for IQ quants. Uncheck to allow IQ quants without imatrix (advanced users only).",
+                key=f"enforce_imatrix_checkbox_{st.session_state.reset_count}",
+                on_change=save_enforce_imatrix
+            )
+
+        # Create local variable for backward compatibility
+        ignore_imatrix_warnings = not enforce_imatrix
 
         # Show info when IQ quants are disabled
         if not use_imatrix and not ignore_imatrix_warnings:
@@ -326,9 +364,9 @@ def render_convert_tab(
             **Importance Matrix Disabled**
 
             - Some I Quants (IQ3_XXS, IQ2_XXS, IQ2_XS, IQ2_S, IQ1_M, IQ1_S) require an importance matrix to be generated.
-            Enable "Use importance matrix" above to unlock these quantization types.
+            Enable "Use imatrix" above to unlock these quantization types.
 
-            - Disable "Imatrix warnings" in settings to try without an imatrix anyway.
+            - Uncheck "Enforce imatrix" to try without an imatrix anyway (advanced users only).
             """)
 
         # Show imatrix options when enabled
@@ -897,7 +935,9 @@ def render_convert_tab(
                         pure_quantization=pure_quantization,
                         keep_split=keep_split,
                         output_tensor_type=output_tensor_type if output_tensor_type != "Same as quantization type" else None,
-                        token_embedding_type=token_embedding_type if token_embedding_type != "Same as quantization type" else None
+                        token_embedding_type=token_embedding_type if token_embedding_type != "Same as quantization type" else None,
+                        overwrite_intermediates=config.get("overwrite_intermediates", False),
+                        overwrite_quants=config.get("overwrite_quants", True)
                     )
 
                 st.success(f"Successfully processed {len(output_files)} files!")

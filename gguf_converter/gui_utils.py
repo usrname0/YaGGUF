@@ -75,6 +75,10 @@ def get_default_config() -> Dict[str, Any]:
         "output_tensor_type": "Same as quantization type",
         "token_embedding_type": "Same as quantization type",
 
+        # File handling options
+        "overwrite_intermediates": False,  # Reuse F32/F16/BF16 by default
+        "overwrite_quants": True,  # Overwrite quantized formats by default
+
         # Quantization types - all stored in other_quants dict
         "other_quants": {
             "Q4_K_M": True,  # Default to Q4_K_M

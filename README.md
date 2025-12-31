@@ -119,7 +119,7 @@ This is normal for large models. The process is CPU-intensive.
 
 ### Other Errors
 
-- **Imatrix warnings** - Some IQ quantization types are disabled without an importance matrix for best results and to avoid errors. This can be disabled in settings if needed.
+- **Enforce imatrix** - Some IQ quantization types are disabled without an importance matrix for best results and to avoid errors. This can be unchecked in the Convert tab if needed (advanced users only).
 - Use "Reset to defaults" in the settings to restore default configuration.
 - If issues persist, you can delete the installation folder and re-install.
   
