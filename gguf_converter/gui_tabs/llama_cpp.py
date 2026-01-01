@@ -154,7 +154,7 @@ def render_llama_cpp_tab(converter: "GGUFConverter", config: Dict[str, Any]) -> 
         - Use a specific llama.cpp version
 
         **Note:** Custom binaries with GPU support are required for GPU offloading in imatrix generation (see Imatrix Settings tab).
-        Gains will depend on hardware (but often not worth it). Quantization only uses the CPU regardless of setup.
+        Gains will depend on hardware. Quantization only uses the CPU regardless of setup.
         """)
 
     with col_bin2:

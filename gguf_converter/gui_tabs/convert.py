@@ -976,12 +976,9 @@ def render_convert_tab(
                     save_config(config)
 
                 with st.spinner("Converting and quantizing... This may take a while."):
-                    # Only use GPU offloading if custom binaries are enabled
-                    # YaGGUF binaries are CPU-only and don't support -ngl
-                    use_num_gpu_layers = None
-                    if config.get("use_custom_binaries", False):
-                        num_gpu_layers_value = int(config.get("imatrix_num_gpu_layers", 0))
-                        use_num_gpu_layers = num_gpu_layers_value if num_gpu_layers_value > 0 else None
+                    # Use GPU offloading if configured
+                    num_gpu_layers_value = int(config.get("imatrix_num_gpu_layers", 0))
+                    use_num_gpu_layers = num_gpu_layers_value if num_gpu_layers_value > 0 else None
 
                     output_files = converter.convert_and_quantize(
                         model_path=model_path_clean,

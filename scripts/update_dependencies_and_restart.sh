@@ -8,9 +8,10 @@ cd "$(dirname "$0")/.."
 PORT=${1:-8501}
 
 echo ""
-echo "========================================"
-echo "Updating Dependencies and Restarting"
-echo "========================================"
+echo "================================================================================"
+echo "                              UPDATE DEPENDENCIES"
+echo "                            $(date '+%Y-%m-%d %H:%M:%S')"
+echo "================================================================================"
 echo ""
 
 # Kill any process using the specified port
@@ -33,9 +34,7 @@ echo "Updating dependencies from requirements.txt..."
 python -m pip install --upgrade -r requirements.txt
 
 echo ""
-echo "========================================"
 echo "Update complete! Restarting GUI..."
-echo "========================================"
 echo ""
 
 # Restart Streamlit on the same port without opening new browser tab

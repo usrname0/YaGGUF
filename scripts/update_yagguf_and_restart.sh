@@ -11,9 +11,10 @@ PORT=${1:-8501}
 VERSION=$2
 
 echo ""
-echo "========================================"
-echo "Updating YaGGUF and Restarting"
-echo "========================================"
+echo "================================================================================"
+echo "                                  UPDATE YAGGUF"
+echo "                            $(date '+%Y-%m-%d %H:%M:%S')"
+echo "================================================================================"
 echo ""
 
 # Kill any process using the specified port
@@ -44,9 +45,7 @@ if [ $? -ne 0 ]; then
 fi
 
 echo ""
-echo "========================================"
 echo "Update complete! Restarting GUI..."
-echo "========================================"
 echo ""
 
 # Activate venv if it exists

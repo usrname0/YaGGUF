@@ -9,9 +9,10 @@ set PORT=%1
 if "%PORT%"=="" set PORT=8501
 
 echo.
-echo ========================================
-echo Updating Dependencies and Restarting
-echo ========================================
+echo ================================================================================
+echo                              UPDATE DEPENDENCIES
+echo                                %DATE% %TIME:~0,8%
+echo ================================================================================
 echo.
 
 REM Kill any process using the specified port
@@ -37,9 +38,7 @@ echo Updating dependencies from requirements.txt...
 python -m pip install --upgrade -r requirements.txt
 
 echo.
-echo ========================================
 echo Update complete! Restarting GUI...
-echo ========================================
 echo.
 
 REM Restart Streamlit on the same port without opening new browser tab

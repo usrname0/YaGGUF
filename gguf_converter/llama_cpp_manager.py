@@ -175,6 +175,15 @@ class LlamaCppManager:
         # Use specified version or default to recommended
         tag = version if version else self.LLAMA_CPP_VERSION
 
+        # Print banner
+        from datetime import datetime
+        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        banner_line = "=" * 80
+        print(f"\n{theme['info']}{banner_line}{Style.RESET_ALL}")
+        print(f"{theme['info']}{'UPDATE BINARIES'.center(80)}{Style.RESET_ALL}")
+        print(f"{theme['info']}{timestamp.center(80)}{Style.RESET_ALL}")
+        print(f"{theme['info']}{banner_line}{Style.RESET_ALL}\n")
+
         # Check if binaries exist and match the requested version
         if not force and self._binaries_exist():
             installed_version = self.get_installed_version_tag()
@@ -597,6 +606,15 @@ class LlamaCppManager:
         """
         import subprocess
         import shutil
+
+        # Print banner
+        from datetime import datetime
+        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        banner_line = "=" * 80
+        print(f"\n{theme['info']}{banner_line}{Style.RESET_ALL}")
+        print(f"{theme['info']}{'UPDATE CONVERSION SCRIPTS'.center(80)}{Style.RESET_ALL}")
+        print(f"{theme['info']}{timestamp.center(80)}{Style.RESET_ALL}")
+        print(f"{theme['info']}{banner_line}{Style.RESET_ALL}\n")
 
         project_root = Path(__file__).parent.parent
         llama_cpp_dir = project_root / "llama.cpp"

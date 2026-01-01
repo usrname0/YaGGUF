@@ -12,9 +12,10 @@ REM Get version from second argument (optional)
 set VERSION=%2
 
 echo.
-echo ========================================
-echo Updating YaGGUF and Restarting
-echo ========================================
+echo ================================================================================
+echo                                  UPDATE YAGGUF
+echo                                %DATE% %TIME:~0,8%
+echo ================================================================================
 echo.
 
 REM Kill any process using the specified port
@@ -50,9 +51,7 @@ if errorlevel 1 (
 )
 
 echo.
-echo ========================================
 echo Update complete! Restarting GUI...
-echo ========================================
 echo.
 
 REM Activate venv if it exists
