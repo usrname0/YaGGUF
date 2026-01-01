@@ -141,6 +141,7 @@ def render_imatrix_stats_tab(converter: "GGUFConverter", config: Dict[str, Any])
                         verbose=verbose
                     )
                 st.session_state.imatrix_stats_result = stats
+                st.session_state.imatrix_stats_file = imatrix_stats_path_clean
                 st.session_state.imatrix_stats_error = None
             except Exception as e:
                 st.session_state.imatrix_stats_result = None
@@ -156,6 +157,11 @@ def render_imatrix_stats_tab(converter: "GGUFConverter", config: Dict[str, Any])
     if 'imatrix_stats_result' in st.session_state and st.session_state.imatrix_stats_result:
         st.markdown("---")
         st.subheader("Statistics Output")
+
+        # Display the imatrix file being analyzed
+        if 'imatrix_stats_file' in st.session_state:
+            imatrix_filename = Path(st.session_state.imatrix_stats_file).name
+            st.markdown(f"#### {imatrix_filename}")
 
         # Add horizontal scroll for wide statistics output
         st.markdown("""

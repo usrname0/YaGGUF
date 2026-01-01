@@ -350,23 +350,24 @@ def render_imatrix_settings_tab(converter: "GGUFConverter", config: Dict[str, An
             )
 
         with col_proc2:
-            # GPU offloading (only show if custom binaries enabled)
-            if config.get("use_custom_binaries", False):
-                # Auto-save callback for num_gpu_layers
-                def save_num_gpu_layers():
-                    config["imatrix_num_gpu_layers"] = int(st.session_state[f"imatrix_num_gpu_layers_{st.session_state.reset_count}"])
-                    save_config(config)
+            # GPU offloading
+            # Auto-save callback for num_gpu_layers
+            def save_num_gpu_layers():
+                config["imatrix_num_gpu_layers"] = int(st.session_state[f"imatrix_num_gpu_layers_{st.session_state.reset_count}"])
+                save_config(config)
 
-                imatrix_num_gpu_layers_input = st.number_input(
-                    "GPU layers (-ngl)",
-                    min_value=0,
-                    max_value=999,
-                    value=int(config.get("imatrix_num_gpu_layers", 0)),
-                    step=1,
-                    help="Number of model layers to offload to GPU. 0 = CPU only, 99 = fully offload. Requires GPU-enabled llama.cpp build.",
-                    key=f"imatrix_num_gpu_layers_{st.session_state.reset_count}",
-                    on_change=save_num_gpu_layers
-                )
+            imatrix_num_gpu_layers_input = st.number_input(
+                "GPU layers (-ngl)",
+                min_value=0,
+                max_value=999,
+                value=int(config.get("imatrix_num_gpu_layers", 0)),
+                step=1,
+                help="0 = CPU only, >99 = fully offloaded in most cases.",
+                key=f"imatrix_num_gpu_layers_{st.session_state.reset_count}",
+                on_change=save_num_gpu_layers
+            )
+            st.caption("Number of model layers to offload to GPU.")
+            st.caption("Requires GPU-enabled llama.cpp build.")
 
         with col_proc3:
             # Auto-save callback for no ppl

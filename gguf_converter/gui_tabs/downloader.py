@@ -248,6 +248,12 @@ def render_downloader_tab(converter: "GGUFConverter", config: Dict[str, Any]) ->
             existing_token = get_token()
 
             if existing_token:
+                # Show temporary login success message
+                if st.session_state.get("hf_just_logged_in", False):
+                    col_msg = st.columns([5, 1])[0]
+                    with col_msg:
+                        st.info("You are logged in to HuggingFace")
+
                 # User has a token but may need to accept terms for gated models
                 if st.session_state.get("show_hf_login", False) and gated_repo:
                     col_msg = st.columns([5, 1])[0]
@@ -278,11 +284,6 @@ def render_downloader_tab(converter: "GGUFConverter", config: Dict[str, Any]) ->
                         st.session_state.hf_auth_message = None
                         print(f"{theme['info']}Logged out from HuggingFace{Style.RESET_ALL}")
                         st.rerun()
-
-                # Always show login status below token field
-                col_status = st.columns([5, 1])[0]
-                with col_status:
-                    st.info("You are logged in to HuggingFace")
             else:
                 # User needs to login
                 col_msg = st.columns([5, 1])[0]
@@ -319,6 +320,7 @@ def render_downloader_tab(converter: "GGUFConverter", config: Dict[str, Any]) ->
                             st.session_state.show_hf_login = True
                             st.session_state.gated_repo_id = None
                             st.session_state.hf_auth_message = None
+                            st.session_state.hf_just_logged_in = True
                             print(f"{theme['success']}Logged in to HuggingFace{Style.RESET_ALL}")
                             st.rerun()
                         except Exception as e:

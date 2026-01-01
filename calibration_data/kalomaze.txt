@@ -9,8 +9,6 @@
 #
 # For more information about imatrix calibration:
 # https://github.com/ggml-org/llama.cpp/discussions/5006
-#
-# -----------------------------------------------------------------------------
 
 addition to a significant decrease in hepatic lipid accumulation in the IOE group, which inhibited energy intake by propionate enrichment, hepatic lipids were also significantly reduced in the mice in the IOP group, which was largely enriched with butyrate. Compared with the IOE group, IOP had a stronger regulatory effect on hepatic metabolism and triglyceride metabolism and higher levels of TCA cycle in the host. In addition, butyrate has the ability to promote browning of white adipose tissue (WAT) to brown adipose tissue (BAT).^[@ref39],[@ref40]^ WAT stores energy, whereas BAT uses energy for heating and consequently host energy expenditure increases.^[@ref41],[@ref42]^ However, adipose tissue weight does not change after WAT browning.^[@ref43]^ Therefore, the weight of adipose tissue of mice in the IOP group dominated by butyrate was greater than that of the mice in the IOE group dominated by propionate.
 

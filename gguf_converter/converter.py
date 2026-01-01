@@ -8,6 +8,7 @@ import json
 import io
 import time
 import shutil
+from datetime import datetime
 from pathlib import Path
 from typing import Optional, Union, List
 from huggingface_hub import snapshot_download, HfApi
@@ -138,6 +139,15 @@ class GGUFConverter:
         """
         output_dir = Path(output_dir)
         output_dir.mkdir(parents=True, exist_ok=True)
+
+        # Print banner
+        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        banner_line = "=" * 80
+        print(f"\n{theme['info']}{banner_line}{Style.RESET_ALL}")
+        print(f"{theme['info']}{'DOWNLOAD FROM HUGGINGFACE'.center(80)}{Style.RESET_ALL}")
+        print(f"{theme['info']}{repo_id.center(80)}{Style.RESET_ALL}")
+        print(f"{theme['info']}{timestamp.center(80)}{Style.RESET_ALL}")
+        print(f"{theme['info']}{banner_line}{Style.RESET_ALL}\n")
 
         # First, quickly verify repository exists (fast failure on 404)
         print(f"{theme['info']}Verifying repository exists...{Style.RESET_ALL}")
@@ -659,6 +669,15 @@ class GGUFConverter:
         if not imatrix_path.exists():
             raise FileNotFoundError(f"Imatrix file not found: {imatrix_path}")
 
+        # Print banner
+        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        banner_line = "=" * 80
+        print(f"\n{theme['info']}{banner_line}{Style.RESET_ALL}")
+        print(f"{theme['info']}{'IMATRIX STATISTICS'.center(80)}{Style.RESET_ALL}")
+        print(f"{theme['info']}{imatrix_path.name.center(80)}{Style.RESET_ALL}")
+        print(f"{theme['info']}{timestamp.center(80)}{Style.RESET_ALL}")
+        print(f"{theme['info']}{banner_line}{Style.RESET_ALL}\n")
+
         # Use native Python implementation (no longer requires llama-imatrix binary or model file)
         # Capture stdout to return as string
         old_stdout = sys.stdout
@@ -755,6 +774,16 @@ class GGUFConverter:
         output_dir = Path(output_dir)
         output_dir.mkdir(parents=True, exist_ok=True)
 
+        # Print banner
+        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        model_display_name = model_path.name
+        banner_line = "=" * 80
+        print(f"\n{theme['info']}{banner_line}{Style.RESET_ALL}")
+        print(f"{theme['info']}{'CONVERT AND QUANTIZE'.center(80)}{Style.RESET_ALL}")
+        print(f"{theme['info']}{model_display_name.center(80)}{Style.RESET_ALL}")
+        print(f"{theme['info']}{timestamp.center(80)}{Style.RESET_ALL}")
+        print(f"{theme['info']}{banner_line}{Style.RESET_ALL}\n")
+
         # Check if it's a HuggingFace repo ID (before Path conversion changes the separators)
         if not model_path.exists() and "/" in model_path_str:
             print(f"{theme['info']}Downloading from HuggingFace: {model_path_str}{Style.RESET_ALL}")
@@ -798,6 +827,7 @@ class GGUFConverter:
             if overwrite_intermediates:
                 print(f"{theme['info']}\nIntermediate file exists: {intermediate_file.name}{Style.RESET_ALL}")
                 print(f"{theme['info']}Overwriting (overwrite_intermediates=True)...{Style.RESET_ALL}")
+                print(f"{theme['warning']}Overwriting: {intermediate_file}{Style.RESET_ALL}")
                 self.convert_to_gguf(
                     model_path=model_path,
                     output_path=intermediate_file,
@@ -805,7 +835,7 @@ class GGUFConverter:
                     verbose=verbose
                 )
             else:
-                print(f"{theme['info']}\nIntermediate file already exists: {intermediate_file.name}{Style.RESET_ALL}")
+                print(f"{theme['success']}\nIntermediate file already exists: {intermediate_file}{Style.RESET_ALL}")
                 print(f"{theme['info']}Skipping conversion, using existing file...{Style.RESET_ALL}")
         else:
             print(f"{theme['info']}Converting {model_name} to GGUF...{Style.RESET_ALL}")
@@ -829,6 +859,7 @@ class GGUFConverter:
             if imatrix_file.exists():
                 print(f"{theme['info']}Importance matrix already exists: {imatrix_file.name}{Style.RESET_ALL}")
                 print(f"{theme['info']}Overwriting with fresh generation...{Style.RESET_ALL}")
+                print(f"{theme['warning']}Overwriting: {imatrix_file}{Style.RESET_ALL}")
 
             print(f"{theme['info']}Generating importance matrix for {model_name}...{Style.RESET_ALL}")
 
@@ -862,6 +893,10 @@ class GGUFConverter:
 
             # Use the generated imatrix
             imatrix_path = imatrix_file
+        elif imatrix_path is not None:
+            # Reusing existing imatrix
+            imatrix_path = Path(imatrix_path)
+            print(f"{theme['success']}Using existing imatrix: {imatrix_path}{Style.RESET_ALL}")
 
         # Step 2: Quantize to requested types
         quantized_files = []
@@ -879,6 +914,7 @@ class GGUFConverter:
                     if overwrite_intermediates:
                         print(f"{theme['info']}{quant_type} file exists: {output_file.name}{Style.RESET_ALL}")
                         print(f"{theme['info']}Overwriting (overwrite_intermediates=True)...{Style.RESET_ALL}")
+                        print(f"{theme['warning']}Overwriting: {output_file}{Style.RESET_ALL}")
                         self.convert_to_gguf(
                             model_path=model_path,
                             output_path=output_file,
@@ -887,7 +923,7 @@ class GGUFConverter:
                         )
                         quantized_files.append(output_file)
                     else:
-                        print(f"{theme['info']}{quant_type} file already exists: {output_file.name}{Style.RESET_ALL}")
+                        print(f"{theme['success']}{quant_type} file already exists: {output_file}{Style.RESET_ALL}")
                         print(f"{theme['info']}Skipping conversion, using existing file...{Style.RESET_ALL}")
                         quantized_files.append(output_file)
                 # Generate from source
@@ -903,13 +939,14 @@ class GGUFConverter:
             else:
                 # Check if quantized file already exists
                 if output_file.exists() and not overwrite_quants:
-                    print(f"{theme['info']}{quant_type} file already exists: {output_file.name}{Style.RESET_ALL}")
+                    print(f"{theme['success']}{quant_type} file already exists: {output_file}{Style.RESET_ALL}")
                     print(f"{theme['info']}Skipping quantization, using existing file...{Style.RESET_ALL}")
                     quantized_files.append(output_file)
                 else:
                     if output_file.exists():
                         print(f"{theme['info']}{quant_type} file exists: {output_file.name}{Style.RESET_ALL}")
                         print(f"{theme['info']}Overwriting (overwrite_quants=True)...{Style.RESET_ALL}")
+                        print(f"{theme['warning']}Overwriting: {output_file}{Style.RESET_ALL}")
 
                     self.quantize(
                         input_path=intermediate_file,
