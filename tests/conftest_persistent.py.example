@@ -1,0 +1,40 @@
+"""
+Example: Persistent test output directory for integration tests
+
+To use:
+1. Rename to conftest.py (or add to existing conftest.py)
+2. Integration tests will save to D:/Dev/YaGGUF/test_outputs/
+3. Files will NOT be automatically cleaned up
+
+This is useful for:
+- Inspecting test outputs
+- Debugging test failures
+- Keeping generated models for manual testing
+"""
+
+import pytest
+from pathlib import Path
+import shutil
+
+
+@pytest.fixture(scope="module")
+def test_output_dir_persistent():
+    """
+    Create a persistent output directory (not cleaned up)
+    """
+    project_root = Path(__file__).parent.parent
+    output_dir = project_root / "test_outputs"
+    output_dir.mkdir(exist_ok=True)
+
+    print(f"\n{'='*80}")
+    print(f"Test outputs will be saved to: {output_dir}")
+    print(f"Files will NOT be automatically cleaned up")
+    print(f"{'='*80}\n")
+
+    return output_dir
+
+
+# To use this in test_integration.py, change:
+# def test_output_dir(tmp_path_factory):
+# to:
+# def test_output_dir(test_output_dir_persistent):

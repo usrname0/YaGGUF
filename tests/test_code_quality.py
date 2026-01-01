@@ -3,6 +3,7 @@ Tests for code quality standards
 """
 
 import re
+import platform
 from pathlib import Path
 
 
@@ -52,29 +53,41 @@ def test_no_emojis_in_code():
     assert not violations, f"Found emojis in production code:\n" + "\n".join(violations)
 
 
-def test_posix_paths_in_ui_code():
+def test_platform_appropriate_paths_in_ui():
     """
-    Verify that file paths displayed in the UI use forward slashes (POSIX format).
+    Verify that file paths displayed in the UI use platform-appropriate separators.
 
-    Checks for patterns like:
-    - st.code(str(path), ...)
-    - st.markdown(f"...{path}...")
-    - st.info(f"...{path}...")
+    On Windows: Should use backslashes (via str(path))
+    On POSIX: Should use forward slashes (via str(path))
 
-    Should use path.as_posix() instead.
+    This test checks that we're NOT forcing .as_posix() on all platforms,
+    which would show forward slashes on Windows (confusing for users).
     """
     project_root = Path(__file__).parent.parent
     gui_files = list((project_root / "gguf_converter" / "gui_tabs").glob("*.py"))
     gui_files.append(project_root / "gguf_converter" / "gui.py")
 
+    is_windows = platform.system() == "Windows"
     violations = []
 
-    # Patterns to check for
-    patterns_to_check = [
-        (r'st\.code\(str\([^)]+\)', "Use .as_posix() instead of str() for path display"),
-        (r'st\.markdown\(f["\'].*\{[^}]*_path\}', "Consider using .as_posix() for path in markdown"),
-        (r'st\.info\(f["\'].*\{[^}]*_path\}', "Consider using .as_posix() for path in info"),
-    ]
+    # On Windows, .as_posix() in user-facing messages is wrong
+    # On POSIX, forcing backslashes would be wrong (but we don't do that)
+    if is_windows:
+        # Check for .as_posix() being used in user-facing UI elements
+        # This would show forward slashes on Windows, which is confusing
+        patterns_to_avoid = [
+            (r'st\.code\([^)]*\.as_posix\(\)', "Don't use .as_posix() in UI on Windows - use str(path) for native separators"),
+            (r'st\.markdown\(f["\'].*\.as_posix\(\)', "Don't use .as_posix() in markdown on Windows - use str(path)"),
+            (r'st\.info\(f["\'].*\.as_posix\(\)', "Don't use .as_posix() in info on Windows - use str(path)"),
+            (r'st\.success\(f["\'].*\.as_posix\(\)', "Don't use .as_posix() in success on Windows - use str(path)"),
+            (r'st\.warning\(f["\'].*\.as_posix\(\)', "Don't use .as_posix() in warning on Windows - use str(path)"),
+            (r'st\.error\(f["\'].*\.as_posix\(\)', "Don't use .as_posix() in error on Windows - use str(path)"),
+        ]
+    else:
+        # On POSIX, check for hardcoded backslashes (shouldn't happen)
+        patterns_to_avoid = [
+            (r'st\.\w+\(f["\'].*\\\\', "Don't use hardcoded backslashes in UI on POSIX systems"),
+        ]
 
     for file_path in gui_files:
         try:
@@ -86,16 +99,23 @@ def test_posix_paths_in_ui_code():
                 if line.strip().startswith('#'):
                     continue
 
-                for pattern, message in patterns_to_check:
+                # Skip if it's clearly not a path (e.g., markdown table separators)
+                if '---' in line or ':::' in line:
+                    continue
+
+                for pattern, message in patterns_to_avoid:
                     if re.search(pattern, line):
-                        # Check if .as_posix() is already used on this line or nearby
-                        if '.as_posix()' not in line:
-                            violations.append(
-                                f"{file_path.relative_to(project_root)}:{i} {message}\n"
-                                f"  Line: {line.strip()[:100]}"
-                            )
+                        violations.append(
+                            f"{file_path.relative_to(project_root)}:{i} {message}\n"
+                            f"  Line: {line.strip()[:100]}"
+                        )
         except Exception as e:
             print(f"Warning: Could not read {file_path}: {e}")
             continue
 
-    assert not violations, f"Found POSIX path issues - use .as_posix() for path display:\n" + "\n".join(violations)
+    platform_name = "Windows" if is_windows else "POSIX"
+    assert not violations, (
+        f"Found platform-inappropriate path formatting on {platform_name}:\n" +
+        "\n".join(violations) +
+        f"\n\nPaths should use platform-native separators via str(path)"
+    )

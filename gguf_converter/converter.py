@@ -431,14 +431,12 @@ class GGUFConverter:
         start_time = time.time()
 
         # Build llama-quantize command
+        # Important: Flags must come BEFORE positional arguments!
+        # Usage: llama-quantize [--flags...] input.gguf output.gguf type [nthreads]
         quantize_bin = self.llama_cpp_manager.get_quantize_path()
-        cmd = [str(quantize_bin), str(input_path), str(output_path), quantization_type]
+        cmd = [str(quantize_bin)]
 
-        # Add num_threads (positional argument, comes before optional flags)
-        if num_threads:
-            cmd.append(str(num_threads))
-
-        # Add optional flags (must come after positional arguments)
+        # Add optional flags FIRST (before positional arguments)
         if allow_requantize:
             cmd.append("--allow-requantize")
 
@@ -463,6 +461,13 @@ class GGUFConverter:
         if token_embedding_type:
             cmd.extend(["--token-embedding-type", token_embedding_type])
 
+        # Add positional arguments AFTER flags
+        cmd.extend([str(input_path), str(output_path), quantization_type])
+
+        # Add num_threads as final positional argument (optional)
+        if num_threads:
+            cmd.append(str(num_threads))
+
         print(f"{theme['highlight']}Running: {' '.join(cmd)}{Style.RESET_ALL}")
         print()
 
@@ -486,13 +491,15 @@ class GGUFConverter:
             raw_error = e.stderr if e.stderr else str(e)
             error_msg = self._clean_llama_error(raw_error)
 
-            # Check if imatrix was provided but llama.cpp still complains about missing imatrix
-            # This indicates likely model incompatibility
-            if "without an importance matrix" in raw_error and imatrix_path:
+            # Check for tied embeddings issue (common with certain models and quantization types)
+            # Pattern: "GGML_ASSERT(start % type_traits[type].blck_size == 0) failed"
+            # Usually happens with token_embd.weight on tied embedding models
+            if "blck_size" in raw_error and "failed" in raw_error:
                 raise RuntimeError(
                     f"Quantization failed: Model incompatibility detected.\n\n"
-                    f"An importance matrix was provided, but {quantization_type} quantization still failed.\n"
-                    f"This typically means the model architecture is incompatible with this quantization type.\n\n"
+                    f"This error typically occurs with certain models (e.g., models with tied embeddings)\n"
+                    f"when using specific quantization types.\n\n"
+                    f"Try a different quantization type or use F16/F32 instead.\n\n"
                     f"Error:\n{error_msg}"
                 )
 
@@ -500,19 +507,48 @@ class GGUFConverter:
 
         elapsed = time.time() - start_time
 
+        # Check for output file
+        # If --keep-split was used, llama-quantize creates sharded files like "model-00001-of-00001.gguf"
+        actual_output_path = output_path
+        sharded_files = []
+
+        if not output_path.exists() and keep_split:
+            # Look for sharded output files
+            output_dir = output_path.parent
+            output_stem = output_path.stem  # filename without extension
+
+            # Pattern: model-00001-of-00001.gguf
+            sharded_files = list(output_dir.glob(f"{output_stem}-*-of-*.gguf"))
+
+            if sharded_files:
+                # Use the first shard as the "output" path to return
+                actual_output_path = sorted(sharded_files)[0]
+                print(f"{theme['info']}Model saved as sharded files ({len(sharded_files)} shard(s)){Style.RESET_ALL}")
+                for shard in sorted(sharded_files):
+                    print(f"{theme['metadata']}  - {shard.name}{Style.RESET_ALL}")
+
         # Print summary
-        if output_path.exists():
+        if actual_output_path.exists():
             input_size = input_path.stat().st_size / (1024**3)
-            output_size = output_path.stat().st_size / (1024**3)
+
+            # If sharded, sum all shard sizes
+            if sharded_files:
+                total_output_size = sum(f.stat().st_size for f in sharded_files)
+                output_size = total_output_size / (1024**3)
+            else:
+                output_size = actual_output_path.stat().st_size / (1024**3)
+
             ratio = input_size / output_size if output_size > 0 else 0
 
-            print(f"\n{theme['success']}Quantization complete: {output_path}{Style.RESET_ALL}")
+            print(f"\n{theme['success']}Quantization complete: {actual_output_path.name if sharded_files else actual_output_path}{Style.RESET_ALL}")
             print(f"{theme['metadata']}Time taken: {elapsed:.2f}s ({elapsed/60:.2f} minutes){Style.RESET_ALL}")
             print(f"{theme['metadata']}Size: {input_size:.2f} GB -> {output_size:.2f} GB ({ratio:.2f}x compression){Style.RESET_ALL}")
         else:
             raise RuntimeError("Quantization appeared to succeed but output file not found")
 
-        return output_path
+        # Return the actual path (might be a shard file if keep_split was used)
+        # This ensures the caller can actually find the file
+        return actual_output_path
 
     def generate_imatrix(
         self,

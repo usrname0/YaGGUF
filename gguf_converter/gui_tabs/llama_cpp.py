@@ -151,7 +151,7 @@ def render_llama_cpp_tab(converter: "GGUFConverter", config: Dict[str, Any]) -> 
         st.markdown("""
         Enable local/custom binaries if you want to:
         - Use a custom-compiled llama.cpp with GPU support (CUDA/ROCm/Metal/Vulkan)
-        - Use a specific llama.cpp version
+        - Use a specific llama.cpp version for quantization
 
         **Note:** Custom binaries with GPU support are required for GPU offloading in imatrix generation (see Imatrix Settings tab).
         Gains will depend on hardware. Quantization only uses the CPU regardless of setup.
