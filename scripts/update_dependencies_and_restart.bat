@@ -10,8 +10,8 @@ if "%PORT%"=="" set PORT=8501
 
 echo.
 echo ================================================================================
-echo                              UPDATE DEPENDENCIES
-echo                                %DATE% %TIME:~0,8%
+echo                               UPDATE DEPENDENCIES
+echo                             %DATE% %TIME:~0,8%
 echo ================================================================================
 echo.
 

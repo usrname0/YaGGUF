@@ -188,11 +188,11 @@ class LlamaCppManager:
         if not force and self._binaries_exist():
             installed_version = self.get_installed_version_tag()
             if installed_version == tag:
-                print(f"{theme['info']}Binaries already at version {tag} in {self.bin_dir}{Style.RESET_ALL}")
+                print(f"{theme['info']}Binaries already at version {tag}{Style.RESET_ALL}")
+                print(f"{theme['success']}Binaries ready in {self.bin_dir}{Style.RESET_ALL}")
                 return self.bin_dir
             elif installed_version:
                 print(f"{theme['info']}Installed version {installed_version} differs from requested {tag}{Style.RESET_ALL}")
-                print(f"{theme['info']}Downloading new version...{Style.RESET_ALL}")
             else:
                 print(f"{theme['info']}Unable to determine installed version, downloading {tag}...{Style.RESET_ALL}")
 
@@ -235,7 +235,7 @@ class LlamaCppManager:
         try:
             urlretrieve(url, download_path, reporthook=self._progress_hook)
             print()  # New line after progress
-            print(f"{theme['success']}Downloaded to {download_path}{Style.RESET_ALL}")
+            print(f"{theme['info']}Downloaded to {download_path}{Style.RESET_ALL}")
         except Exception as e:
             print(f"\n{theme['error']}ERROR: Failed to download binaries: {e}{Style.RESET_ALL}")
             raise RuntimeError(
@@ -249,7 +249,7 @@ class LlamaCppManager:
 
         # Clean up archive
         download_path.unlink()
-        print(f"{theme['success']}Extraction complete{Style.RESET_ALL}")
+        print(f"{theme['info']}Extraction complete{Style.RESET_ALL}")
 
         # Verify binaries exist
         if not self._check_binary_files_exist():
@@ -643,6 +643,7 @@ class LlamaCppManager:
 
                 if current_version and target_version in current_version:
                     print(f"{theme['info']}Conversion scripts already at version {target_version}{Style.RESET_ALL}")
+                    print(f"{theme['success']}Conversion scripts ready in {llama_cpp_dir}{Style.RESET_ALL}")
                     return {
                         'status': 'already_updated',
                         'message': f'Conversion scripts already at version {target_version}'
@@ -669,6 +670,7 @@ class LlamaCppManager:
 
             # Checkout the target version
             print(f"{theme['info']}Checking out version {target_version}...{Style.RESET_ALL}")
+            print(f"{theme['highlight']}https://github.com/ggml-org/llama.cpp/tree/{target_version}{Style.RESET_ALL}")
             checkout_result = subprocess.run(
                 ["git", "checkout", target_version],
                 cwd=llama_cpp_dir,
@@ -679,6 +681,7 @@ class LlamaCppManager:
 
             if checkout_result.returncode == 0:
                 print(f"{theme['success']}Conversion scripts updated to version {target_version}{Style.RESET_ALL}")
+                print(f"{theme['success']}Conversion scripts ready in {llama_cpp_dir}{Style.RESET_ALL}")
                 return {
                     'status': 'success',
                     'message': f'Conversion scripts updated to version {target_version}'
