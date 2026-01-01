@@ -68,7 +68,6 @@ def get_default_config() -> Dict[str, Any]:
         "model_path": "",
         "output_dir": "",
         "intermediate_type": "F16",
-        "allow_requantize": False,
         "leave_output_tensor": False,
         "pure_quantization": False,
         "keep_split": False,

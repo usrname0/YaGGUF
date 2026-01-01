@@ -210,13 +210,42 @@ class GGUFConverter:
 
         return Path(model_path)
 
+    def _detect_model_shards(self, model_path: Path) -> Optional[int]:
+        """
+        Detect if a model directory contains sharded safetensors files.
+
+        Args:
+            model_path: Path to the model directory
+
+        Returns:
+            Number of shards if model is sharded, None otherwise
+        """
+        if not model_path.is_dir():
+            return None
+
+        # Look for pattern: model-00001-of-00002.safetensors
+        import re
+        shard_pattern = re.compile(r'-(\d+)-of-(\d+)\.safetensors$')
+
+        max_shards = 0
+        for file in model_path.iterdir():
+            if file.suffix == '.safetensors':
+                match = shard_pattern.search(file.name)
+                if match:
+                    total_shards = int(match.group(2))
+                    max_shards = max(max_shards, total_shards)
+
+        return max_shards if max_shards > 0 else None
+
     def convert_to_gguf(
         self,
         model_path: Union[str, Path],
         output_path: Union[str, Path],
         output_type: str = "f16",
         vocab_only: bool = False,
-        verbose: bool = False
+        verbose: bool = False,
+        split_max_size: Optional[str] = None,
+        split_max_tensors: Optional[int] = None
     ) -> Path:
         """
         Convert a model to GGUF format
@@ -227,9 +256,11 @@ class GGUFConverter:
             output_type: Output precision (f32, f16, bf16, q8_0, auto)
             vocab_only: Only extract vocabulary
             verbose: Enable verbose logging
+            split_max_size: Maximum size per split (e.g., "2G")
+            split_max_tensors: Maximum tensors per split
 
         Returns:
-            Path to the created GGUF file
+            Path to the created GGUF file (or first shard if split)
         """
         model_path = Path(model_path)
         output_path = Path(output_path)
@@ -263,6 +294,10 @@ class GGUFConverter:
             cmd.append("--vocab-only")
         if verbose:
             cmd.append("--verbose")
+        if split_max_size:
+            cmd.extend(["--split-max-size", split_max_size])
+        if split_max_tensors:
+            cmd.extend(["--split-max-tensors", str(split_max_tensors)])
 
         # Check if model requires special handling
         if self._is_ministral3_model(model_path):
@@ -284,8 +319,25 @@ class GGUFConverter:
         if verbose and result.stdout:
             print(result.stdout)
 
-        print(f"{theme['success']}Conversion complete: {output_path}{Style.RESET_ALL}")
-        return output_path
+        # Check if shards were created when splitting was requested
+        actual_output_path = output_path
+        if (split_max_size or split_max_tensors) and not output_path.exists():
+            # Look for sharded output files
+            output_dir = output_path.parent
+            output_stem = output_path.stem
+            sharded_files = sorted(output_dir.glob(f"{output_stem}-*-of-*.gguf"))
+
+            if sharded_files:
+                actual_output_path = sharded_files[0]
+                print(f"{theme['success']}Conversion complete: {len(sharded_files)} shard(s) created{Style.RESET_ALL}")
+                for shard in sharded_files:
+                    print(f"{theme['metadata']}  - {shard.name}{Style.RESET_ALL}")
+            else:
+                print(f"{theme['success']}Conversion complete: {output_path}{Style.RESET_ALL}")
+        else:
+            print(f"{theme['success']}Conversion complete: {output_path}{Style.RESET_ALL}")
+
+        return actual_output_path
 
     def _is_ministral3_model(self, model_path: Path) -> bool:
         """
@@ -381,7 +433,6 @@ class GGUFConverter:
         parallel: bool = True,
         num_workers: Optional[int] = None,
         scalar_optimization: bool = False,
-        allow_requantize: bool = False,
         leave_output_tensor: bool = False,
         pure_quantization: bool = False,
         keep_split: bool = False,
@@ -401,7 +452,6 @@ class GGUFConverter:
             parallel: Ignored (kept for API compatibility)
             num_workers: Ignored (kept for API compatibility)
             scalar_optimization: Ignored (kept for API compatibility)
-            allow_requantize: Allow quantizing already-quantized models (may reduce quality)
             leave_output_tensor: Keep output.weight unquantized for better quality (increases model size)
             pure_quantization: Disable k-quant mixtures, quantize all tensors uniformly
             keep_split: Keep model in same shards as input (for multi-file models)
@@ -437,9 +487,6 @@ class GGUFConverter:
         cmd = [str(quantize_bin)]
 
         # Add optional flags FIRST (before positional arguments)
-        if allow_requantize:
-            cmd.append("--allow-requantize")
-
         if leave_output_tensor:
             cmd.append("--leave-output-tensor")
 
@@ -763,7 +810,6 @@ class GGUFConverter:
         imatrix_output_name: Optional[str] = None,
         imatrix_num_gpu_layers: Optional[int] = None,
         ignore_imatrix_warnings: bool = False,
-        allow_requantize: bool = False,
         leave_output_tensor: bool = False,
         pure_quantization: bool = False,
         keep_split: bool = False,
@@ -792,7 +838,6 @@ class GGUFConverter:
             imatrix_collect_output: Collect output.weight tensor in imatrix (required for IQ quantizations)
             imatrix_calibration_file: Path to calibration file for imatrix generation (None = use default)
             ignore_imatrix_warnings: Allow IQ quants without imatrix (may cause degraded quality or failure)
-            allow_requantize: Allow quantizing already-quantized models (may reduce quality)
             leave_output_tensor: Keep output.weight unquantized for better quality (increases model size)
             pure_quantization: Disable k-quant mixtures, quantize all tensors uniformly
             keep_split: Keep model in same shards as input (for multi-file models)
@@ -936,32 +981,89 @@ class GGUFConverter:
         is_already_gguf = False
         model_name = model_path.name
 
+        # Detect if source model is sharded and we want to preserve splits
+        split_max_tensors = None
+        split_max_size = None
+        if keep_split and model_path.is_dir():
+            num_shards = self._detect_model_shards(model_path)
+            if num_shards and num_shards > 1:
+                # Calculate approximate size per shard based on source safetensors files
+                safetensors_files = list(model_path.glob("*.safetensors"))
+                if safetensors_files:
+                    total_size = sum(f.stat().st_size for f in safetensors_files)
+                    # Convert to GB and divide by number of shards, then add 20% buffer for GGUF overhead
+                    size_per_shard_gb = (total_size / (1024**3) / num_shards) * 1.2
+                    # Round to nearest integer GB (must be integer for llama.cpp)
+                    size_per_shard_gb_int = max(1, round(size_per_shard_gb))
+                    split_max_size = f"{size_per_shard_gb_int}G"
+                    print(f"{theme['info']}Detected {num_shards} shards in source model{Style.RESET_ALL}")
+                    print(f"{theme['info']}Will preserve sharding in conversion (split_max_size={split_max_size}){Style.RESET_ALL}")
+
         # Step 1: Convert to GGUF
         intermediate_file = output_dir / f"{model_name}_{intermediate_type.upper()}.gguf"
 
-        # Check if intermediate file already exists
-        if intermediate_file.exists():
-            if overwrite_intermediates:
-                print(f"{theme['info']}\nIntermediate file exists: {intermediate_file.name}{Style.RESET_ALL}")
-                print(f"{theme['info']}Overwriting (overwrite_intermediates=True)...{Style.RESET_ALL}")
-                print(f"{theme['warning']}Overwriting: {intermediate_file}{Style.RESET_ALL}")
-                self.convert_to_gguf(
+        # Check for existing intermediate files based on keep_split mode
+        if split_max_size or split_max_tensors:
+            # Keep split mode: check for split intermediate files, ignore single file
+            intermediate_shards = sorted(output_dir.glob(f"{intermediate_file.stem}-*-of-*.gguf"))
+
+            if intermediate_shards:
+                if overwrite_intermediates:
+                    print(f"{theme['info']}\nSplit intermediate files exist ({len(intermediate_shards)} shard(s)){Style.RESET_ALL}")
+                    print(f"{theme['info']}Overwriting (overwrite_intermediates=True)...{Style.RESET_ALL}")
+                    for shard in intermediate_shards:
+                        print(f"{theme['warning']}Overwriting: {shard.name}{Style.RESET_ALL}")
+                    intermediate_file = self.convert_to_gguf(
+                        model_path=model_path,
+                        output_path=intermediate_file,
+                        output_type=intermediate_type,
+                        verbose=verbose,
+                        split_max_size=split_max_size,
+                        split_max_tensors=split_max_tensors
+                    )
+                else:
+                    print(f"{theme['success']}\nSplit intermediate files already exist ({len(intermediate_shards)} shard(s)){Style.RESET_ALL}")
+                    print(f"{theme['info']}Skipping conversion, using existing files...{Style.RESET_ALL}")
+                    for shard in intermediate_shards:
+                        print(f"{theme['metadata']}  - {shard.name}{Style.RESET_ALL}")
+                    # Use first shard as the intermediate file (llama-imatrix and llama-quantize auto-detect rest)
+                    intermediate_file = intermediate_shards[0]
+            else:
+                # No split files exist, create them
+                print(f"{theme['info']}Converting {model_name} to GGUF (with splitting)...{Style.RESET_ALL}")
+                intermediate_file = self.convert_to_gguf(
+                    model_path=model_path,
+                    output_path=intermediate_file,
+                    output_type=intermediate_type,
+                    verbose=verbose,
+                    split_max_size=split_max_size,
+                    split_max_tensors=split_max_tensors
+                )
+        else:
+            # Normal mode: check for single intermediate file, ignore split files
+            if intermediate_file.exists():
+                if overwrite_intermediates:
+                    print(f"{theme['info']}\nIntermediate file exists: {intermediate_file.name}{Style.RESET_ALL}")
+                    print(f"{theme['info']}Overwriting (overwrite_intermediates=True)...{Style.RESET_ALL}")
+                    print(f"{theme['warning']}Overwriting: {intermediate_file}{Style.RESET_ALL}")
+                    intermediate_file = self.convert_to_gguf(
+                        model_path=model_path,
+                        output_path=intermediate_file,
+                        output_type=intermediate_type,
+                        verbose=verbose
+                    )
+                else:
+                    print(f"{theme['success']}\nIntermediate file already exists: {intermediate_file}{Style.RESET_ALL}")
+                    print(f"{theme['info']}Skipping conversion, using existing file...{Style.RESET_ALL}")
+            else:
+                # No single file exists, create it
+                print(f"{theme['info']}Converting {model_name} to GGUF...{Style.RESET_ALL}")
+                intermediate_file = self.convert_to_gguf(
                     model_path=model_path,
                     output_path=intermediate_file,
                     output_type=intermediate_type,
                     verbose=verbose
                 )
-            else:
-                print(f"{theme['success']}\nIntermediate file already exists: {intermediate_file}{Style.RESET_ALL}")
-                print(f"{theme['info']}Skipping conversion, using existing file...{Style.RESET_ALL}")
-        else:
-            print(f"{theme['info']}Converting {model_name} to GGUF...{Style.RESET_ALL}")
-            self.convert_to_gguf(
-                model_path=model_path,
-                output_path=intermediate_file,
-                output_type=intermediate_type,
-                verbose=verbose
-            )
 
         # Step 1.5: Generate importance matrix if requested
         if generate_imatrix:
@@ -1025,60 +1127,155 @@ class GGUFConverter:
                 # Check if this is the intermediate format
                 if quant_type.upper() == intermediate_type.upper():
                     print(f"{theme['info']}{quant_type} is the intermediate format{Style.RESET_ALL}")
-                    quantized_files.append(intermediate_file)
-                # Check if output already exists
-                elif output_file.exists():
-                    if overwrite_intermediates:
-                        print(f"{theme['info']}{quant_type} file exists: {output_file.name}{Style.RESET_ALL}")
-                        print(f"{theme['info']}Overwriting (overwrite_intermediates=True)...{Style.RESET_ALL}")
-                        print(f"{theme['warning']}Overwriting: {output_file}{Style.RESET_ALL}")
-                        self.convert_to_gguf(
-                            model_path=model_path,
+                    # If intermediate is sharded, add all shards
+                    if split_max_size or split_max_tensors:
+                        intermediate_stem_base = output_dir / f"{model_name}_{intermediate_type.upper()}"
+                        sharded_files = sorted(output_dir.glob(f"{intermediate_stem_base.name}-*-of-*.gguf"))
+                        if sharded_files:
+                            quantized_files.extend(sharded_files)
+                        else:
+                            quantized_files.append(intermediate_file)
+                    else:
+                        quantized_files.append(intermediate_file)
+                else:
+                    # Not the intermediate format, check for existing files
+                    if split_max_size or split_max_tensors:
+                        # Keep split mode: check for split files, ignore single
+                        output_shards = sorted(output_dir.glob(f"{output_file.stem}-*-of-*.gguf"))
+
+                        if output_shards:
+                            if overwrite_intermediates:
+                                print(f"{theme['info']}{quant_type} split files exist ({len(output_shards)} shard(s)){Style.RESET_ALL}")
+                                print(f"{theme['info']}Overwriting (overwrite_intermediates=True)...{Style.RESET_ALL}")
+                                for shard in output_shards:
+                                    print(f"{theme['warning']}Overwriting: {shard.name}{Style.RESET_ALL}")
+                                actual_output = self.convert_to_gguf(
+                                    model_path=model_path,
+                                    output_path=output_file,
+                                    output_type=quant_type.lower(),
+                                    verbose=verbose,
+                                    split_max_size=split_max_size,
+                                    split_max_tensors=split_max_tensors
+                                )
+                                # Get all new shards
+                                new_shards = sorted(output_dir.glob(f"{output_file.stem}-*-of-*.gguf"))
+                                quantized_files.extend(new_shards if new_shards else [actual_output])
+                            else:
+                                print(f"{theme['success']}{quant_type} split files already exist ({len(output_shards)} shard(s)){Style.RESET_ALL}")
+                                print(f"{theme['info']}Skipping conversion, using existing files...{Style.RESET_ALL}")
+                                for shard in output_shards:
+                                    print(f"{theme['metadata']}  - {shard.name}{Style.RESET_ALL}")
+                                quantized_files.extend(output_shards)
+                        else:
+                            # No split files exist, create them
+                            print(f"{theme['info']}Converting {model_name} to {quant_type} from source (with splitting)...{Style.RESET_ALL}")
+                            actual_output = self.convert_to_gguf(
+                                model_path=model_path,
+                                output_path=output_file,
+                                output_type=quant_type.lower(),
+                                verbose=verbose,
+                                split_max_size=split_max_size,
+                                split_max_tensors=split_max_tensors
+                            )
+                            # Get all shards
+                            new_shards = sorted(output_dir.glob(f"{output_file.stem}-*-of-*.gguf"))
+                            quantized_files.extend(new_shards if new_shards else [actual_output])
+                    else:
+                        # Normal mode: check for single file, ignore split files
+                        if output_file.exists():
+                            if overwrite_intermediates:
+                                print(f"{theme['info']}{quant_type} file exists: {output_file.name}{Style.RESET_ALL}")
+                                print(f"{theme['info']}Overwriting (overwrite_intermediates=True)...{Style.RESET_ALL}")
+                                print(f"{theme['warning']}Overwriting: {output_file}{Style.RESET_ALL}")
+                                actual_output = self.convert_to_gguf(
+                                    model_path=model_path,
+                                    output_path=output_file,
+                                    output_type=quant_type.lower(),
+                                    verbose=verbose
+                                )
+                                quantized_files.append(actual_output)
+                            else:
+                                print(f"{theme['success']}{quant_type} file already exists: {output_file}{Style.RESET_ALL}")
+                                print(f"{theme['info']}Skipping conversion, using existing file...{Style.RESET_ALL}")
+                                quantized_files.append(output_file)
+                        else:
+                            # No single file exists, create it
+                            print(f"{theme['info']}Converting {model_name} to {quant_type} from source...{Style.RESET_ALL}")
+                            actual_output = self.convert_to_gguf(
+                                model_path=model_path,
+                                output_path=output_file,
+                                output_type=quant_type.lower(),
+                                verbose=verbose
+                            )
+                            quantized_files.append(actual_output)
+            else:
+                # Regular quantization types (Q4_K_M, etc.)
+                if keep_split:
+                    # Keep split mode: check for split files, ignore single
+                    output_shards = sorted(output_dir.glob(f"{output_file.stem}-*-of-*.gguf"))
+
+                    if output_shards and not overwrite_quants:
+                        print(f"{theme['success']}{quant_type} sharded files already exist ({len(output_shards)} shard(s)){Style.RESET_ALL}")
+                        print(f"{theme['info']}Skipping quantization, using existing files...{Style.RESET_ALL}")
+                        for shard in output_shards:
+                            print(f"{theme['metadata']}  - {shard.name}{Style.RESET_ALL}")
+                        quantized_files.extend(output_shards)
+                    else:
+                        # Need to quantize
+                        if output_shards:
+                            print(f"{theme['info']}{quant_type} split files exist ({len(output_shards)} shard(s)){Style.RESET_ALL}")
+                            print(f"{theme['info']}Overwriting (overwrite_quants=True)...{Style.RESET_ALL}")
+                            for shard in output_shards:
+                                print(f"{theme['warning']}Overwriting: {shard.name}{Style.RESET_ALL}")
+
+                        actual_output_path = self.quantize(
+                            input_path=intermediate_file,
                             output_path=output_file,
-                            output_type=quant_type.lower(),
-                            verbose=verbose
+                            quantization_type=quant_type,
+                            verbose=verbose,
+                            imatrix_path=imatrix_path,
+                            num_threads=num_threads,
+                            leave_output_tensor=leave_output_tensor,
+                            pure_quantization=pure_quantization,
+                            keep_split=keep_split,
+                            output_tensor_type=output_tensor_type,
+                            token_embedding_type=token_embedding_type
                         )
+
+                        # Get all output shards
+                        new_shards = sorted(output_dir.glob(f"{output_file.stem}-*-of-*.gguf"))
+                        if new_shards:
+                            quantized_files.extend(new_shards)
+                        else:
+                            # Fallback if no shards found (shouldn't happen in keep_split mode)
+                            quantized_files.append(actual_output_path)
+                else:
+                    # Normal mode: check for single file, ignore split files
+                    if output_file.exists() and not overwrite_quants:
+                        print(f"{theme['success']}{quant_type} file already exists: {output_file}{Style.RESET_ALL}")
+                        print(f"{theme['info']}Skipping quantization, using existing file...{Style.RESET_ALL}")
                         quantized_files.append(output_file)
                     else:
-                        print(f"{theme['success']}{quant_type} file already exists: {output_file}{Style.RESET_ALL}")
-                        print(f"{theme['info']}Skipping conversion, using existing file...{Style.RESET_ALL}")
-                        quantized_files.append(output_file)
-                # Generate from source
-                else:
-                    print(f"{theme['info']}Converting {model_name} to {quant_type} from source...{Style.RESET_ALL}")
-                    self.convert_to_gguf(
-                        model_path=model_path,
-                        output_path=output_file,
-                        output_type=quant_type.lower(),
-                        verbose=verbose
-                    )
-                    quantized_files.append(output_file)
-            else:
-                # Check if quantized file already exists
-                if output_file.exists() and not overwrite_quants:
-                    print(f"{theme['success']}{quant_type} file already exists: {output_file}{Style.RESET_ALL}")
-                    print(f"{theme['info']}Skipping quantization, using existing file...{Style.RESET_ALL}")
-                    quantized_files.append(output_file)
-                else:
-                    if output_file.exists():
-                        print(f"{theme['info']}{quant_type} file exists: {output_file.name}{Style.RESET_ALL}")
-                        print(f"{theme['info']}Overwriting (overwrite_quants=True)...{Style.RESET_ALL}")
-                        print(f"{theme['warning']}Overwriting: {output_file}{Style.RESET_ALL}")
+                        # Need to quantize
+                        if output_file.exists():
+                            print(f"{theme['info']}{quant_type} file exists: {output_file.name}{Style.RESET_ALL}")
+                            print(f"{theme['info']}Overwriting (overwrite_quants=True)...{Style.RESET_ALL}")
+                            print(f"{theme['warning']}Overwriting: {output_file}{Style.RESET_ALL}")
 
-                    self.quantize(
-                        input_path=intermediate_file,
-                        output_path=output_file,
-                        quantization_type=quant_type,
-                        verbose=verbose,
-                        imatrix_path=imatrix_path,
-                        num_threads=num_threads,
-                        allow_requantize=allow_requantize,
-                        leave_output_tensor=leave_output_tensor,
-                        pure_quantization=pure_quantization,
-                        keep_split=keep_split,
-                        output_tensor_type=output_tensor_type,
-                        token_embedding_type=token_embedding_type
-                    )
-                    quantized_files.append(output_file)
+                        actual_output_path = self.quantize(
+                            input_path=intermediate_file,
+                            output_path=output_file,
+                            quantization_type=quant_type,
+                            verbose=verbose,
+                            imatrix_path=imatrix_path,
+                            num_threads=num_threads,
+                            leave_output_tensor=leave_output_tensor,
+                            pure_quantization=pure_quantization,
+                            keep_split=False,  # Explicitly disable in normal mode
+                            output_tensor_type=output_tensor_type,
+                            token_embedding_type=token_embedding_type
+                        )
+
+                        quantized_files.append(actual_output_path)
 
         return quantized_files

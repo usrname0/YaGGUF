@@ -241,14 +241,6 @@ def render_convert_tab(
         with st.expander("Advanced Quantization Options"):
             st.markdown("These options affect how llama.cpp quantizes your model. Most users won't need these.")
 
-            allow_requantize = st.checkbox(
-                "Allow requantize",
-                value=config.get("allow_requantize", False),
-                help="Allow quantizing models that are already quantized. Warning: This can severely reduce quality compared to quantizing from F16/F32.",
-                key="allow_requantize_checkbox",
-                on_change=make_config_saver(config, "allow_requantize", "allow_requantize_checkbox")
-            )
-
             leave_output_tensor = st.checkbox(
                 "Leave output tensor unquantized",
                 value=config.get("leave_output_tensor", False),
@@ -996,7 +988,6 @@ def render_convert_tab(
                         imatrix_output_name=imatrix_output_filename,
                         imatrix_num_gpu_layers=use_num_gpu_layers,
                         ignore_imatrix_warnings=ignore_imatrix_warnings,
-                        allow_requantize=allow_requantize,
                         leave_output_tensor=leave_output_tensor,
                         pure_quantization=pure_quantization,
                         keep_split=keep_split,
