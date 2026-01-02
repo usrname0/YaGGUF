@@ -1009,7 +1009,6 @@ def render_convert_tab(
                                 # Round to nearest integer GB (must be integer for llama.cpp)
                                 size_per_shard_gb_int = max(1, round(size_per_shard_gb))
                                 split_size_override = f"{size_per_shard_gb_int}G"
-                                print(f"Will split into {num_shards} shards (size per shard: {split_size_override})")
                             else:
                                 st.warning(f"No safetensors files found in model directory. Cannot calculate split size automatically.")
                         else:
