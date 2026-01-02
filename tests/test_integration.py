@@ -15,8 +15,11 @@ Run only integration tests: pytest -m integration
 
 import pytest
 import shutil
+import subprocess
+import hashlib
 from pathlib import Path
 from gguf_converter.converter import GGUFConverter
+from gguf_converter.llama_cpp_manager import LlamaCppManager
 
 
 # Small model for testing (only ~500MB)
@@ -454,6 +457,115 @@ class TestImatrixGeneration:
         assert results[0].exists()
         assert results[0].stat().st_size > 0
 
+
+@pytest.fixture(scope="module")
+def llama_manager():
+    """
+    Create a LlamaCppManager instance for testing
+    """
+    return LlamaCppManager()
+
+
+@pytest.mark.integration
+@pytest.mark.slow
+class TestFunctionalCorrectness:
+    """
+    Test that the converted models are functionally correct
+    """
+
+    def test_q4_k_m_checksum(self, converter, llama_manager, downloaded_model, test_output_dir):
+        """
+        Verify Q4_K_M model output against a golden checksum
+        """
+        # --- 1. Locate the correct binary ---
+        binary_name = "llama-completion"
+        llama_bin_path = llama_manager.get_binary_path(binary_name)
+        
+        if not llama_bin_path or not llama_bin_path.exists():
+             llama_bin_path = llama_manager.get_binary_path("main")
+
+        if not llama_bin_path or not llama_bin_path.exists():
+            pytest.skip(f"{binary_name} (or 'main') binary not found, skipping checksum test.")
+
+        # --- 2. Prepare Model ---
+        output_dir = test_output_dir / "correctness_Q4_K_M"
+        output_dir.mkdir(exist_ok=True)
+
+        quantized_file = output_dir / f"{TEST_MODEL_NAME}_Q4_K_M.gguf"
+
+        if not quantized_file.exists():
+            print(f"\n[CHECKSUM] Quantizing to Q4_K_M for correctness test...")
+            results = converter.convert_and_quantize(
+                model_path=downloaded_model,
+                output_dir=output_dir,
+                quantization_types=["Q4_K_M"],
+                intermediate_type="f16",
+                verbose=False,
+            )
+            assert results, f"Failed to create Q4_K_M model"
+            assert quantized_file.exists()
+
+        # --- 3. Generate Text ---
+        prompt = "def fibonacci(n):"
+        seed = 42
+        n_predict = 20
+
+        cmd = [
+            str(llama_bin_path),
+            "-m", str(quantized_file),
+            "-p", prompt,
+            "--seed", str(seed),
+            "-n", str(n_predict),
+            "--temp", "0.0",
+            "-ngl", "0",      # Force CPU mode (prevents shader hangs)
+            "-no-cnv"         # Force Raw Mode (disables 'user/assistant' chat wrappers)
+        ]
+
+        print(f"\n[CHECKSUM] Running {binary_name}: {' '.join(cmd)}")
+        
+        # KEY FIX: capture_output=True is required to populate result.stdout
+        result = subprocess.run(
+            cmd,
+            capture_output=True, # <--- THIS MUST BE TRUE
+            text=True,
+            timeout=120,
+            stdin=subprocess.DEVNULL # <--- Keep this to kill interactive loops
+        )
+
+        generated_text_with_prompt = result.stdout.strip()
+        
+        if not generated_text_with_prompt:
+             # If this fails, print stderr to see why
+             pytest.fail(f"llama-completion produced no output. Stderr:\n{result.stderr}")
+
+        # Extract only the generated part
+        if prompt in generated_text_with_prompt:
+             generated_text = generated_text_with_prompt.split(prompt, 1)[-1].strip()
+        else:
+             generated_text = generated_text_with_prompt
+
+        # --- 4. Validate Checksum ---
+        project_root = Path(__file__).parent.parent
+        golden_checksum_path = (
+            project_root / "tests" / "golden_outputs" / "qwen2.5_0.5b_q4_k_m_checksum.txt"
+        )
+
+        current_checksum = hashlib.sha256(generated_text.encode("utf-8")).hexdigest()
+        print(f"[CHECKSUM] Generated text: '{generated_text}'")
+        print(f"[CHECKSUM] Current checksum: {current_checksum}")
+
+        if golden_checksum_path.exists():
+            golden_checksum = golden_checksum_path.read_text().strip()
+            print(f"[CHECKSUM] Golden checksum:  {golden_checksum}")
+            assert current_checksum == golden_checksum, \
+                f"Checksum mismatch! New checksum: {current_checksum}"
+        else:
+            print(f"[CHECKSUM] Golden checksum file not found. Creating {golden_checksum_path}")
+            golden_checksum_path.parent.mkdir(parents=True, exist_ok=True)
+            golden_checksum_path.write_text(current_checksum)
+            pytest.fail(
+                f"Created new golden checksum file. Please commit: {golden_checksum_path}. Rerun to verify."
+            )
 
 @pytest.mark.integration
 @pytest.mark.slow
