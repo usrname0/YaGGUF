@@ -237,6 +237,38 @@ def render_convert_tab(
                 on_change=make_config_saver(config, "overwrite_quants", "overwrite_quants_checkbox")
             )
 
+            st.markdown("---")
+
+            keep_split = st.checkbox(
+                "Keep split files",
+                value=config.get("keep_split", False),
+                help="Preserve multi-file model sharding. When enabled, models with multiple shards will maintain their split structure.",
+                key="keep_split_checkbox",
+                on_change=make_config_saver(config, "keep_split", "keep_split_checkbox")
+            )
+
+            # Use a narrow column for the number input to make it smaller
+            split_size_col1, split_size_col2 = st.columns([1, 5])
+
+            with split_size_col1:
+                def save_split_max_size_gb():
+                    config["split_max_size_gb"] = st.session_state.split_max_size_gb_input
+                    save_config(config)
+
+                split_max_size_gb = st.number_input(
+                    "Override split size (GB)",
+                    min_value=0,
+                    max_value=100,
+                    value=config.get("split_max_size_gb", 0),
+                    step=1,
+                    help="Override automatic split size detection (leave at 0 for auto). Example: 5 for 5GB shards.",
+                    key="split_max_size_gb_input",
+                    on_change=save_split_max_size_gb,
+                    disabled=not keep_split
+                )
+
+            st.markdown("Changing split size can cause filename chaos.  A clean output directory is recommended.")
+
         # Advanced quantization options
         with st.expander("Advanced Quantization Options"):
             st.markdown("These options affect how llama.cpp quantizes your model. Most users won't need these.")
@@ -255,14 +287,6 @@ def render_convert_tab(
                 help="Disable k-quant mixtures and quantize all tensors to the same type. Results in more uniform quantization.",
                 key="pure_quantization_checkbox",
                 on_change=make_config_saver(config, "pure_quantization", "pure_quantization_checkbox")
-            )
-
-            keep_split = st.checkbox(
-                "Keep split files",
-                value=config.get("keep_split", False),
-                help="Generate quantized model in the same shards as the input model (for multi-file models).",
-                key="keep_split_checkbox",
-                on_change=make_config_saver(config, "keep_split", "keep_split_checkbox")
             )
 
             st.markdown("---")
@@ -972,6 +996,11 @@ def render_convert_tab(
                     num_gpu_layers_value = int(config.get("imatrix_num_gpu_layers", 0))
                     use_num_gpu_layers = num_gpu_layers_value if num_gpu_layers_value > 0 else None
 
+                    # Convert split size from GUI format (integer GB) to llama.cpp format ("5G", etc.)
+                    split_size_override = None
+                    if split_max_size_gb > 0:
+                        split_size_override = f"{int(split_max_size_gb)}G"
+
                     output_files = converter.convert_and_quantize(
                         model_path=model_path_clean,
                         output_dir=output_dir_clean,
@@ -994,7 +1023,8 @@ def render_convert_tab(
                         output_tensor_type=output_tensor_type if output_tensor_type != "Same as quantization type" else None,
                         token_embedding_type=token_embedding_type if token_embedding_type != "Same as quantization type" else None,
                         overwrite_intermediates=config.get("overwrite_intermediates", False),
-                        overwrite_quants=config.get("overwrite_quants", True)
+                        overwrite_quants=config.get("overwrite_quants", True),
+                        split_max_size_override=split_size_override
                     )
 
                 st.success(f"Successfully processed {len(output_files)} files!")

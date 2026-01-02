@@ -71,6 +71,7 @@ def get_default_config() -> Dict[str, Any]:
         "leave_output_tensor": False,
         "pure_quantization": False,
         "keep_split": False,
+        "split_max_size_gb": 0,
         "output_tensor_type": "Same as quantization type",
         "token_embedding_type": "Same as quantization type",
 
@@ -89,6 +90,10 @@ def get_default_config() -> Dict[str, Any]:
         # Download tab
         "repo_id": "",
         "download_dir": "",
+
+        # Merge tab
+        "merge_input_dir": "",
+        "merge_output_dir": "",
 
         # Custom binaries
         "use_custom_binaries": False,

@@ -816,7 +816,8 @@ class GGUFConverter:
         output_tensor_type: Optional[str] = None,
         token_embedding_type: Optional[str] = None,
         overwrite_intermediates: bool = False,
-        overwrite_quants: bool = True
+        overwrite_quants: bool = True,
+        split_max_size_override: Optional[str] = None
     ) -> List[Path]:
         """
         Convert to GGUF and quantize in one go
@@ -845,6 +846,7 @@ class GGUFConverter:
             token_embedding_type: Override quantization type for token embeddings (e.g., "Q8_0", "F16")
             overwrite_intermediates: Regenerate intermediate formats (F32/F16/BF16) even if they exist
             overwrite_quants: Regenerate quantized formats even if they exist
+            split_max_size_override: Manual override for split size (e.g., "5G"). If None, auto-detect from source model.
 
         Returns:
             List of paths to created quantized files
@@ -985,19 +987,25 @@ class GGUFConverter:
         split_max_tensors = None
         split_max_size = None
         if keep_split and model_path.is_dir():
-            num_shards = self._detect_model_shards(model_path)
-            if num_shards and num_shards > 1:
-                # Calculate approximate size per shard based on source safetensors files
-                safetensors_files = list(model_path.glob("*.safetensors"))
-                if safetensors_files:
-                    total_size = sum(f.stat().st_size for f in safetensors_files)
-                    # Convert to GB and divide by number of shards, then add 20% buffer for GGUF overhead
-                    size_per_shard_gb = (total_size / (1024**3) / num_shards) * 1.2
-                    # Round to nearest integer GB (must be integer for llama.cpp)
-                    size_per_shard_gb_int = max(1, round(size_per_shard_gb))
-                    split_max_size = f"{size_per_shard_gb_int}G"
-                    print(f"{theme['info']}Detected {num_shards} shards in source model{Style.RESET_ALL}")
-                    print(f"{theme['info']}Will preserve sharding in conversion (split_max_size={split_max_size}){Style.RESET_ALL}")
+            # Check if user provided a manual override
+            if split_max_size_override:
+                split_max_size = split_max_size_override
+                print(f"{theme['info']}Using manual split size: {split_max_size}{Style.RESET_ALL}")
+            else:
+                # Auto-detect from source model
+                num_shards = self._detect_model_shards(model_path)
+                if num_shards and num_shards > 1:
+                    # Calculate approximate size per shard based on source safetensors files
+                    safetensors_files = list(model_path.glob("*.safetensors"))
+                    if safetensors_files:
+                        total_size = sum(f.stat().st_size for f in safetensors_files)
+                        # Convert to GB and divide by number of shards, then add 20% buffer for GGUF overhead
+                        size_per_shard_gb = (total_size / (1024**3) / num_shards) * 1.2
+                        # Round to nearest integer GB (must be integer for llama.cpp)
+                        size_per_shard_gb_int = max(1, round(size_per_shard_gb))
+                        split_max_size = f"{size_per_shard_gb_int}G"
+                        print(f"{theme['info']}Detected {num_shards} shards in source model{Style.RESET_ALL}")
+                        print(f"{theme['info']}Will preserve sharding in conversion (split_max_size={split_max_size}){Style.RESET_ALL}")
 
         # Step 1: Convert to GGUF
         intermediate_file = output_dir / f"{model_name}_{intermediate_type.upper()}.gguf"
