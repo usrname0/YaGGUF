@@ -210,33 +210,6 @@ class GGUFConverter:
 
         return Path(model_path)
 
-    def _detect_model_shards(self, model_path: Path) -> Optional[int]:
-        """
-        Detect if a model directory contains sharded safetensors files.
-
-        Args:
-            model_path: Path to the model directory
-
-        Returns:
-            Number of shards if model is sharded, None otherwise
-        """
-        if not model_path.is_dir():
-            return None
-
-        # Look for pattern: model-00001-of-00002.safetensors
-        import re
-        shard_pattern = re.compile(r'-(\d+)-of-(\d+)\.safetensors$')
-
-        max_shards = 0
-        for file in model_path.iterdir():
-            if file.suffix == '.safetensors':
-                match = shard_pattern.search(file.name)
-                if match:
-                    total_shards = int(match.group(2))
-                    max_shards = max(max_shards, total_shards)
-
-        return max_shards if max_shards > 0 else None
-
     def convert_to_gguf(
         self,
         model_path: Union[str, Path],
@@ -817,7 +790,7 @@ class GGUFConverter:
         token_embedding_type: Optional[str] = None,
         overwrite_intermediates: bool = False,
         overwrite_quants: bool = True,
-        split_max_size_override: Optional[str] = None
+        split_max_size: Optional[str] = None
     ) -> List[Path]:
         """
         Convert to GGUF and quantize in one go
@@ -846,7 +819,7 @@ class GGUFConverter:
             token_embedding_type: Override quantization type for token embeddings (e.g., "Q8_0", "F16")
             overwrite_intermediates: Regenerate intermediate formats (F32/F16/BF16) even if they exist
             overwrite_quants: Regenerate quantized formats even if they exist
-            split_max_size_override: Manual override for split size (e.g., "5G"). If None, auto-detect from source model.
+            split_max_size: Maximum size per shard when splitting (e.g., "5G"). If None, no splitting.
 
         Returns:
             List of paths to created quantized files
@@ -983,29 +956,10 @@ class GGUFConverter:
         is_already_gguf = False
         model_name = model_path.name
 
-        # Detect if source model is sharded and we want to preserve splits
+        # Use split settings if user requested splitting
         split_max_tensors = None
-        split_max_size = None
-        if keep_split and model_path.is_dir():
-            # Check if user provided a manual override
-            if split_max_size_override:
-                split_max_size = split_max_size_override
-                print(f"{theme['info']}Using manual split size: {split_max_size}{Style.RESET_ALL}")
-            else:
-                # Auto-detect from source model
-                num_shards = self._detect_model_shards(model_path)
-                if num_shards and num_shards > 1:
-                    # Calculate approximate size per shard based on source safetensors files
-                    safetensors_files = list(model_path.glob("*.safetensors"))
-                    if safetensors_files:
-                        total_size = sum(f.stat().st_size for f in safetensors_files)
-                        # Convert to GB and divide by number of shards, then add 20% buffer for GGUF overhead
-                        size_per_shard_gb = (total_size / (1024**3) / num_shards) * 1.2
-                        # Round to nearest integer GB (must be integer for llama.cpp)
-                        size_per_shard_gb_int = max(1, round(size_per_shard_gb))
-                        split_max_size = f"{size_per_shard_gb_int}G"
-                        print(f"{theme['info']}Detected {num_shards} shards in source model{Style.RESET_ALL}")
-                        print(f"{theme['info']}Will preserve sharding in conversion (split_max_size={split_max_size}){Style.RESET_ALL}")
+        if split_max_size:
+            print(f"{theme['info']}Using split size: {split_max_size}{Style.RESET_ALL}")
 
         # Step 1: Convert to GGUF
         intermediate_file = output_dir / f"{model_name}_{intermediate_type.upper()}.gguf"

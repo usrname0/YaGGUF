@@ -71,7 +71,7 @@ def get_default_config() -> Dict[str, Any]:
         "leave_output_tensor": False,
         "pure_quantization": False,
         "keep_split": False,
-        "split_max_size_gb": 0,
+        "num_shards": 2,
         "output_tensor_type": "Same as quantization type",
         "token_embedding_type": "Same as quantization type",
 

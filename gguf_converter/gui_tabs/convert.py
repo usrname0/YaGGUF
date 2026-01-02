@@ -240,9 +240,9 @@ def render_convert_tab(
             st.markdown("---")
 
             keep_split = st.checkbox(
-                "Keep split files",
+                "Split files",
                 value=config.get("keep_split", False),
-                help="Preserve multi-file model sharding. When enabled, models with multiple shards will maintain their split structure.",
+                help="Split the output model into multiple files. Useful for very large models that exceed file size limits.",
                 key="keep_split_checkbox",
                 on_change=make_config_saver(config, "keep_split", "keep_split_checkbox")
             )
@@ -251,23 +251,22 @@ def render_convert_tab(
             split_size_col1, split_size_col2 = st.columns([1, 5])
 
             with split_size_col1:
-                def save_split_max_size_gb():
-                    config["split_max_size_gb"] = st.session_state.split_max_size_gb_input
+                def save_num_shards():
+                    config["num_shards"] = st.session_state.num_shards_input
                     save_config(config)
 
-                split_max_size_gb = st.number_input(
-                    "Override split size (GB)",
-                    min_value=0,
-                    max_value=100,
-                    value=config.get("split_max_size_gb", 0),
+                num_shards = st.number_input(
+                    "Number of shards",
+                    min_value=2,
+                    value=max(2, config.get("num_shards", 2)),
                     step=1,
-                    help="Override automatic split size detection (leave at 0 for auto). Example: 5 for 5GB shards.",
-                    key="split_max_size_gb_input",
-                    on_change=save_split_max_size_gb,
+                    help="Number of files to split the model into. Must be 2 or greater.",
+                    key="num_shards_input",
+                    on_change=save_num_shards,
                     disabled=not keep_split
                 )
 
-            st.markdown("Changing split size can cause filename chaos.  A clean output directory is recommended.")
+            st.markdown("Changing the number of shards can cause filename chaos. A clean output directory is recommended.")
 
         # Advanced quantization options
         with st.expander("Advanced Quantization Options"):
@@ -996,10 +995,25 @@ def render_convert_tab(
                     num_gpu_layers_value = int(config.get("imatrix_num_gpu_layers", 0))
                     use_num_gpu_layers = num_gpu_layers_value if num_gpu_layers_value > 0 else None
 
-                    # Convert split size from GUI format (integer GB) to llama.cpp format ("5G", etc.)
+                    # Calculate split size based on number of shards
                     split_size_override = None
-                    if split_max_size_gb > 0:
-                        split_size_override = f"{int(split_max_size_gb)}G"
+                    if keep_split and num_shards >= 2:
+                        # Get model size from safetensors files to calculate size per shard
+                        model_path_obj = Path(model_path_clean)
+                        if model_path_obj.is_dir():
+                            safetensors_files = list(model_path_obj.glob("*.safetensors"))
+                            if safetensors_files:
+                                total_size = sum(f.stat().st_size for f in safetensors_files)
+                                # Convert to GB and divide by number of shards, then add 20% buffer for GGUF overhead
+                                size_per_shard_gb = (total_size / (1024**3) / num_shards) * 1.2
+                                # Round to nearest integer GB (must be integer for llama.cpp)
+                                size_per_shard_gb_int = max(1, round(size_per_shard_gb))
+                                split_size_override = f"{size_per_shard_gb_int}G"
+                                print(f"Will split into {num_shards} shards (size per shard: {split_size_override})")
+                            else:
+                                st.warning(f"No safetensors files found in model directory. Cannot calculate split size automatically.")
+                        else:
+                            st.warning(f"Model path is not a directory. Cannot calculate split size automatically.")
 
                     output_files = converter.convert_and_quantize(
                         model_path=model_path_clean,
@@ -1024,7 +1038,7 @@ def render_convert_tab(
                         token_embedding_type=token_embedding_type if token_embedding_type != "Same as quantization type" else None,
                         overwrite_intermediates=config.get("overwrite_intermediates", False),
                         overwrite_quants=config.get("overwrite_quants", True),
-                        split_max_size_override=split_size_override
+                        split_max_size=split_size_override
                     )
 
                 st.success(f"Successfully processed {len(output_files)} files!")
