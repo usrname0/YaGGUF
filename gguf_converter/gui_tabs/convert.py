@@ -221,64 +221,80 @@ def render_convert_tab(
 
         # File Handling section
         with st.expander("File Handling"):
-            overwrite_intermediates = st.checkbox(
-                "Overwrite intermediates (F32, F16, BF16)",
-                value=config.get("overwrite_intermediates", False),
-                help="If enabled, regenerate intermediate formats even if they exist. If disabled (default), reuse existing intermediate files to save time.",
-                key="overwrite_intermediates_checkbox",
-                on_change=make_config_saver(config, "overwrite_intermediates", "overwrite_intermediates_checkbox")
-            )
+            # Two-column layout: radio buttons on left, options on right
+            radio_col, options_col = st.columns([1, 3])
 
-            overwrite_quants = st.checkbox(
-                "Overwrite quants",
-                value=config.get("overwrite_quants", True),
-                help="If enabled (default), regenerate quantized formats even if they exist. If disabled, skip quantization for files that already exist.",
-                key="overwrite_quants_checkbox",
-                on_change=make_config_saver(config, "overwrite_quants", "overwrite_quants_checkbox")
-            )
-
-            st.markdown("---")
-
-            keep_split = st.checkbox(
-                "Split files",
-                value=config.get("keep_split", False),
-                help="Split the output model into multiple files. Useful for very large models that exceed file size limits.",
-                key="keep_split_checkbox",
-                on_change=make_config_saver(config, "keep_split", "keep_split_checkbox")
-            )
-
-            # Use a narrow column for the number input to make it smaller
-            split_size_col1, split_size_col2 = st.columns([1, 5])
-
-            with split_size_col1:
-                def save_num_shards():
-                    config["num_shards"] = st.session_state.num_shards_input
+            with radio_col:
+                # File handling mode
+                def save_file_mode():
+                    config["file_mode"] = st.session_state.file_mode_radio
                     save_config(config)
 
-                num_shards = st.number_input(
-                    "Number of shards",
-                    min_value=2,
-                    value=max(2, config.get("num_shards", 2)),
-                    step=1,
-                    help="Number of files to split the model into. Must be 2 or greater.",
-                    key="num_shards_input",
-                    on_change=save_num_shards,
-                    disabled=not keep_split
+                file_mode = st.radio(
+                    "File handling mode",
+                    options=["Single files", "Split files"],
+                    index=0 if config.get("file_mode", "Single files") == "Single files" else 1,
+                    key="file_mode_radio",
+                    on_change=save_file_mode
                 )
 
-            st.markdown("Changing the number of shards can cause filename chaos. A clean output directory is recommended.")
+                # Add spacing to prevent size changes when switching modes
+                st.markdown("<br><br><br>", unsafe_allow_html=True)
+
+            keep_split = (file_mode == "Split files")
+
+            with options_col:
+                if file_mode == "Split files":
+                    st.markdown("**Split file options:**")
+
+                    st.markdown("- Split files will always overwrite existing split intermediates and quants.")
+
+                    # Use a narrow column for the number input to make it smaller
+                    split_size_col1, split_size_col2 = st.columns([1, 2])
+
+                    with split_size_col1:
+                        def save_max_shard_size():
+                            config["max_shard_size_gb"] = st.session_state.max_shard_size_input
+                            save_config(config)
+
+                        max_shard_size_gb = st.number_input(
+                            "Max size per shard (GB)",
+                            min_value=0.1,
+                            value=config.get("max_shard_size_gb", 2.0),
+                            step=0.1,
+                            format="%.1f",
+                            help="Maximum size per shard file in GB. llama.cpp will create as many shards as needed to stay under this limit.",
+                            key="max_shard_size_input",
+                            on_change=save_max_shard_size
+                        )
+
+                    # Split mode doesn't use these settings, but set defaults for the converter call
+                    overwrite_intermediates = True  # Always overwrite in split mode
+                    overwrite_quants = True  # Always overwrite in split mode
+                else:
+                    st.markdown("**Single file options:**")
+
+                    # Single file options - show overwrite checkboxes
+                    max_shard_size_gb = 0  # Not used in single file mode
+
+                    overwrite_intermediates = st.checkbox(
+                        "Overwrite intermediates (F32, F16, BF16)",
+                        value=config.get("overwrite_intermediates", True),
+                        help="If enabled (default), regenerate intermediate formats even if they exist. If disabled, reuse existing intermediate files to save time.",
+                        key="overwrite_intermediates_checkbox",
+                        on_change=make_config_saver(config, "overwrite_intermediates", "overwrite_intermediates_checkbox")
+                    )
+
+                    overwrite_quants = st.checkbox(
+                        "Overwrite quants",
+                        value=config.get("overwrite_quants", True),
+                        help="If enabled (default), regenerate quantized formats even if they exist. If disabled, skip quantization for files that already exist.",
+                        key="overwrite_quants_checkbox",
+                        on_change=make_config_saver(config, "overwrite_quants", "overwrite_quants_checkbox")
+                    )
 
         # Advanced quantization options
         with st.expander("Advanced Quantization Options"):
-            st.markdown("These options affect how llama.cpp quantizes your model. Most users won't need these.")
-
-            leave_output_tensor = st.checkbox(
-                "Leave output tensor unquantized",
-                value=config.get("leave_output_tensor", False),
-                help="Keep output.weight at higher precision for better quality (increases model size slightly). Especially useful when requantizing.",
-                key="leave_output_tensor_checkbox",
-                on_change=make_config_saver(config, "leave_output_tensor", "leave_output_tensor_checkbox")
-            )
 
             pure_quantization = st.checkbox(
                 "Pure quantization (disable mixtures)",
@@ -288,38 +304,62 @@ def render_convert_tab(
                 on_change=make_config_saver(config, "pure_quantization", "pure_quantization_checkbox")
             )
 
-            st.markdown("---")
-            st.markdown("**Selective Tensor Quantization:** Override quantization type for specific tensors. Use these to keep certain layers at higher precision.")
+            if pure_quantization:
+                st.markdown('<p style="color: gray;"><strong>Selective Tensor Quantization:</strong> (disabled due to "Pure quantization")</p>', unsafe_allow_html=True)
+            else:
+                st.markdown("**Selective Tensor Quantization:** Keep certain layers at higher precision.")
 
-            # Output tensor type
-            tensor_type_options = ["Same as quantization type", "Q8_0", "Q6_K", "Q5_K_M", "F16", "F32"]
+            # Output tensor type and token embedding type side-by-side
+            output_tensor_options = ["Same as quant type (default)", "Unquantized", "Q8_0", "Q6_K", "Q5_K_M", "F16", "F32"]
+            token_embedding_options = ["Same as quant type (default)", "Q8_0", "Q6_K", "Q5_K_M", "F16", "F32"]
 
-            def save_output_tensor_type():
-                config["output_tensor_type"] = st.session_state.output_tensor_type_select
-                save_config(config)
+            tensor_col1, tensor_col2 = st.columns(2)
 
-            output_tensor_type = st.selectbox(
-                "Output tensor type",
-                options=tensor_type_options,
-                index=tensor_type_options.index(config.get("output_tensor_type", "Same as quantization type")),
-                help="Quantization type for output.weight tensor. Keeping this at higher precision (Q8_0 or F16) can improve quality at the cost of slightly larger file size.",
-                key="output_tensor_type_select",
-                on_change=save_output_tensor_type
-            )
+            with tensor_col1:
+                def save_output_tensor_type():
+                    config["output_tensor_type"] = st.session_state.output_tensor_type_select
+                    save_config(config)
 
-            # Token embedding type
-            def save_token_embedding_type():
-                config["token_embedding_type"] = st.session_state.token_embedding_type_select
-                save_config(config)
+                # Handle migration from old label and old checkbox
+                saved_output_value = config.get("output_tensor_type", "Same as quant type (default)")
+                if saved_output_value == "Same as quantization type":
+                    saved_output_value = "Same as quant type (default)"
+                # Migrate from old "leave_output_tensor" checkbox
+                if config.get("leave_output_tensor", False) and saved_output_value == "Same as quant type (default)":
+                    saved_output_value = "Unquantized"
+                    config["output_tensor_type"] = "Unquantized"
+                    config["leave_output_tensor"] = False  # Clear old setting
+                    save_config(config)
 
-            token_embedding_type = st.selectbox(
-                "Token embedding type",
-                options=tensor_type_options,
-                index=tensor_type_options.index(config.get("token_embedding_type", "Same as quantization type")),
-                help="Quantization type for token embeddings. Keeping this at higher precision can improve accuracy for certain tasks.",
-                key="token_embedding_type_select",
-                on_change=save_token_embedding_type
-            )
+                output_tensor_type = st.selectbox(
+                    "Override output tensor type",
+                    options=output_tensor_options,
+                    index=output_tensor_options.index(saved_output_value),
+                    help="Quantization type for output.weight tensor. Select 'Unquantized' or a higher precision type (Q8_0, F16) to improve quality at the cost of slightly larger file size." if not pure_quantization else "Disabled when Pure quantization is enabled",
+                    key="output_tensor_type_select",
+                    on_change=save_output_tensor_type,
+                    disabled=pure_quantization
+                )
+
+            with tensor_col2:
+                def save_token_embedding_type():
+                    config["token_embedding_type"] = st.session_state.token_embedding_type_select
+                    save_config(config)
+
+                # Handle migration from old label
+                saved_token_value = config.get("token_embedding_type", "Same as quant type (default)")
+                if saved_token_value == "Same as quantization type":
+                    saved_token_value = "Same as quant type (default)"
+
+                token_embedding_type = st.selectbox(
+                    "Override token embedding type",
+                    options=token_embedding_options,
+                    index=token_embedding_options.index(saved_token_value),
+                    help="Quantization type for token embeddings. Keeping this at higher precision can improve accuracy for certain tasks." if not pure_quantization else "Disabled when Pure quantization is enabled",
+                    key="token_embedding_type_select",
+                    on_change=save_token_embedding_type,
+                    disabled=pure_quantization
+                )
 
         if "other_quants" not in config:
             config["other_quants"] = {}
@@ -995,24 +1035,21 @@ def render_convert_tab(
                     num_gpu_layers_value = int(config.get("imatrix_num_gpu_layers", 0))
                     use_num_gpu_layers = num_gpu_layers_value if num_gpu_layers_value > 0 else None
 
-                    # Calculate split size based on number of shards
+                    # Format split size for llama.cpp
                     split_size_override = None
-                    if keep_split and num_shards >= 2:
-                        # Get model size from safetensors files to calculate size per shard
-                        model_path_obj = Path(model_path_clean)
-                        if model_path_obj.is_dir():
-                            safetensors_files = list(model_path_obj.glob("*.safetensors"))
-                            if safetensors_files:
-                                total_size = sum(f.stat().st_size for f in safetensors_files)
-                                # Convert to GB and divide by number of shards, then add 20% buffer for GGUF overhead
-                                size_per_shard_gb = (total_size / (1024**3) / num_shards) * 1.2
-                                # Round to nearest integer GB (must be integer for llama.cpp)
-                                size_per_shard_gb_int = max(1, round(size_per_shard_gb))
-                                split_size_override = f"{size_per_shard_gb_int}G"
-                            else:
-                                st.warning(f"No safetensors files found in model directory. Cannot calculate split size automatically.")
+                    if keep_split and max_shard_size_gb > 0:
+                        # Format as "2.5G" or "2G" depending on whether it's a whole number
+                        if max_shard_size_gb == int(max_shard_size_gb):
+                            split_size_override = f"{int(max_shard_size_gb)}G"
                         else:
-                            st.warning(f"Model path is not a directory. Cannot calculate split size automatically.")
+                            split_size_override = f"{max_shard_size_gb:.1f}G"
+
+                    # Handle output tensor type selection
+                    leave_output_tensor = (output_tensor_type == "Unquantized")
+                    output_tensor_type_param = None if output_tensor_type in ["Same as quant type (default)", "Unquantized"] else output_tensor_type
+
+                    # Handle token embedding type selection
+                    token_embedding_type_param = None if token_embedding_type in ["Same as quant type (default)", "Unquantized"] else token_embedding_type
 
                     output_files = converter.convert_and_quantize(
                         model_path=model_path_clean,
@@ -1033,8 +1070,8 @@ def render_convert_tab(
                         leave_output_tensor=leave_output_tensor,
                         pure_quantization=pure_quantization,
                         keep_split=keep_split,
-                        output_tensor_type=output_tensor_type if output_tensor_type != "Same as quantization type" else None,
-                        token_embedding_type=token_embedding_type if token_embedding_type != "Same as quantization type" else None,
+                        output_tensor_type=output_tensor_type_param,
+                        token_embedding_type=token_embedding_type_param,
                         overwrite_intermediates=config.get("overwrite_intermediates", False),
                         overwrite_quants=config.get("overwrite_quants", True),
                         split_max_size=split_size_override

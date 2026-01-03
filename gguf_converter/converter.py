@@ -211,6 +211,36 @@ class GGUFConverter:
         return Path(model_path)
 
     @staticmethod
+    def _get_shard_count(shard_files: List[Path]) -> Optional[int]:
+        """
+        Get the total shard count from a set of shard files.
+
+        Args:
+            shard_files: List of shard files (e.g., model-00001-of-00009.gguf, ...)
+
+        Returns:
+            Total shard count if consistent across all files, None otherwise
+        """
+        if not shard_files:
+            return None
+
+        import re
+        shard_pattern = re.compile(r'-(\d+)-of-(\d+)\.gguf$')
+
+        total_count = None
+        for file in shard_files:
+            match = shard_pattern.search(file.name)
+            if match:
+                shard_total = int(match.group(2))
+                if total_count is None:
+                    total_count = shard_total
+                elif total_count != shard_total:
+                    # Inconsistent total counts
+                    return None
+
+        return total_count
+
+    @staticmethod
     def _validate_shard_set(shard_files: List[Path]) -> bool:
         """
         Validate that a set of shard files is complete.
@@ -863,7 +893,7 @@ class GGUFConverter:
             token_embedding_type: Override quantization type for token embeddings (e.g., "Q8_0", "F16")
             overwrite_intermediates: Regenerate intermediate formats (F32/F16/BF16) even if they exist
             overwrite_quants: Regenerate quantized formats even if they exist
-            split_max_size: Maximum size per shard when splitting (e.g., "5G"). If None, no splitting.
+            split_max_size: Maximum size per shard when splitting (e.g., "5G" or "2.5G"). If None, no splitting.
 
         Returns:
             List of paths to created quantized files
@@ -1014,42 +1044,22 @@ class GGUFConverter:
             intermediate_shards = sorted(output_dir.glob(f"{intermediate_file.stem}-*-of-*.gguf"))
 
             if intermediate_shards:
-                # Validate that we have a complete set
-                is_complete = self._validate_shard_set(intermediate_shards)
+                # Split files always regenerate - delete old shards
+                existing_shard_count = self._get_shard_count(intermediate_shards)
+                print(f"{theme['warning']}\nExisting {existing_shard_count}-shard intermediate set found{Style.RESET_ALL}")
+                print(f"{theme['warning']}Deleting and regenerating (split mode always overwrites)...{Style.RESET_ALL}")
+                for shard in intermediate_shards:
+                    print(f"{theme['warning']}  Deleting: {shard.name}{Style.RESET_ALL}")
+                    shard.unlink()
 
-                if not is_complete:
-                    print(f"{theme['warning']}\nIncomplete intermediate shard set found ({len(intermediate_shards)} file(s)){Style.RESET_ALL}")
-                    print(f"{theme['warning']}Overwriting incomplete set...{Style.RESET_ALL}")
-                    for shard in intermediate_shards:
-                        print(f"{theme['warning']}  - {shard.name}{Style.RESET_ALL}")
-                    intermediate_file = self.convert_to_gguf(
-                        model_path=model_path,
-                        output_path=intermediate_file,
-                        output_type=intermediate_type,
-                        verbose=verbose,
-                        split_max_size=split_max_size,
-                        split_max_tensors=split_max_tensors
-                    )
-                elif overwrite_intermediates:
-                    print(f"{theme['info']}\nComplete split intermediate set exists ({len(intermediate_shards)} shard(s)){Style.RESET_ALL}")
-                    print(f"{theme['info']}Overwriting (overwrite_intermediates=True)...{Style.RESET_ALL}")
-                    for shard in intermediate_shards:
-                        print(f"{theme['warning']}Overwriting: {shard.name}{Style.RESET_ALL}")
-                    intermediate_file = self.convert_to_gguf(
-                        model_path=model_path,
-                        output_path=intermediate_file,
-                        output_type=intermediate_type,
-                        verbose=verbose,
-                        split_max_size=split_max_size,
-                        split_max_tensors=split_max_tensors
-                    )
-                else:
-                    print(f"{theme['success']}\nComplete split intermediate set exists ({len(intermediate_shards)} shard(s)){Style.RESET_ALL}")
-                    print(f"{theme['info']}Reusing existing files...{Style.RESET_ALL}")
-                    for shard in intermediate_shards:
-                        print(f"{theme['metadata']}  - {shard.name}{Style.RESET_ALL}")
-                    # Use first shard as the intermediate file (llama-imatrix and llama-quantize auto-detect rest)
-                    intermediate_file = intermediate_shards[0]
+                intermediate_file = self.convert_to_gguf(
+                    model_path=model_path,
+                    output_path=intermediate_file,
+                    output_type=intermediate_type,
+                    verbose=verbose,
+                    split_max_size=split_max_size,
+                    split_max_tensors=split_max_tensors
+                )
             else:
                 # No split files exist, create them
                 print(f"{theme['info']}Converting {model_name} to GGUF (with splitting)...{Style.RESET_ALL}")
@@ -1166,46 +1176,25 @@ class GGUFConverter:
                         output_shards = sorted(output_dir.glob(f"{output_file.stem}-*-of-*.gguf"))
 
                         if output_shards:
-                            # Validate that we have a complete set
-                            is_complete = self._validate_shard_set(output_shards)
+                            # Split files always regenerate - delete old shards
+                            existing_shard_count = self._get_shard_count(output_shards)
+                            print(f"{theme['warning']}{quant_type} existing {existing_shard_count}-shard set found{Style.RESET_ALL}")
+                            print(f"{theme['warning']}Deleting and regenerating (split mode always overwrites)...{Style.RESET_ALL}")
+                            for shard in output_shards:
+                                print(f"{theme['warning']}  Deleting: {shard.name}{Style.RESET_ALL}")
+                                shard.unlink()
 
-                            if not is_complete:
-                                print(f"{theme['warning']}{quant_type} incomplete shard set found ({len(output_shards)} file(s)){Style.RESET_ALL}")
-                                print(f"{theme['warning']}Overwriting incomplete set...{Style.RESET_ALL}")
-                                for shard in output_shards:
-                                    print(f"{theme['warning']}  - {shard.name}{Style.RESET_ALL}")
-                                actual_output = self.convert_to_gguf(
-                                    model_path=model_path,
-                                    output_path=output_file,
-                                    output_type=quant_type.lower(),
-                                    verbose=verbose,
-                                    split_max_size=split_max_size,
-                                    split_max_tensors=split_max_tensors
-                                )
-                                new_shards = sorted(output_dir.glob(f"{output_file.stem}-*-of-*.gguf"))
-                                quantized_files.extend(new_shards if new_shards else [actual_output])
-                            elif overwrite_intermediates:
-                                print(f"{theme['info']}{quant_type} complete shard set exists ({len(output_shards)} shard(s)){Style.RESET_ALL}")
-                                print(f"{theme['info']}Overwriting (overwrite_intermediates=True)...{Style.RESET_ALL}")
-                                for shard in output_shards:
-                                    print(f"{theme['warning']}Overwriting: {shard.name}{Style.RESET_ALL}")
-                                actual_output = self.convert_to_gguf(
-                                    model_path=model_path,
-                                    output_path=output_file,
-                                    output_type=quant_type.lower(),
-                                    verbose=verbose,
-                                    split_max_size=split_max_size,
-                                    split_max_tensors=split_max_tensors
-                                )
-                                # Get all new shards
-                                new_shards = sorted(output_dir.glob(f"{output_file.stem}-*-of-*.gguf"))
-                                quantized_files.extend(new_shards if new_shards else [actual_output])
-                            else:
-                                print(f"{theme['success']}{quant_type} complete shard set exists ({len(output_shards)} shard(s)){Style.RESET_ALL}")
-                                print(f"{theme['info']}Reusing existing files...{Style.RESET_ALL}")
-                                for shard in output_shards:
-                                    print(f"{theme['metadata']}  - {shard.name}{Style.RESET_ALL}")
-                                quantized_files.extend(output_shards)
+                            actual_output = self.convert_to_gguf(
+                                model_path=model_path,
+                                output_path=output_file,
+                                output_type=quant_type.lower(),
+                                verbose=verbose,
+                                split_max_size=split_max_size,
+                                split_max_tensors=split_max_tensors
+                            )
+                            # Get all new shards
+                            new_shards = sorted(output_dir.glob(f"{output_file.stem}-*-of-*.gguf"))
+                            quantized_files.extend(new_shards if new_shards else [actual_output])
                         else:
                             # No split files exist, create them
                             print(f"{theme['info']}Converting {model_name} to {quant_type} from source (with splitting)...{Style.RESET_ALL}")
@@ -1255,26 +1244,30 @@ class GGUFConverter:
                     output_shards = sorted(output_dir.glob(f"{output_file.stem}-*-of-*.gguf"))
 
                     if output_shards:
-                        # Validate that we have a complete set
+                        # Check if we should reuse existing shards
                         is_complete = self._validate_shard_set(output_shards)
+                        existing_shard_count = self._get_shard_count(output_shards)
 
-                        if not is_complete:
-                            print(f"{theme['warning']}{quant_type} incomplete shard set found ({len(output_shards)} file(s)){Style.RESET_ALL}")
-                            print(f"{theme['warning']}Overwriting incomplete set...{Style.RESET_ALL}")
-                            for shard in output_shards:
-                                print(f"{theme['warning']}  - {shard.name}{Style.RESET_ALL}")
-                        elif not overwrite_quants:
-                            print(f"{theme['success']}{quant_type} complete shard set exists ({len(output_shards)} shard(s)){Style.RESET_ALL}")
+                        if is_complete and not overwrite_quants:
+                            print(f"{theme['warning']}{quant_type} existing {existing_shard_count}-shard set found{Style.RESET_ALL}")
+                            print(f"{theme['warning']}Note: New max_shard_size setting may produce a different shard count{Style.RESET_ALL}")
                             print(f"{theme['info']}Reusing existing files...{Style.RESET_ALL}")
                             for shard in output_shards:
                                 print(f"{theme['metadata']}  - {shard.name}{Style.RESET_ALL}")
                             quantized_files.extend(output_shards)
                             continue  # Skip to next quant type
+
+                        # Need to regenerate - delete old shards
+                        if not is_complete:
+                            print(f"{theme['warning']}{quant_type} incomplete shard set found ({len(output_shards)} file(s)){Style.RESET_ALL}")
                         else:
-                            print(f"{theme['info']}{quant_type} complete shard set exists ({len(output_shards)} shard(s)){Style.RESET_ALL}")
+                            print(f"{theme['info']}{quant_type} existing {existing_shard_count}-shard set found{Style.RESET_ALL}")
                             print(f"{theme['info']}Overwriting (overwrite_quants=True)...{Style.RESET_ALL}")
-                            for shard in output_shards:
-                                print(f"{theme['warning']}Overwriting: {shard.name}{Style.RESET_ALL}")
+
+                        print(f"{theme['warning']}Deleting old shards...{Style.RESET_ALL}")
+                        for shard in output_shards:
+                            print(f"{theme['warning']}  Deleting: {shard.name}{Style.RESET_ALL}")
+                            shard.unlink()
 
                     # Need to quantize (either no files, incomplete set, or overwrite_quants=True)
                     actual_output_path = self.quantize(

@@ -68,15 +68,14 @@ def get_default_config() -> Dict[str, Any]:
         "model_path": "",
         "output_dir": "",
         "intermediate_type": "F16",
-        "leave_output_tensor": False,
         "pure_quantization": False,
-        "keep_split": False,
-        "num_shards": 2,
-        "output_tensor_type": "Same as quantization type",
-        "token_embedding_type": "Same as quantization type",
+        "file_mode": "Single files",
+        "max_shard_size_gb": 2.0,
+        "output_tensor_type": "Same as quant type (default)",
+        "token_embedding_type": "Same as quant type (default)",
 
         # File handling options
-        "overwrite_intermediates": False,  # Reuse F32/F16/BF16 by default
+        "overwrite_intermediates": True,  # Overwrite F32/F16/BF16 by default
         "overwrite_quants": True,  # Overwrite quantized formats by default
 
         # Quantization types - all stored in other_quants dict
