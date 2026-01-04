@@ -214,3 +214,6 @@ bin/
 nul
 CLAUDE.md
 GEMINI.md
+
+# Test golden outputs (per-system baselines)
+tests/golden_outputs/qwen2.5_0.5b_q4_k_m_checksum.txt

@@ -506,9 +506,9 @@ class TestFunctionalCorrectness:
             assert quantized_file.exists()
 
         # --- 3. Generate Text ---
-        prompt = "def fibonacci(n):"
+        prompt = "Explain the golden ratio"
         seed = 42
-        n_predict = 20
+        n_predict = 30
 
         cmd = [
             str(llama_bin_path),
@@ -544,6 +544,11 @@ class TestFunctionalCorrectness:
         else:
              generated_text = generated_text_with_prompt
 
+        # Basic sanity checks before checksum validation
+        assert len(generated_text) > 10, "Generated text is too short - model may be broken"
+        assert len(generated_text) < 5000, "Generated text is suspiciously long - possible corruption"
+        assert not generated_text.startswith("�"), "Output contains unicode errors - model may be corrupt"
+
         # --- 4. Validate Checksum ---
         project_root = Path(__file__).parent.parent
         golden_checksum_path = (
@@ -551,14 +556,23 @@ class TestFunctionalCorrectness:
         )
 
         current_checksum = hashlib.sha256(generated_text.encode("utf-8")).hexdigest()
-        print(f"[CHECKSUM] Generated text: '{generated_text}'")
+        print(f"\n[CHECKSUM] Generated text ({len(generated_text)} chars):")
+        print(f"[CHECKSUM]   '{generated_text[:100]}{'...' if len(generated_text) > 100 else ''}'")
         print(f"[CHECKSUM] Current checksum: {current_checksum}")
 
         if golden_checksum_path.exists():
             golden_checksum = golden_checksum_path.read_text().strip()
             print(f"[CHECKSUM] Golden checksum:  {golden_checksum}")
+
+            if current_checksum != golden_checksum:
+                print(f"\n[CHECKSUM] MISMATCH DETECTED!")
+                print(f"[CHECKSUM] This could mean:")
+                print(f"[CHECKSUM]   - llama.cpp version changed (update golden checksum)")
+                print(f"[CHECKSUM]   - Model quantization is broken (investigate!)")
+                print(f"[CHECKSUM]   - Platform differences (rare with seed + temp=0)")
+
             assert current_checksum == golden_checksum, \
-                f"Checksum mismatch! New checksum: {current_checksum}"
+                f"Checksum mismatch!\n  Expected: {golden_checksum}\n  Got:      {current_checksum}\n  Full text: {generated_text}"
         else:
             print(f"[CHECKSUM] Golden checksum file not found. Creating {golden_checksum_path}")
             golden_checksum_path.parent.mkdir(parents=True, exist_ok=True)
