@@ -843,6 +843,8 @@ class GGUFConverter:
         output_dir: Union[str, Path],
         quantization_types: List[str] = ["Q4_K_M"],
         intermediate_type: str = "f16",
+        custom_intermediate_path: Optional[Union[str, Path]] = None,
+        custom_intermediate_format: Optional[str] = None,
         verbose: bool = False,
         parallel: bool = True,
         num_workers: Optional[int] = None,
@@ -874,6 +876,8 @@ class GGUFConverter:
             output_dir: Directory for output files
             quantization_types: List of quantization types to create
             intermediate_type: Intermediate format (f16 or f32)
+            custom_intermediate_path: Path to existing intermediate GGUF file to use instead of generating
+            custom_intermediate_format: Format of custom intermediate file (F16/F32/BF16)
             verbose: Enable verbose logging
             parallel: Ignored (kept for API compatibility)
             num_workers: Ignored (kept for API compatibility)
@@ -1000,15 +1004,20 @@ class GGUFConverter:
             print(f"{theme['info']}Downloading from HuggingFace: {model_path_str}{Style.RESET_ALL}")
             model_path = self.download_model(model_path_str, output_dir / "downloads")
 
-        # Validate model path is a source model directory with config.json
-        if model_path.is_dir():
-            if not (model_path / "config.json").exists():
-                raise ValueError(
-                    f"Model path must be a HuggingFace model directory with config.json.\n"
-                    f"The directory '{model_path}' does not contain config.json."
-                )
-        elif not model_path.is_file():
-            raise ValueError(f"Model path does not exist: {model_path}")
+        # Validate model path - skip config.json check if using custom intermediate
+        # Check both path and format to ensure we're actually using a custom intermediate
+        using_custom_intermediate = custom_intermediate_path and custom_intermediate_format
+
+        if not using_custom_intermediate:
+            # Only validate source model directory when converting from source
+            if model_path.is_dir():
+                if not (model_path / "config.json").exists():
+                    raise ValueError(
+                        f"Model path must be a HuggingFace model directory with config.json.\n"
+                        f"The directory '{model_path}' does not contain config.json."
+                    )
+            elif not model_path.is_file():
+                raise ValueError(f"Model path does not exist: {model_path}")
 
         # Check if imatrix enforcement is disabled for IQ quants
         IMATRIX_REQUIRED_TYPES = [
@@ -1035,69 +1044,87 @@ class GGUFConverter:
         if split_max_size:
             print(f"{theme['info']}Splitting files with max size per shard: {split_max_size}{Style.RESET_ALL}")
 
-        # Step 1: Convert to GGUF
-        intermediate_file = output_dir / f"{model_name}_{intermediate_type.upper()}.gguf"
+        # Step 1: Convert to GGUF or use custom intermediate
+        if using_custom_intermediate:
+            # Use provided custom intermediate file
+            intermediate_file = Path(custom_intermediate_path)
 
-        # Check for existing intermediate files based on keep_split mode
-        if split_max_size or split_max_tensors:
-            # Keep split mode: check for split intermediate files, ignore single file
-            intermediate_shards = sorted(output_dir.glob(f"{intermediate_file.stem}-*-of-*.gguf"))
+            # Validate file exists
+            if not intermediate_file.exists():
+                raise FileNotFoundError(f"Custom intermediate file not found: {intermediate_file}")
 
-            if intermediate_shards:
-                # Split files always regenerate - delete old shards
-                existing_shard_count = self._get_shard_count(intermediate_shards)
-                print(f"{theme['warning']}\nExisting {existing_shard_count}-shard intermediate set found{Style.RESET_ALL}")
-                print(f"{theme['warning']}Deleting and regenerating (split mode always overwrites)...{Style.RESET_ALL}")
-                for shard in intermediate_shards:
-                    print(f"{theme['warning']}  Deleting: {shard.name}{Style.RESET_ALL}")
-                    shard.unlink()
+            # Override intermediate_type to match custom file
+            if custom_intermediate_format:
+                intermediate_type = custom_intermediate_format.upper()
 
-                # Don't reassign intermediate_file - keep it as base path for split mode
-                self.convert_to_gguf(
-                    model_path=model_path,
-                    output_path=intermediate_file,
-                    output_type=intermediate_type,
-                    verbose=verbose,
-                    split_max_size=split_max_size,
-                    split_max_tensors=split_max_tensors
-                )
-            else:
-                # No split files exist, create them
-                print(f"{theme['info']}Converting {model_name} to GGUF (with splitting)...{Style.RESET_ALL}")
-                # Don't reassign intermediate_file - keep it as base path for split mode
-                self.convert_to_gguf(
-                    model_path=model_path,
-                    output_path=intermediate_file,
-                    output_type=intermediate_type,
-                    verbose=verbose,
-                    split_max_size=split_max_size,
-                    split_max_tensors=split_max_tensors
-                )
+            print(f"{theme['success']}\nUsing custom intermediate file: {intermediate_file.name}{Style.RESET_ALL}")
+            print(f"{theme['info']}Format: {intermediate_type}{Style.RESET_ALL}")
+            print(f"{theme['info']}Size: {intermediate_file.stat().st_size / (1024**3):.2f} GB{Style.RESET_ALL}")
+            print(f"{theme['info']}Skipping conversion step...{Style.RESET_ALL}\n")
         else:
-            # Normal mode: check for single intermediate file, ignore split files
-            if intermediate_file.exists():
-                if overwrite_intermediates:
-                    print(f"{theme['info']}\nIntermediate file exists: {intermediate_file.name}{Style.RESET_ALL}")
-                    print(f"{theme['info']}Overwriting (overwrite_intermediates=True)...{Style.RESET_ALL}")
-                    print(f"{theme['warning']}Overwriting: {intermediate_file}{Style.RESET_ALL}")
+            # Normal conversion workflow
+            intermediate_file = output_dir / f"{model_name}_{intermediate_type.upper()}.gguf"
+
+            # Check for existing intermediate files based on keep_split mode
+            if split_max_size or split_max_tensors:
+                # Keep split mode: check for split intermediate files, ignore single file
+                intermediate_shards = sorted(output_dir.glob(f"{intermediate_file.stem}-*-of-*.gguf"))
+
+                if intermediate_shards:
+                    # Split files always regenerate - delete old shards
+                    existing_shard_count = self._get_shard_count(intermediate_shards)
+                    print(f"{theme['warning']}\nExisting {existing_shard_count}-shard intermediate set found{Style.RESET_ALL}")
+                    print(f"{theme['warning']}Deleting and regenerating (split mode always overwrites)...{Style.RESET_ALL}")
+                    for shard in intermediate_shards:
+                        print(f"{theme['warning']}  Deleting: {shard.name}{Style.RESET_ALL}")
+                        shard.unlink()
+
+                    # Don't reassign intermediate_file - keep it as base path for split mode
+                    self.convert_to_gguf(
+                        model_path=model_path,
+                        output_path=intermediate_file,
+                        output_type=intermediate_type,
+                        verbose=verbose,
+                        split_max_size=split_max_size,
+                        split_max_tensors=split_max_tensors
+                    )
+                else:
+                    # No split files exist, create them
+                    print(f"{theme['info']}Converting {model_name} to GGUF (with splitting)...{Style.RESET_ALL}")
+                    # Don't reassign intermediate_file - keep it as base path for split mode
+                    self.convert_to_gguf(
+                        model_path=model_path,
+                        output_path=intermediate_file,
+                        output_type=intermediate_type,
+                        verbose=verbose,
+                        split_max_size=split_max_size,
+                        split_max_tensors=split_max_tensors
+                    )
+            else:
+                # Normal mode: check for single intermediate file, ignore split files
+                if intermediate_file.exists():
+                    if overwrite_intermediates:
+                        print(f"{theme['info']}\nIntermediate file exists: {intermediate_file.name}{Style.RESET_ALL}")
+                        print(f"{theme['info']}Overwriting (overwrite_intermediates=True)...{Style.RESET_ALL}")
+                        print(f"{theme['warning']}Overwriting: {intermediate_file}{Style.RESET_ALL}")
+                        intermediate_file = self.convert_to_gguf(
+                            model_path=model_path,
+                            output_path=intermediate_file,
+                            output_type=intermediate_type,
+                            verbose=verbose
+                        )
+                    else:
+                        print(f"{theme['success']}\nIntermediate file already exists: {intermediate_file}{Style.RESET_ALL}")
+                        print(f"{theme['info']}Skipping conversion, using existing file...{Style.RESET_ALL}")
+                else:
+                    # No single file exists, create it
+                    print(f"{theme['info']}Converting {model_name} to GGUF...{Style.RESET_ALL}")
                     intermediate_file = self.convert_to_gguf(
                         model_path=model_path,
                         output_path=intermediate_file,
                         output_type=intermediate_type,
                         verbose=verbose
                     )
-                else:
-                    print(f"{theme['success']}\nIntermediate file already exists: {intermediate_file}{Style.RESET_ALL}")
-                    print(f"{theme['info']}Skipping conversion, using existing file...{Style.RESET_ALL}")
-            else:
-                # No single file exists, create it
-                print(f"{theme['info']}Converting {model_name} to GGUF...{Style.RESET_ALL}")
-                intermediate_file = self.convert_to_gguf(
-                    model_path=model_path,
-                    output_path=intermediate_file,
-                    output_type=intermediate_type,
-                    verbose=verbose
-                )
 
         # Step 1.5: Generate importance matrix if requested
         if generate_imatrix:

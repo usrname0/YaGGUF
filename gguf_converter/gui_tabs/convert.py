@@ -99,6 +99,107 @@ def validate_calibration_file(config: Dict[str, Any]) -> Optional[Path]:
     return calibration_file_path
 
 
+def detect_intermediate_gguf_files(model_path: Path) -> Dict[str, Dict[str, Any]]:
+    """
+    Detect intermediate GGUF files in model directory.
+
+    Looks for files matching patterns:
+    - Single: {anything}_F16.gguf, {anything}_F32.gguf, {anything}_BF16.gguf
+    - Split: {anything}_F16-00001-of-00003.gguf, etc.
+
+    Args:
+        model_path: Path to model directory
+
+    Returns:
+        Dictionary mapping format to file info:
+        {
+            'F16': {
+                'type': 'single' or 'split',
+                'files': [Path objects sorted],
+                'primary_file': Path (first file or single file),
+                'shard_count': int (1 for single, N for split),
+                'total_size_gb': float
+            },
+            ...
+        }
+    """
+    intermediates = {}
+
+    # Pattern for intermediate files
+    single_pattern = re.compile(r'^(.+)_(F16|F32|BF16)\.gguf$')
+    split_pattern = re.compile(r'^(.+)_(F16|F32|BF16)-(\d+)-of-(\d+)\.gguf$')
+
+    # Scan directory for GGUF files
+    if not model_path.exists() or not model_path.is_dir():
+        return {}
+
+    for gguf_file in model_path.glob("*.gguf"):
+        # Try split pattern first (more specific)
+        split_match = split_pattern.match(gguf_file.name)
+        if split_match:
+            format_type = split_match.group(2)
+            shard_num = int(split_match.group(3))
+            total_shards = int(split_match.group(4))
+
+            if format_type not in intermediates:
+                intermediates[format_type] = {
+                    'type': 'split',
+                    'files': [],
+                    'shard_numbers': [],
+                    'total_expected': total_shards
+                }
+
+            if intermediates[format_type]['type'] == 'split':
+                intermediates[format_type]['files'].append(gguf_file)
+                intermediates[format_type]['shard_numbers'].append(shard_num)
+        else:
+            # Try single pattern
+            single_match = single_pattern.match(gguf_file.name)
+            if single_match:
+                format_type = single_match.group(2)
+
+                # Only add if not already found as split
+                if format_type not in intermediates:
+                    intermediates[format_type] = {
+                        'type': 'single',
+                        'files': [gguf_file]
+                    }
+
+    # Validate and finalize each format
+    validated = {}
+    for format_type, info in intermediates.items():
+        if info['type'] == 'split':
+            # Sort files by shard number
+            sorted_files = sorted(info['files'], key=lambda p:
+                int(split_pattern.match(p.name).group(3)))
+
+            # Validate complete set
+            expected = set(range(1, info['total_expected'] + 1))
+            found = set(info['shard_numbers'])
+
+            if expected == found:
+                # Complete set
+                validated[format_type] = {
+                    'type': 'split',
+                    'files': sorted_files,
+                    'primary_file': sorted_files[0],
+                    'shard_count': len(sorted_files),
+                    'total_size_gb': sum(f.stat().st_size for f in sorted_files) / (1024**3)
+                }
+        else:
+            # Single file
+            file = info['files'][0]
+            validated[format_type] = {
+                'type': 'single',
+                'files': [file],
+                'primary_file': file,
+                'shard_count': 1,
+                'total_size_gb': file.stat().st_size / (1024**3)
+            }
+
+    return validated
+
+
 def render_convert_tab(
     converter: "GGUFConverter",
     config: Dict[str, Any],
@@ -167,6 +268,129 @@ def render_convert_tab(
                     except Exception as e:
                         st.toast(f"Could not open folder: {e}")
 
+        # Initialize session state for reset tracking
+        if 'reset_count' not in st.session_state:
+            st.session_state.reset_count = 0
+
+        # Strip quotes from paths for detection
+        model_path_clean = strip_quotes(model_path)
+
+        # Detect available intermediate files
+        intermediate_options = []
+        intermediate_info_map = {}  # Maps option string to file info
+
+        model_path_valid = bool(model_path_clean and Path(model_path_clean).exists())
+
+        if not model_path_valid:
+            intermediate_options = ["Model path invalid - provide valid path above"]
+            dropdown_disabled = True
+        elif not Path(model_path_clean).is_dir():
+            intermediate_options = ["Model path must be a directory"]
+            dropdown_disabled = True
+        else:
+            model_path_obj = Path(model_path_clean)
+
+            # Detect safetensors files
+            safetensors_files = list(model_path_obj.glob("*.safetensors"))
+            has_safetensors = len(safetensors_files) > 0
+
+            # Scan for intermediate GGUF files
+            detected = detect_intermediate_gguf_files(model_path_obj)
+
+            # Build options
+            intermediate_options = []
+
+            # Add safetensors option if found
+            if has_safetensors:
+                # Check if they're split (look for index files or numbered files)
+                split_pattern = re.compile(r'-\d+of\d+\.safetensors$|\.safetensors\.\d+$')
+                split_files = [f for f in safetensors_files if split_pattern.search(f.name)]
+
+                if split_files:
+                    total_size = sum(f.stat().st_size for f in safetensors_files) / (1024**3)
+                    option_text = f"safetensors ({len(safetensors_files)} files, {total_size:.2f} GB)"
+                else:
+                    total_size = sum(f.stat().st_size for f in safetensors_files) / (1024**3)
+                    if len(safetensors_files) == 1:
+                        option_text = f"safetensors (single file, {total_size:.2f} GB)"
+                    else:
+                        option_text = f"safetensors ({len(safetensors_files)} files, {total_size:.2f} GB)"
+
+                intermediate_options.append(option_text)
+                # Don't add to intermediate_info_map - safetensors needs conversion, not direct use
+
+            # Add intermediate GGUF files
+            for format_type in ['F16', 'F32', 'BF16']:
+                if format_type in detected:
+                    info = detected[format_type]
+
+                    # Extract base filename
+                    if info['type'] == 'single':
+                        base_name = info['primary_file'].stem  # Remove .gguf extension
+                        option_text = f"{base_name} (single file, {info['total_size_gb']:.2f} GB)"
+                    else:
+                        # Remove shard numbering pattern: -00001-of-00003
+                        base_name = re.sub(r'-\d+-of-\d+$', '', info['primary_file'].stem)
+                        option_text = f"{base_name} ({info['shard_count']} shards, {info['total_size_gb']:.2f} GB)"
+
+                    intermediate_options.append(option_text)
+                    intermediate_info_map[option_text] = {
+                        'format': format_type,
+                        'info': info
+                    }
+
+            # If no files found, show disabled message
+            if not intermediate_options:
+                intermediate_options = ["No files found"]
+                dropdown_disabled = True
+            else:
+                dropdown_disabled = False
+
+        # Determine default selection
+        default_index = 0
+        saved_mode = config.get("custom_intermediate_mode", "")
+
+        if saved_mode and saved_mode in intermediate_options:
+            default_index = intermediate_options.index(saved_mode)
+
+        # Intermediate source dropdown with same width as path inputs
+        cols, has_browse = path_input_columns()
+
+        with cols[0]:
+            intermediate_source = st.selectbox(
+                "Model files",
+                options=intermediate_options,
+                index=default_index,
+                disabled=dropdown_disabled,
+                help="Select safetensors to convert or existing intermediate GGUF to quantize directly",
+                key=f"intermediate_source_dropdown_{st.session_state.reset_count}"
+            )
+
+            # Auto-sync dropdown value with config (similar to imatrix dropdown pattern)
+            if intermediate_source in intermediate_info_map:
+                # It's a custom intermediate selection - save it
+                selected_data = intermediate_info_map[intermediate_source]
+                if (config.get("custom_intermediate_mode") != intermediate_source or
+                    config.get("custom_intermediate_format") != selected_data['format']):
+                    config["custom_intermediate_mode"] = intermediate_source
+                    config["custom_intermediate_format"] = selected_data['format']
+                    config["custom_intermediate_path"] = str(selected_data['info']['primary_file'])
+                    save_config(config)
+            else:
+                # Not a custom intermediate - clear settings
+                if config.get("custom_intermediate_format") or config.get("custom_intermediate_path"):
+                    config["custom_intermediate_mode"] = intermediate_source
+                    config["custom_intermediate_format"] = None
+                    config["custom_intermediate_path"] = None
+                    save_config(config)
+
+        # Determine if using custom intermediate
+        # Check config directly rather than string matching, which is more reliable
+        using_custom_intermediate = bool(
+            config.get("custom_intermediate_format") and
+            config.get("custom_intermediate_path")
+        )
+
         # Output directory with Select Folder and Open Folder buttons
         cols, has_browse = path_input_columns()
 
@@ -216,7 +440,6 @@ def render_convert_tab(
                         st.toast(f"Could not open folder: {e}")
 
         # Strip quotes from paths
-        model_path_clean = strip_quotes(model_path)
         output_dir_clean = strip_quotes(output_dir)
 
         # File Handling section
@@ -484,36 +707,39 @@ def render_convert_tab(
 
             generate_custom_option = "GENERATE (custom name)"
             dropdown_options = imatrix_files + [generate_default_option, generate_custom_option]
-            col_imatrix_select, col_imatrix_update = st.columns([5, 1])
-            with col_imatrix_select:
-                # Determine default selection
-                saved_mode = config.get("imatrix_mode", "")
-                saved_reuse_path = config.get("imatrix_reuse_path", "")
-                default_index = 0
-                fallback_happened = False
 
-                if saved_mode == "generate_custom":
-                    default_index = len(dropdown_options) - 1
-                elif saved_mode == "generate":
-                    default_index = len(imatrix_files)
-                elif saved_mode == "reuse" and saved_reuse_path and saved_reuse_path in imatrix_files:
-                    default_index = imatrix_files.index(saved_reuse_path)
-                elif saved_mode == "reuse" and saved_reuse_path:
-                    # Saved file not found - falling back
-                    fallback_happened = True
-                    if imatrix_files:
-                        # Auto-select newest existing file
-                        default_index = 0
-                    else:
-                        # No files - select generate default
-                        default_index = len(imatrix_files)
-                elif imatrix_files:
+            # Use same column structure as path inputs
+            cols, has_browse = path_input_columns()
+
+            # Determine default selection
+            saved_mode = config.get("imatrix_mode", "")
+            saved_reuse_path = config.get("imatrix_reuse_path", "")
+            default_index = 0
+            fallback_happened = False
+
+            if saved_mode == "generate_custom":
+                default_index = len(dropdown_options) - 1
+            elif saved_mode == "generate":
+                default_index = len(imatrix_files)
+            elif saved_mode == "reuse" and saved_reuse_path and saved_reuse_path in imatrix_files:
+                default_index = imatrix_files.index(saved_reuse_path)
+            elif saved_mode == "reuse" and saved_reuse_path:
+                # Saved file not found - falling back
+                fallback_happened = True
+                if imatrix_files:
                     # Auto-select newest existing file
                     default_index = 0
                 else:
                     # No files - select generate default
                     default_index = len(imatrix_files)
+            elif imatrix_files:
+                # Auto-select newest existing file
+                default_index = 0
+            else:
+                # No files - select generate default
+                default_index = len(imatrix_files)
 
+            with cols[0]:
                 imatrix_selection = st.selectbox(
                     "Imatrix file",
                     options=dropdown_options,
@@ -558,7 +784,7 @@ def render_convert_tab(
                     if "imatrix_fallback_warning" in st.session_state:
                         del st.session_state.imatrix_fallback_warning
 
-            with col_imatrix_update:
+            with cols[-1]:
                 st.markdown("<br>", unsafe_allow_html=True)  # Align with selectbox
                 if st.button("Refresh File List", key="update_imatrix_file_list", use_container_width=True):
                     # Save the current selection before rerunning
@@ -704,6 +930,12 @@ def render_convert_tab(
         ]
         st.markdown("**Intermediate Formats:**")
 
+        # Override intermediate_type if using custom intermediate
+        if using_custom_intermediate:
+            custom_format = config.get("custom_intermediate_format")
+            if custom_format:
+                intermediate_type = custom_format
+
         # 3 columns for the 3 formats
         format_cols = st.columns(3)
         full_quants = {
@@ -723,7 +955,8 @@ def render_convert_tab(
                 if st.button(
                     button_label,
                     key=f"intermediate_btn_{qtype}",
-                    type=button_type
+                    type=button_type,
+                    disabled=using_custom_intermediate
                 ):
                     selected_format = qtype
 
@@ -732,7 +965,12 @@ def render_convert_tab(
             with format_cols[idx]:
                 is_intermediate = qtype == intermediate_type
 
-                if is_intermediate:
+                if using_custom_intermediate:
+                    # When using custom intermediate, disable all checkboxes
+                    # Only the selected format is checked
+                    checkbox_value = is_intermediate
+                    checkbox_disabled = True
+                elif is_intermediate:
                     checkbox_value = True
                     checkbox_disabled = True
                 else:
@@ -1052,11 +1290,20 @@ def render_convert_tab(
                     # Handle token embedding type selection
                     token_embedding_type_param = None if token_embedding_type in ["Same as quant type (default)", "Unquantized"] else token_embedding_type
 
+                    # Get custom intermediate parameters if selected
+                    custom_intermediate_path = None
+                    custom_intermediate_format = None
+                    if using_custom_intermediate:
+                        custom_intermediate_path = config.get("custom_intermediate_path")
+                        custom_intermediate_format = config.get("custom_intermediate_format")
+
                     output_files = converter.convert_and_quantize(
                         model_path=model_path_clean,
                         output_dir=output_dir_clean,
                         quantization_types=selected_quants,
                         intermediate_type=intermediate_type,
+                        custom_intermediate_path=custom_intermediate_path,
+                        custom_intermediate_format=custom_intermediate_format,
                         verbose=verbose,
                         generate_imatrix=generate_imatrix_flag,
                         imatrix_path=imatrix_path_to_use,
