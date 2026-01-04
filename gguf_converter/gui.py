@@ -145,6 +145,11 @@ def main() -> None:
                 del st.session_state[key]
             if "iq_checkbox_states" in st.session_state:
                 st.session_state.iq_checkbox_states = {}
+            # Reset file handling and advanced quantization options
+            st.session_state.file_mode_radio = "Single files"
+            st.session_state.output_tensor_type_select = "Same as quant type (default)"
+            st.session_state.token_embedding_type_select = "Same as quant type (default)"
+            st.session_state.pure_quantization_checkbox = False
             st.session_state.pending_reset_defaults = True
             st.rerun()
 

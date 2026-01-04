@@ -296,18 +296,7 @@ def render_convert_tab(
         # Advanced quantization options
         with st.expander("Advanced Quantization Options"):
 
-            pure_quantization = st.checkbox(
-                "Pure quantization (disable mixtures)",
-                value=config.get("pure_quantization", False),
-                help="Disable k-quant mixtures and quantize all tensors to the same type. Results in more uniform quantization.",
-                key="pure_quantization_checkbox",
-                on_change=make_config_saver(config, "pure_quantization", "pure_quantization_checkbox")
-            )
-
-            if pure_quantization:
-                st.markdown('<p style="color: gray;"><strong>Selective Tensor Quantization:</strong> (disabled due to "Pure quantization")</p>', unsafe_allow_html=True)
-            else:
-                st.markdown("**Selective Tensor Quantization:** Keep certain layers at higher precision.")
+            st.markdown("**Selective Tensor Quantization:** Keep certain layers at higher precision.")
 
             # Output tensor type and token embedding type side-by-side
             output_tensor_options = ["Same as quant type (default)", "Unquantized", "Q8_0", "Q6_K", "Q5_K_M", "F16", "F32"]
@@ -335,10 +324,9 @@ def render_convert_tab(
                     "Override output tensor type",
                     options=output_tensor_options,
                     index=output_tensor_options.index(saved_output_value),
-                    help="Quantization type for output.weight tensor. Select 'Unquantized' or a higher precision type (Q8_0, F16) to improve quality at the cost of slightly larger file size." if not pure_quantization else "Disabled when Pure quantization is enabled",
+                    help="Quantization type for output.weight tensor. Select 'Unquantized' or a higher precision type (Q8_0, F16) to improve quality at the cost of slightly larger file size.",
                     key="output_tensor_type_select",
-                    on_change=save_output_tensor_type,
-                    disabled=pure_quantization
+                    on_change=save_output_tensor_type
                 )
 
             with tensor_col2:
@@ -355,11 +343,18 @@ def render_convert_tab(
                     "Override token embedding type",
                     options=token_embedding_options,
                     index=token_embedding_options.index(saved_token_value),
-                    help="Quantization type for token embeddings. Keeping this at higher precision can improve accuracy for certain tasks." if not pure_quantization else "Disabled when Pure quantization is enabled",
+                    help="Quantization type for token embeddings. Keeping this at higher precision can improve accuracy for certain tasks.",
                     key="token_embedding_type_select",
-                    on_change=save_token_embedding_type,
-                    disabled=pure_quantization
+                    on_change=save_token_embedding_type
                 )
+
+            pure_quantization = st.checkbox(
+                "Pure quantization (disable mixtures)",
+                value=config.get("pure_quantization", False),
+                help="Disable k-quant mixtures and quantize all tensors to the same type. Results in more uniform quantization.",
+                key="pure_quantization_checkbox",
+                on_change=make_config_saver(config, "pure_quantization", "pure_quantization_checkbox")
+            )
 
         if "other_quants" not in config:
             config["other_quants"] = {}
@@ -422,8 +417,10 @@ def render_convert_tab(
                 """Save imatrix checkbox state and custom name"""
                 if f"imatrix_custom_name_{st.session_state.reset_count}" in st.session_state:
                     config["imatrix_generate_name"] = st.session_state[f"imatrix_custom_name_{st.session_state.reset_count}"]
-                config["use_imatrix"] = st.session_state[f"use_imatrix_checkbox_{st.session_state.reset_count}"]
-                save_config(config)
+                key = f"use_imatrix_checkbox_{st.session_state.reset_count}"
+                if key in st.session_state:
+                    config["use_imatrix"] = st.session_state[key]
+                    save_config(config)
 
             use_imatrix = st.checkbox(
                 "Use imatrix",
@@ -436,8 +433,10 @@ def render_convert_tab(
         with imatrix_col2:
             def save_enforce_imatrix():
                 """Save enforce imatrix checkbox state"""
-                config["ignore_imatrix_warnings"] = not st.session_state[f"enforce_imatrix_checkbox_{st.session_state.reset_count}"]
-                save_config(config)
+                key = f"enforce_imatrix_checkbox_{st.session_state.reset_count}"
+                if key in st.session_state:
+                    config["ignore_imatrix_warnings"] = not st.session_state[key]
+                    save_config(config)
 
             enforce_imatrix = st.checkbox(
                 "Enforce imatrix",
@@ -602,8 +601,10 @@ def render_convert_tab(
                 save_config(config)
 
                 def save_custom_imatrix_name():
-                    config["imatrix_generate_name"] = st.session_state[f"imatrix_custom_name_{st.session_state.reset_count}"]
-                    save_config(config)
+                    key = f"imatrix_custom_name_{st.session_state.reset_count}"
+                    if key in st.session_state:
+                        config["imatrix_generate_name"] = st.session_state[key]
+                        save_config(config)
 
                 col_imatrix_name, col_imatrix_default = st.columns([5, 1])
                 with col_imatrix_name:
@@ -740,7 +741,8 @@ def render_convert_tab(
 
                 def save_full_selection(qt, inter_type):
                     def save_to_config():
-                        if not st.session_state[f"full_{qt}_{inter_type}"]:
+                        key = f"full_{qt}_{inter_type}"
+                        if key in st.session_state and not st.session_state[key]:
                             config["other_quants"][qt] = False
                             save_config(config)
                     return save_to_config
@@ -785,8 +787,9 @@ def render_convert_tab(
         st.markdown("**Legacy Quants:**")
         def save_trad_selection(qtype, widget_key):
             def save_to_config():
-                config["other_quants"][qtype] = st.session_state[widget_key]
-                save_config(config)
+                if widget_key in st.session_state:
+                    config["other_quants"][qtype] = st.session_state[widget_key]
+                    save_config(config)
             return save_to_config
 
         trad_cols = st.columns(3)
@@ -813,8 +816,9 @@ def render_convert_tab(
 
         def save_quant_selection(qtype, widget_key):
             def save_to_config():
-                config["other_quants"][qtype] = st.session_state[widget_key]
-                save_config(config)
+                if widget_key in st.session_state:
+                    config["other_quants"][qtype] = st.session_state[widget_key]
+                    save_config(config)
             return save_to_config
 
         st.markdown("**K Quants (Recommended):**")
@@ -1038,11 +1042,8 @@ def render_convert_tab(
                     # Format split size for llama.cpp
                     split_size_override = None
                     if keep_split and max_shard_size_gb > 0:
-                        # Format as "2.5G" or "2G" depending on whether it's a whole number
-                        if max_shard_size_gb == int(max_shard_size_gb):
-                            split_size_override = f"{int(max_shard_size_gb)}G"
-                        else:
-                            split_size_override = f"{max_shard_size_gb:.1f}G"
+                        # Always convert to MB (e.g., 1.1G -> 1100M, 2.5G -> 2500M)
+                        split_size_override = f"{round(max_shard_size_gb * 1000)}M"
 
                     # Handle output tensor type selection
                     leave_output_tensor = (output_tensor_type == "Unquantized")
@@ -1113,8 +1114,7 @@ def render_convert_tab(
                 st.subheader("Output Files")
                 for file_path in output_files:
                     file_size = file_path.stat().st_size / (1024**3)  # GB
-                    st.write(f"`{file_path.name}` ({file_size:.2f} GB)")
-                    st.code(str(file_path), language=None)
+                    st.write(f"`{file_path}` ({file_size:.2f} GB)")
 
             except Exception as e:
                 # Show in Streamlit UI

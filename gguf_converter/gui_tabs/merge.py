@@ -8,12 +8,17 @@ import streamlit as st
 from pathlib import Path
 from typing import Optional, Dict, Any, List, Tuple
 import re
+import sys
+import subprocess
 from collections import defaultdict
+from datetime import datetime
+from colorama import Style
 
 from ..gui_utils import (
     strip_quotes, open_folder, browse_folder,
     save_config, path_input_columns, get_platform_path
 )
+from ..theme import THEME as theme
 
 
 def analyze_shards(directory: Path, extension: str) -> Dict[str, Dict[str, Any]]:
@@ -55,6 +60,10 @@ def analyze_shards(directory: Path, extension: str) -> Dict[str, Dict[str, Any]]
             base_name = match.group(1)
             shard_num = int(match.group(2))
             total_shards = int(match.group(3))
+
+            # Skip files with only 1 shard (e.g., -00001-of-00001)
+            if total_shards == 1:
+                continue
 
             # Initialize or update model info
             if models[base_name]['total_expected'] == 0:
@@ -147,76 +156,6 @@ def render_merge_tab(converter, config: Dict[str, Any]):
                     except Exception as e:
                         st.toast(f"Could not open folder: {e}")
 
-        # Auto-detect file type and show what was found
-        file_type = None
-        models_info = {}
-        total_shards = 0
-
-        if input_dir:
-            input_path = Path(strip_quotes(input_dir))
-            if input_path.exists() and input_path.is_dir():
-                # Analyze GGUF shards
-                gguf_models = analyze_shards(input_path, "gguf")
-                # Analyze safetensors shards
-                safetensors_models = analyze_shards(input_path, "safetensors")
-
-                if gguf_models:
-                    file_type = "GGUF"
-                    models_info = gguf_models
-                    total_shards = sum(len(info['shards_found']) for info in gguf_models.values())
-                elif safetensors_models:
-                    file_type = "Safetensors"
-                    models_info = safetensors_models
-                    total_shards = sum(len(info['shards_found']) for info in safetensors_models.values())
-
-                # Display detailed information
-                if models_info:
-                    complete_models = [name for name, info in models_info.items() if info.get('complete', False)]
-                    incomplete_models = [name for name, info in models_info.items() if not info.get('complete', False)]
-
-                    info_lines = [f"**Total shards found:** {total_shards}"]
-                    info_lines.append(f"**Unique models detected:** {len(models_info)}")
-
-                    if complete_models:
-                        info_lines.append(f"**Complete models:** {len(complete_models)}")
-                    if incomplete_models:
-                        info_lines.append(f"**Incomplete models:** {len(incomplete_models)}")
-
-                    st.info("\n\n".join(info_lines))
-
-                    # Show details for each model
-                    for base_name, info in sorted(models_info.items()):
-                        if info.get('complete', False):
-                            status = "Complete"
-                            status_prefix = "[OK]"
-                        else:
-                            status = "Incomplete"
-                            status_prefix = "[!]"
-
-                        with st.expander(f"{status_prefix} {base_name} - {status} ({len(info['shards_found'])}/{info['total_expected']} shards)"):
-                            st.write(f"**Expected shards:** {info['total_expected']}")
-                            st.write(f"**Found shards:** {len(info['shards_found'])}")
-
-                            if 'error' in info:
-                                st.error(info['error'])
-                            elif not info['complete']:
-                                missing = info.get('missing_shards', [])
-                                if missing:
-                                    missing_str = ", ".join(str(s) for s in missing)
-                                    st.warning(f"Missing shard(s): {missing_str}")
-                            else:
-                                st.success(f"All shards present. Ready to merge into: `{info['output_filename']}`")
-
-                            # List all found files
-                            if st.checkbox(f"Show shard files", key=f"show_files_{base_name}"):
-                                for file_path in info['files']:
-                                    st.text(f"  {file_path.name}")
-                else:
-                    st.warning("No sharded files found in directory (looking for *-*-of-*.gguf or *-*-of-*.safetensors)")
-
-    with col2:
-        st.subheader("Output")
-
         # Output directory with Select Folder and Open Folder buttons
         cols, has_browse = path_input_columns()
 
@@ -268,8 +207,72 @@ def render_merge_tab(converter, config: Dict[str, Any]):
                     except Exception as e:
                         st.toast(f"Could not open folder: {e}")
 
+        # Auto-detect file type and show what was found
+        file_type = None
+        models_info = {}
+        total_shards = 0
+
+        if input_dir:
+            input_path = Path(strip_quotes(input_dir))
+            if input_path.exists() and input_path.is_dir():
+                # Analyze GGUF shards
+                gguf_models = analyze_shards(input_path, "gguf")
+                # Analyze safetensors shards
+                safetensors_models = analyze_shards(input_path, "safetensors")
+
+                if gguf_models:
+                    file_type = "GGUF"
+                    models_info = gguf_models
+                    total_shards = sum(len(info['shards_found']) for info in gguf_models.values())
+                elif safetensors_models:
+                    file_type = "Safetensors"
+                    models_info = safetensors_models
+                    total_shards = sum(len(info['shards_found']) for info in safetensors_models.values())
+
+                # Display detailed information
+                if models_info:
+                    complete_models_list = [name for name, info in models_info.items() if info.get('complete', False)]
+                    incomplete_models = [name for name, info in models_info.items() if not info.get('complete', False)]
+
+                    info_lines = [f"**Total shards found:** {total_shards}"]
+                    info_lines.append(f"**Unique models detected:** {len(models_info)}")
+
+                    if complete_models_list:
+                        info_lines.append(f"**Complete models:** {len(complete_models_list)}")
+                    if incomplete_models:
+                        info_lines.append(f"**Incomplete models:** {len(incomplete_models)}")
+
+                    st.info("\n\n".join(info_lines))
+
+                    # Show details for each model
+                    for base_name, info in sorted(models_info.items()):
+                        if info.get('complete', False):
+                            status = "Complete"
+                            status_prefix = "[OK]"
+                        else:
+                            status = "Incomplete"
+                            status_prefix = "[!]"
+
+                        with st.expander(f"{status_prefix} {base_name} - {status} ({len(info['shards_found'])}/{info['total_expected']} shards)"):
+                            if 'error' in info:
+                                st.error(info['error'])
+                            elif not info['complete']:
+                                st.warning(f"{len(info['shards_found'])}/{info['total_expected']} shards present. Will not merge.")
+                            else:
+                                st.success(f"{len(info['shards_found'])}/{info['total_expected']} shards present. Ready to merge into: `{info['output_filename']}`")
+
+                            # List all found files
+                            for file_path in info['files']:
+                                st.text(f"  {file_path.name}")
+                else:
+                    st.warning("No sharded files found in directory (looking for xxxxx-of-xxxxx.gguf or .safetensors)")
+
+    with col2:
+        st.subheader("Model Selection")
+
         # Model selection if multiple models detected
         selected_model = None
+        selected_models = []
         output_filename = None
 
         if models_info:
@@ -278,13 +281,15 @@ def render_merge_tab(converter, config: Dict[str, Any]):
             if len(complete_models) == 1:
                 # Only one complete model, auto-select it
                 selected_model = list(complete_models.keys())[0]
+                selected_models = [selected_model]
                 output_filename = complete_models[selected_model]['output_filename']
                 st.info(f"Output file will be named: `{output_filename}`")
             elif len(complete_models) > 1:
                 # Multiple complete models, let user choose
-                st.subheader("Model Selection")
-                model_options = [f"{name} ({info['total_expected']} shards)" for name, info in sorted(complete_models.items())]
-                model_names = list(sorted(complete_models.keys()))
+                # Add "All complete models" option as first choice
+                model_options = [f"All complete models ({len(complete_models)} models)"]
+                model_options.extend([f"{name} ({info['total_expected']} shards)" for name, info in sorted(complete_models.items())])
+                model_names = [None] + list(sorted(complete_models.keys()))  # None for "all models"
 
                 selected_index = st.selectbox(
                     "Select model to merge",
@@ -293,13 +298,51 @@ def render_merge_tab(converter, config: Dict[str, Any]):
                     key="model_selection"
                 )
 
-                if selected_index is not None:
+                if selected_index == 0:
+                    # All models selected
+                    selected_model = None
+                    selected_models = list(sorted(complete_models.keys()))
+                    model_list = "\n".join([f"  - `{complete_models[name]['output_filename']}`" for name in selected_models])
+                    st.info(f"Will merge all {len(selected_models)} complete models:\n\n{model_list}")
+                elif selected_index is not None:
                     selected_model = model_names[selected_index]
+                    selected_models = [selected_model]
                     output_filename = complete_models[selected_model]['output_filename']
                     st.info(f"Output file will be named: `{output_filename}`")
-            elif models_info:
+            else:
                 # Only incomplete models found
+                st.selectbox(
+                    "Select model to merge",
+                    options=["No complete models available"],
+                    disabled=True,
+                    key="model_selection_disabled"
+                )
                 st.warning("No complete models found. All models are missing one or more shards.")
+        else:
+            # No models found at all
+            st.selectbox(
+                "Select model to merge",
+                options=["No models detected"],
+                disabled=True,
+                key="model_selection_empty"
+            )
+
+        # Check for existing files that would be overwritten
+        existing_files = []
+        if selected_models and output_dir:
+            output_dir_path = Path(strip_quotes(output_dir))
+            if output_dir_path.exists():
+                complete_models = {name: info for name, info in models_info.items() if info.get('complete', False)}
+                for model_name in selected_models:
+                    model_info = complete_models[model_name]
+                    output_filename = model_info['output_filename']
+                    output_path = output_dir_path / output_filename
+                    if output_path.exists():
+                        existing_files.append(output_filename)
+
+        if existing_files:
+            file_list = "\n".join([f"  - `{filename}`" for filename in existing_files])
+            st.warning(f"**Warning:** The following {len(existing_files)} file(s) already exist and will be overwritten:\n\n{file_list}")
 
         st.markdown("---")
 
@@ -317,50 +360,66 @@ def render_merge_tab(converter, config: Dict[str, Any]):
                 st.error("No sharded files detected in the input directory")
                 return
 
-            if not selected_model:
+            if not selected_models:
                 st.error("No complete model selected for merging")
                 return
 
-            if not output_filename:
-                st.error("Could not determine output filename from shards")
-                return
-
             output_dir_path = Path(strip_quotes(output_dir))
-            output_path = output_dir_path / output_filename
 
             if not output_dir_path.exists():
                 st.error(f"Output directory does not exist: {output_dir}")
                 return
 
-            # Get the shard files for the selected model
+            # Get the shard files for the selected model(s)
             complete_models = {name: info for name, info in models_info.items() if info.get('complete', False)}
-            model_info = complete_models[selected_model]
-            shard_files = model_info['files']
 
-            try:
-                with st.spinner(f"Merging {file_type} shards for {selected_model}..."):
-                    if file_type == "GGUF":
-                        merge_gguf_shards(shard_files, output_path)
-                    else:
-                        merge_safetensors_shards(shard_files, output_path)
+            # Print header banner once at the start
+            timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            banner_line = "=" * 80
+            print(f"\n{theme['info']}{banner_line}{Style.RESET_ALL}")
+            print(f"{theme['info']}{'MERGE SHARDS'.center(80)}{Style.RESET_ALL}")
+            print(f"{theme['info']}{timestamp.center(80)}{Style.RESET_ALL}")
+            print(f"{theme['info']}{banner_line}{Style.RESET_ALL}\n")
 
-                st.success(f"Successfully merged shards to: {output_path}")
+            merged_files = []
+            errors = []
 
-                # Show file info
-                if output_path.exists():
+            for model_name in selected_models:
+                model_info = complete_models[model_name]
+                shard_files = model_info['files']
+                output_filename = model_info['output_filename']
+                output_path = output_dir_path / output_filename
+
+                try:
+                    with st.spinner(f"Merging {file_type} shards for {model_name}..."):
+                        if file_type == "GGUF":
+                            merge_gguf_shards(shard_files, output_path)
+                        else:
+                            merge_safetensors_shards(shard_files, output_path)
+
+                    merged_files.append(output_path)
+
+                except Exception as e:
+                    errors.append((model_name, e))
+
+            # Show results
+            if merged_files:
+                st.success(f"Successfully merged {len(merged_files)} model(s)")
+                for output_path in merged_files:
                     file_size = output_path.stat().st_size / (1024**3)
-                    st.info(f"Output file size: {file_size:.2f} GB")
-                    st.code(str(output_path), language=None)
+                    st.write(f"`{output_path}` ({file_size:.2f} GB)")
 
-            except Exception as e:
-                st.error(f"Error merging shards: {e}")
-                import traceback
-                st.exception(e)
+            if errors:
+                st.error(f"Failed to merge {len(errors)} model(s)")
+                for model_name, error in errors:
+                    st.error(f"**{model_name}:** {error}")
+                    import traceback
+                    st.exception(error)
 
 
 def merge_gguf_shards(shard_files: List[Path], output_file: Path):
     """
-    Merge GGUF sharded files into a single file.
+    Merge GGUF sharded files into a single file using llama-gguf-split.
 
     Args:
         shard_files: List of GGUF shard file paths (already sorted)
@@ -369,24 +428,50 @@ def merge_gguf_shards(shard_files: List[Path], output_file: Path):
     if not shard_files:
         raise ValueError("No GGUF shard files provided")
 
-    st.write(f"Merging {len(shard_files)} shard file(s):")
+    # Print model info to terminal
+    print(f"{theme['info']}Merging {output_file.name} from {len(shard_files)} shard(s):{Style.RESET_ALL}")
     for shard in shard_files:
-        st.write(f"  - {shard.name}")
+        print(f"{theme['metadata']}  {shard.name}{Style.RESET_ALL}")
+    print()
 
     # Ensure output directory exists
     output_file.parent.mkdir(parents=True, exist_ok=True)
 
-    # Merge by concatenating files
-    with open(output_file, 'wb') as outfile:
-        for shard in shard_files:
-            with open(shard, 'rb') as infile:
-                # Copy in chunks to handle large files
-                chunk_size = 1024 * 1024 * 100  # 100MB chunks
-                while True:
-                    chunk = infile.read(chunk_size)
-                    if not chunk:
-                        break
-                    outfile.write(chunk)
+    # Delete existing file if it exists (llama-gguf-split won't overwrite)
+    if output_file.exists():
+        print(f"{theme['warning']}Deleting existing file: {output_file.name}{Style.RESET_ALL}")
+        output_file.unlink()
+
+    # Find llama-gguf-split executable
+    bin_dir = Path(__file__).parent.parent.parent / "bin"
+    gguf_split_exe = bin_dir / "llama-gguf-split.exe" if sys.platform == "win32" else bin_dir / "llama-gguf-split"
+
+    if not gguf_split_exe.exists():
+        raise FileNotFoundError(f"llama-gguf-split not found at {gguf_split_exe}")
+
+    # Use the first shard as input (llama-gguf-split will find the others)
+    first_shard = shard_files[0]
+
+    # Run llama-gguf-split --merge
+    cmd = [str(gguf_split_exe), "--merge", str(first_shard), str(output_file)]
+
+    print(f"{theme['highlight']}Running: {' '.join(cmd)}{Style.RESET_ALL}\n")
+
+    result = subprocess.run(
+        cmd,
+        capture_output=True,
+        text=True
+    )
+
+    if result.returncode != 0:
+        raise RuntimeError(f"llama-gguf-split failed:\n{result.stderr}")
+
+    if result.stdout:
+        # Print tool output to terminal
+        for line in result.stdout.strip().split('\n'):
+            print(f"{theme['metadata']}{line}{Style.RESET_ALL}")
+
+    print(f"{theme['success']}Successfully merged: {output_file.name}{Style.RESET_ALL}\n")
 
 
 def merge_safetensors_shards(shard_files: List[Path], output_file: Path):
@@ -409,9 +494,11 @@ def merge_safetensors_shards(shard_files: List[Path], output_file: Path):
     if not shard_files:
         raise ValueError("No safetensors shard files provided")
 
-    st.write(f"Merging {len(shard_files)} shard file(s):")
+    # Print model info to terminal
+    print(f"{theme['info']}Merging {output_file.name} from {len(shard_files)} shard(s):{Style.RESET_ALL}")
     for shard in shard_files:
-        st.write(f"  - {shard.name}")
+        print(f"{theme['metadata']}  {shard.name}{Style.RESET_ALL}")
+    print()
 
     # Ensure output directory exists
     output_file.parent.mkdir(parents=True, exist_ok=True)
@@ -420,9 +507,11 @@ def merge_safetensors_shards(shard_files: List[Path], output_file: Path):
     merged_tensors = {}
 
     for shard in shard_files:
-        st.write(f"Loading {shard.name}...")
+        print(f"{theme['info']}Loading {shard.name}...{Style.RESET_ALL}")
         tensors = load_file(str(shard))
         merged_tensors.update(tensors)
 
-    st.write(f"Saving merged file to {output_file.name}...")
+    print(f"{theme['info']}Saving merged file...{Style.RESET_ALL}")
     save_file(merged_tensors, str(output_file))
+
+    print(f"{theme['success']}Successfully merged: {output_file.name}{Style.RESET_ALL}\n")

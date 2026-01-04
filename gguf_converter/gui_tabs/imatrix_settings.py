@@ -131,8 +131,10 @@ def render_imatrix_settings_tab(converter: "GGUFConverter", config: Dict[str, An
         with col_cal:
             # Auto-save callback for calibration file
             def save_calibration_file():
-                config["imatrix_calibration_file"] = st.session_state[f"imatrix_cal_selection_{st.session_state.reset_count}"]
-                save_config(config)
+                key = f"imatrix_cal_selection_{st.session_state.reset_count}"
+                if key in st.session_state:
+                    config["imatrix_calibration_file"] = st.session_state[key]
+                    save_config(config)
 
             calibration_selection = st.selectbox(
                 "Calibration file",
@@ -287,8 +289,10 @@ def render_imatrix_settings_tab(converter: "GGUFConverter", config: Dict[str, An
         with col_proc1:
             # Auto-save callback for chunks
             def save_chunks():
-                config["imatrix_chunks"] = int(st.session_state[f"imatrix_chunks_input_{st.session_state.reset_count}"])
-                save_config(config)
+                key = f"imatrix_chunks_input_{st.session_state.reset_count}"
+                if key in st.session_state:
+                    config["imatrix_chunks"] = int(st.session_state[key])
+                    save_config(config)
 
             imatrix_chunks_input = st.number_input(
                 "Chunks to process",
@@ -303,8 +307,10 @@ def render_imatrix_settings_tab(converter: "GGUFConverter", config: Dict[str, An
 
             # Auto-save callback for ctx size
             def save_ctx():
-                config["imatrix_ctx_size"] = int(st.session_state[f"imatrix_ctx_input_{st.session_state.reset_count}"])
-                save_config(config)
+                key = f"imatrix_ctx_input_{st.session_state.reset_count}"
+                if key in st.session_state:
+                    config["imatrix_ctx_size"] = int(st.session_state[key])
+                    save_config(config)
 
             imatrix_ctx_input = st.number_input(
                 "Context size",
@@ -319,8 +325,10 @@ def render_imatrix_settings_tab(converter: "GGUFConverter", config: Dict[str, An
 
             # Auto-save callback for from chunk
             def save_from_chunk():
-                config["imatrix_from_chunk"] = int(st.session_state[f"imatrix_from_chunk_input_{st.session_state.reset_count}"])
-                save_config(config)
+                key = f"imatrix_from_chunk_input_{st.session_state.reset_count}"
+                if key in st.session_state:
+                    config["imatrix_from_chunk"] = int(st.session_state[key])
+                    save_config(config)
 
             imatrix_from_chunk_input = st.number_input(
                 "Skip first N chunks",
@@ -335,8 +343,10 @@ def render_imatrix_settings_tab(converter: "GGUFConverter", config: Dict[str, An
 
             # Auto-save callback for output frequency
             def save_output_freq():
-                config["imatrix_output_frequency"] = int(st.session_state[f"imatrix_output_freq_input_{st.session_state.reset_count}"])
-                save_config(config)
+                key = f"imatrix_output_freq_input_{st.session_state.reset_count}"
+                if key in st.session_state:
+                    config["imatrix_output_frequency"] = int(st.session_state[key])
+                    save_config(config)
 
             imatrix_output_freq_input = st.number_input(
                 "Output frequency (chunks)",
@@ -353,8 +363,10 @@ def render_imatrix_settings_tab(converter: "GGUFConverter", config: Dict[str, An
             # GPU offloading
             # Auto-save callback for num_gpu_layers
             def save_num_gpu_layers():
-                config["imatrix_num_gpu_layers"] = int(st.session_state[f"imatrix_num_gpu_layers_{st.session_state.reset_count}"])
-                save_config(config)
+                key = f"imatrix_num_gpu_layers_{st.session_state.reset_count}"
+                if key in st.session_state:
+                    config["imatrix_num_gpu_layers"] = int(st.session_state[key])
+                    save_config(config)
 
             imatrix_num_gpu_layers_input = st.number_input(
                 "GPU layers (-ngl)",
@@ -442,8 +454,10 @@ def render_imatrix_settings_tab(converter: "GGUFConverter", config: Dict[str, An
         with col_max_lines:
             # Auto-save callback for max preview lines
             def save_max_preview_lines():
-                config["max_preview_lines"] = int(st.session_state[f"max_preview_lines_{st.session_state.reset_count}"])
-                save_config(config)
+                key = f"max_preview_lines_{st.session_state.reset_count}"
+                if key in st.session_state:
+                    config["max_preview_lines"] = int(st.session_state[key])
+                    save_config(config)
 
             max_preview_lines = st.number_input(
                 "Preview max lines",
@@ -459,8 +473,10 @@ def render_imatrix_settings_tab(converter: "GGUFConverter", config: Dict[str, An
         with col_height:
             # Auto-save callback for preview height
             def save_preview_height():
-                config["preview_height"] = int(st.session_state[f"preview_height_{st.session_state.reset_count}"])
-                save_config(config)
+                key = f"preview_height_{st.session_state.reset_count}"
+                if key in st.session_state:
+                    config["preview_height"] = int(st.session_state[key])
+                    save_config(config)
 
             preview_height = st.slider(
                 "Preview height",

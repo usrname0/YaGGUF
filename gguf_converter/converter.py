@@ -1052,7 +1052,8 @@ class GGUFConverter:
                     print(f"{theme['warning']}  Deleting: {shard.name}{Style.RESET_ALL}")
                     shard.unlink()
 
-                intermediate_file = self.convert_to_gguf(
+                # Don't reassign intermediate_file - keep it as base path for split mode
+                self.convert_to_gguf(
                     model_path=model_path,
                     output_path=intermediate_file,
                     output_type=intermediate_type,
@@ -1063,7 +1064,8 @@ class GGUFConverter:
             else:
                 # No split files exist, create them
                 print(f"{theme['info']}Converting {model_name} to GGUF (with splitting)...{Style.RESET_ALL}")
-                intermediate_file = self.convert_to_gguf(
+                # Don't reassign intermediate_file - keep it as base path for split mode
+                self.convert_to_gguf(
                     model_path=model_path,
                     output_path=intermediate_file,
                     output_type=intermediate_type,
@@ -1130,8 +1132,15 @@ class GGUFConverter:
                     "Please select a calibration file in the Imatrix Settings tab."
                 )
 
+            # For imatrix generation, use first shard if in split mode
+            imatrix_input_file = intermediate_file
+            if split_max_size or split_max_tensors:
+                intermediate_shards = sorted(output_dir.glob(f"{intermediate_file.stem}-*-of-*.gguf"))
+                if intermediate_shards:
+                    imatrix_input_file = intermediate_shards[0]
+
             self.generate_imatrix(
-                model_path=intermediate_file,
+                model_path=imatrix_input_file,
                 output_path=imatrix_file,
                 calibration_file=calibration_file,
                 ctx_size=imatrix_ctx_size,
@@ -1148,6 +1157,14 @@ class GGUFConverter:
             # Reusing existing imatrix
             imatrix_path = Path(imatrix_path)
             print(f"{theme['success']}Using existing imatrix: {imatrix_path}{Style.RESET_ALL}")
+
+        # Determine the actual intermediate file to use for quantization
+        # In split mode, use the first shard; otherwise use the base path
+        actual_intermediate_file = intermediate_file
+        if split_max_size or split_max_tensors:
+            intermediate_shards = sorted(output_dir.glob(f"{intermediate_file.stem}-*-of-*.gguf"))
+            if intermediate_shards:
+                actual_intermediate_file = intermediate_shards[0]
 
         # Step 2: Quantize to requested types
         quantized_files = []
@@ -1270,8 +1287,11 @@ class GGUFConverter:
                             shard.unlink()
 
                     # Need to quantize (either no files, incomplete set, or overwrite_quants=True)
+                    # Use actual_intermediate_file which is already set to first shard in split mode
+                    quantize_input = actual_intermediate_file
+
                     actual_output_path = self.quantize(
-                        input_path=intermediate_file,
+                        input_path=quantize_input,
                         output_path=output_file,
                         quantization_type=quant_type,
                         verbose=verbose,
@@ -1305,7 +1325,7 @@ class GGUFConverter:
                             print(f"{theme['warning']}Overwriting: {output_file}{Style.RESET_ALL}")
 
                         actual_output_path = self.quantize(
-                            input_path=intermediate_file,
+                            input_path=actual_intermediate_file,
                             output_path=output_file,
                             quantization_type=quant_type,
                             verbose=verbose,

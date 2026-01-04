@@ -147,8 +147,9 @@ def make_config_saver(config: Dict[str, Any], config_key: str, session_key: str)
                     on_change=make_config_saver(config, "my_feature", "my_feature_checkbox"))
     """
     def save() -> None:
-        config[config_key] = st.session_state[session_key]
-        save_config(config)
+        if session_key in st.session_state:
+            config[config_key] = st.session_state[session_key]
+            save_config(config)
     return save
 
 
