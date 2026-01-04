@@ -115,6 +115,7 @@ def main() -> None:
         st.markdown("**Performance:**")
         max_workers = multiprocessing.cpu_count()
         default_threads = max(1, max_workers - 1)
+        st.text(f"Logical Processors: {max_workers}")
 
         def save_num_threads():
             config["num_threads"] = int(st.session_state.num_threads_input)
@@ -126,7 +127,7 @@ def main() -> None:
             max_value=max_workers,
             value=int(config.get("num_threads") or default_threads),
             step=1,
-            help=f"Number of threads for llama.cpp (logical processors: {max_workers}, default: {default_threads} to keep system responsive)",
+            help=f"Number of threads for llama.cpp. Default: maximum-1 to keep system responsive)",
             key="num_threads_input",
             on_change=save_num_threads
         )

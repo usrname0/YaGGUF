@@ -356,9 +356,16 @@ def render_convert_tab(
         # Intermediate source dropdown with same width as path inputs
         cols, has_browse = path_input_columns()
 
+        # Create dynamic label showing count when files are detected
+        if dropdown_disabled:
+            model_files_label = "Model files"
+        else:
+            file_count = len(intermediate_options)
+            model_files_label = f"Model files: {file_count} detected"
+
         with cols[0]:
             intermediate_source = st.selectbox(
-                "Model files",
+                model_files_label,
                 options=intermediate_options,
                 index=default_index,
                 disabled=dropdown_disabled,
@@ -739,9 +746,15 @@ def render_convert_tab(
                 # No files - select generate default
                 default_index = len(imatrix_files)
 
+            # Create dynamic label showing count of existing imatrix files
+            if imatrix_files:
+                imatrix_label = f"Imatrix file: {len(imatrix_files)} detected"
+            else:
+                imatrix_label = "Imatrix file"
+
             with cols[0]:
                 imatrix_selection = st.selectbox(
-                    "Imatrix file",
+                    imatrix_label,
                     options=dropdown_options,
                     index=default_index,
                     help="Choose an existing imatrix file, generate with default name, or generate with custom name",
@@ -784,7 +797,9 @@ def render_convert_tab(
                     if "imatrix_fallback_warning" in st.session_state:
                         del st.session_state.imatrix_fallback_warning
 
-            with cols[-1]:
+            # Place button in middle column if tkinter available, otherwise last column
+            button_col = cols[1] if has_browse else cols[-1]
+            with button_col:
                 st.markdown("<br>", unsafe_allow_html=True)  # Align with selectbox
                 if st.button("Refresh File List", key="update_imatrix_file_list", use_container_width=True):
                     # Save the current selection before rerunning

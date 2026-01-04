@@ -136,8 +136,14 @@ def render_imatrix_settings_tab(converter: "GGUFConverter", config: Dict[str, An
                     config["imatrix_calibration_file"] = st.session_state[key]
                     save_config(config)
 
+            # Create dynamic label showing count of calibration files
+            if calibration_files and calibration_files[0] != "(no files found)":
+                calibration_label = f"Calibration file: {len(calibration_files)} detected"
+            else:
+                calibration_label = "Calibration file"
+
             calibration_selection = st.selectbox(
-                "Calibration file",
+                calibration_label,
                 options=calibration_files,
                 index=default_index,
                 help="Select a calibration file from the directory above",
