@@ -424,6 +424,62 @@ def render_convert_tab(
             config.get("custom_intermediate_path")
         )
 
+        # Get intermediate_type early (needed for checkbox state management)
+        if "other_quants" not in config:
+            config["other_quants"] = {}
+        intermediate_type = config.get("intermediate_type", "F16").upper()
+
+        # Track custom intermediate mode changes to save/restore checkbox states
+        if 'previous_using_custom_intermediate' not in st.session_state:
+            st.session_state.previous_using_custom_intermediate = using_custom_intermediate
+
+        if "custom_intermediate_saved_states" not in config:
+            config["custom_intermediate_saved_states"] = {}
+
+        # Handle entering custom intermediate mode
+        if using_custom_intermediate and not st.session_state.previous_using_custom_intermediate:
+            # Save current checkbox states before disabling
+            if "other_quants" not in config:
+                config["other_quants"] = {}
+
+            # Save all non-intermediate checkbox states
+            for qtype in ["F32", "F16", "BF16"]:
+                if qtype != intermediate_type:
+                    current_state = config["other_quants"].get(qtype, False)
+                    config["custom_intermediate_saved_states"][qtype] = current_state
+                    # Clear the checkbox state
+                    config["other_quants"][qtype] = False
+                    # Clear session state for this checkbox
+                    checkbox_key = f"full_{qtype}_{intermediate_type}"
+                    if checkbox_key in st.session_state:
+                        st.session_state[checkbox_key] = False
+
+            st.session_state.previous_using_custom_intermediate = True
+            save_config(config)
+            st.rerun()
+
+        # Handle exiting custom intermediate mode (returning to safetensors)
+        elif not using_custom_intermediate and st.session_state.previous_using_custom_intermediate:
+            # Restore saved checkbox states
+            if "other_quants" not in config:
+                config["other_quants"] = {}
+
+            for qtype in ["F32", "F16", "BF16"]:
+                if qtype in config["custom_intermediate_saved_states"]:
+                    # Restore saved state
+                    saved_state = config["custom_intermediate_saved_states"][qtype]
+                    config["other_quants"][qtype] = saved_state
+                    # Update session state to match
+                    checkbox_key = f"full_{qtype}_{intermediate_type}"
+                    if checkbox_key in st.session_state:
+                        st.session_state[checkbox_key] = saved_state
+
+            # Clear the saved states after restoring
+            config["custom_intermediate_saved_states"] = {}
+            st.session_state.previous_using_custom_intermediate = False
+            save_config(config)
+            st.rerun()
+
         # Output directory with Select Folder and Open Folder buttons
         cols, has_browse = path_input_columns()
 
@@ -611,11 +667,6 @@ def render_convert_tab(
                 key="pure_quantization_checkbox",
                 on_change=make_config_saver(config, "pure_quantization", "pure_quantization_checkbox")
             )
-
-        if "other_quants" not in config:
-            config["other_quants"] = {}
-
-        intermediate_type = config.get("intermediate_type", "F16").upper()
 
         # Track intermediate format changes to restore checkbox states
         if 'previous_intermediate' not in st.session_state:
@@ -1010,9 +1061,8 @@ def render_convert_tab(
                 is_intermediate = qtype == intermediate_type
 
                 if using_custom_intermediate:
-                    # When using custom intermediate, disable all checkboxes
-                    # Only the selected format is checked
-                    checkbox_value = is_intermediate
+                    # When using custom intermediate, disable and uncheck all checkboxes
+                    checkbox_value = False
                     checkbox_disabled = True
                 elif is_intermediate:
                     checkbox_value = True
