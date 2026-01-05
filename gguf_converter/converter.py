@@ -352,7 +352,7 @@ class GGUFConverter:
             cmd.append("--mistral-format")
 
         print(f"{theme['info']}Converting {model_path.name} to GGUF format...{Style.RESET_ALL}")
-        print(f"{theme['highlight']}Running: {' '.join(cmd)}{Style.RESET_ALL}")
+        print(f"{theme['highlight']}Running: {' '.join(cmd)}{Style.RESET_ALL}\n")
 
         result = subprocess.run(cmd, capture_output=not verbose, text=True)
 
@@ -376,13 +376,13 @@ class GGUFConverter:
 
             if sharded_files:
                 actual_output_path = sharded_files[0]
-                print(f"{theme['success']}Conversion complete: {len(sharded_files)} shard(s) created{Style.RESET_ALL}")
+                print(f"\n{theme['success']}Conversion complete: {len(sharded_files)} shard(s) created{Style.RESET_ALL}")
                 for shard in sharded_files:
                     print(f"{theme['metadata']}  - {shard.name}{Style.RESET_ALL}")
             else:
-                print(f"{theme['success']}Conversion complete: {output_path}{Style.RESET_ALL}")
+                print(f"\n{theme['success']}Conversion complete: {output_path}{Style.RESET_ALL}")
         else:
-            print(f"{theme['success']}Conversion complete: {output_path}{Style.RESET_ALL}")
+            print(f"\n{theme['success']}Conversion complete: {output_path}{Style.RESET_ALL}")
 
         return actual_output_path
 
@@ -562,7 +562,7 @@ class GGUFConverter:
         if num_threads:
             cmd.append(str(num_threads))
 
-        print(f"{theme['highlight']}Running: {' '.join(cmd)}{Style.RESET_ALL}")
+        print(f"{theme['highlight']}Running: {' '.join(cmd)}{Style.RESET_ALL}\n")
         print()
 
         # Run llama-quantize
@@ -1044,6 +1044,15 @@ class GGUFConverter:
         if split_max_size:
             print(f"{theme['info']}Splitting files with max size per shard: {split_max_size}{Style.RESET_ALL}")
 
+        # Display safetensors file information if converting from safetensors
+        if not using_custom_intermediate and model_path.is_dir():
+            safetensors_files = list(model_path.glob("*.safetensors"))
+            if safetensors_files:
+                total_size = sum(f.stat().st_size for f in safetensors_files) / (1024**3)
+                print(f"{theme['success']}\nUsing safetensors files from: {model_path.name}{Style.RESET_ALL}")
+                print(f"{theme['info']}File count: {len(safetensors_files)}{Style.RESET_ALL}")
+                print(f"{theme['info']}Total size: {total_size:.2f} GB{Style.RESET_ALL}\n")
+
         # Step 1: Convert to GGUF or use custom intermediate
         if using_custom_intermediate:
             # Use provided custom intermediate file
@@ -1104,7 +1113,7 @@ class GGUFConverter:
                 # Normal mode: check for single intermediate file, ignore split files
                 if intermediate_file.exists():
                     if overwrite_intermediates:
-                        print(f"{theme['info']}\nIntermediate file exists: {intermediate_file.name}{Style.RESET_ALL}")
+                        print(f"{theme['info']}Intermediate file exists: {intermediate_file.name}{Style.RESET_ALL}")
                         print(f"{theme['info']}Overwriting (overwrite_intermediates=True)...{Style.RESET_ALL}")
                         print(f"{theme['warning']}Overwriting: {intermediate_file}{Style.RESET_ALL}")
                         intermediate_file = self.convert_to_gguf(
@@ -1114,7 +1123,7 @@ class GGUFConverter:
                             verbose=verbose
                         )
                     else:
-                        print(f"{theme['success']}\nIntermediate file already exists: {intermediate_file}{Style.RESET_ALL}")
+                        print(f"{theme['success']}Intermediate file already exists: {intermediate_file}{Style.RESET_ALL}")
                         print(f"{theme['info']}Skipping conversion, using existing file...{Style.RESET_ALL}")
                 else:
                     # No single file exists, create it
