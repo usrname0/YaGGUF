@@ -171,10 +171,8 @@ def render_imatrix_settings_tab(converter: "GGUFConverter", config: Dict[str, An
                 if current_selection:
                     config["imatrix_calibration_file"] = current_selection
                     save_config(config)
-                    # Store toast message in session state to show after rerun
-                    st.session_state.calibration_refresh_toast = f"Refreshed - calibration file: {current_selection}"
-                else:
-                    st.session_state.calibration_refresh_toast = "Updated calibration file list"
+                # Store toast message in session state to show after rerun
+                st.session_state.calibration_refresh_toast = "Refreshed - calibration file list"
                 st.rerun()
 
         # Show toast message after refresh (if flag is set)

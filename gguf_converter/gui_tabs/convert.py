@@ -391,6 +391,32 @@ def render_convert_tab(
                     config["custom_intermediate_path"] = None
                     save_config(config)
 
+        # Place button in middle column if tkinter available, otherwise last column
+        button_col = cols[1] if has_browse else cols[-1]
+        with button_col:
+            st.markdown("<br>", unsafe_allow_html=True)  # Align with selectbox
+            if st.button("Refresh File List", key="update_model_files_list", use_container_width=True):
+                # Save the current selection before rerunning
+                current_selection = st.session_state.get(f"intermediate_source_dropdown_{st.session_state.reset_count}")
+                if current_selection:
+                    if current_selection in intermediate_info_map:
+                        selected_data = intermediate_info_map[current_selection]
+                        config["custom_intermediate_mode"] = current_selection
+                        config["custom_intermediate_format"] = selected_data['format']
+                        config["custom_intermediate_path"] = str(selected_data['info']['primary_file'])
+                    else:
+                        config["custom_intermediate_mode"] = current_selection
+                        config["custom_intermediate_format"] = None
+                        config["custom_intermediate_path"] = None
+                    save_config(config)
+                st.session_state.model_files_refresh_toast = "Refreshed - model file list"
+                st.rerun()
+
+        # Show toast message after refresh (if flag is set)
+        if "model_files_refresh_toast" in st.session_state:
+            st.toast(st.session_state.model_files_refresh_toast)
+            del st.session_state.model_files_refresh_toast
+
         # Determine if using custom intermediate
         # Check config directly rather than string matching, which is more reliable
         using_custom_intermediate = bool(
@@ -807,18 +833,16 @@ def render_convert_tab(
                     if current_selection:
                         if current_selection == generate_custom_option:
                             config["imatrix_mode"] = "generate_custom"
-                            st.session_state.imatrix_refresh_toast = "Refreshed - mode: GENERATE (custom name)"
                         elif current_selection == generate_default_option:
                             config["imatrix_mode"] = "generate"
-                            st.session_state.imatrix_refresh_toast = "Refreshed - mode: GENERATE (default name)"
                         elif current_selection in imatrix_files:
                             config["imatrix_mode"] = "reuse"
                             config["imatrix_reuse_path"] = current_selection
-                            st.session_state.imatrix_refresh_toast = f"Refreshed - imatrix: {current_selection}"
                         save_config(config)
                     # Clear the fallback warning since user is confirming their selection
                     if "imatrix_fallback_warning" in st.session_state:
                         del st.session_state.imatrix_fallback_warning
+                    st.session_state.imatrix_refresh_toast = "Refreshed - imatrix file list"
                     st.rerun()
 
             # Show toast message after refresh (if flag is set)
