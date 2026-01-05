@@ -442,21 +442,21 @@ def render_convert_tab(
             if "other_quants" not in config:
                 config["other_quants"] = {}
 
-            # Save all non-intermediate checkbox states
+            # Save ALL checkbox states (including the current intermediate)
             for qtype in ["F32", "F16", "BF16"]:
-                if qtype != intermediate_type:
+                # For the current intermediate format, it's always enabled, so save True
+                # For others, save their actual state
+                if qtype == intermediate_type:
+                    current_state = True
+                else:
                     current_state = config["other_quants"].get(qtype, False)
-                    config["custom_intermediate_saved_states"][qtype] = current_state
-                    # Clear the checkbox state
-                    config["other_quants"][qtype] = False
-                    # Clear session state for this checkbox
-                    checkbox_key = f"full_{qtype}_{intermediate_type}"
-                    if checkbox_key in st.session_state:
-                        st.session_state[checkbox_key] = False
+
+                config["custom_intermediate_saved_states"][qtype] = current_state
+                # Clear the checkbox state in config
+                config["other_quants"][qtype] = False
 
             st.session_state.previous_using_custom_intermediate = True
             save_config(config)
-            st.rerun()
 
         # Handle exiting custom intermediate mode (returning to safetensors)
         elif not using_custom_intermediate and st.session_state.previous_using_custom_intermediate:
@@ -466,19 +466,14 @@ def render_convert_tab(
 
             for qtype in ["F32", "F16", "BF16"]:
                 if qtype in config["custom_intermediate_saved_states"]:
-                    # Restore saved state
+                    # Restore saved state to config
                     saved_state = config["custom_intermediate_saved_states"][qtype]
                     config["other_quants"][qtype] = saved_state
-                    # Update session state to match
-                    checkbox_key = f"full_{qtype}_{intermediate_type}"
-                    if checkbox_key in st.session_state:
-                        st.session_state[checkbox_key] = saved_state
 
             # Clear the saved states after restoring
             config["custom_intermediate_saved_states"] = {}
             st.session_state.previous_using_custom_intermediate = False
             save_config(config)
-            st.rerun()
 
         # Output directory with Select Folder and Open Folder buttons
         cols, has_browse = path_input_columns()
@@ -1079,11 +1074,14 @@ def render_convert_tab(
                             save_config(config)
                     return save_to_config
 
+                # Include using_custom_intermediate in key so widgets get recreated when mode changes
+                widget_key = f"full_{qtype}_{intermediate_type}_{using_custom_intermediate}"
+
                 full_checkboxes[qtype] = st.checkbox(
                     qtype,
                     value=checkbox_value,
                     help=tooltip,
-                    key=f"full_{qtype}_{intermediate_type}",
+                    key=widget_key,
                     disabled=checkbox_disabled,
                     on_change=save_full_selection(qtype, intermediate_type) if not checkbox_disabled else None
                 )
