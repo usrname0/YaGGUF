@@ -967,7 +967,12 @@ def render_convert_tab(
             "IQ2_XXS", "IQ2_XS", "IQ2_S", "IQ2_M",
             "IQ3_XXS", "IQ3_XS"
         ]
-        st.markdown("**Intermediate Formats:**")
+
+        # Gray out "Intermediate Formats:" label when using custom intermediate
+        if using_custom_intermediate:
+            st.markdown('<span style="color: gray;">**Intermediate Formats (disabled)(selected model is intermediate):**</span>', unsafe_allow_html=True)
+        else:
+            st.markdown("**Intermediate Formats:**")
 
         # Override intermediate_type if using custom intermediate
         if using_custom_intermediate:
