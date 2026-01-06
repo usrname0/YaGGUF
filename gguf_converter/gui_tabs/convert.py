@@ -1132,8 +1132,7 @@ def render_convert_tab(
                             save_config(config)
                     return save_to_config
 
-                # Include using_custom_intermediate in key so widgets get recreated when mode changes
-                widget_key = f"full_{qtype}_{intermediate_type}_{using_custom_intermediate}"
+                widget_key = f"full_{qtype}_{intermediate_type}"
 
                 full_checkboxes[qtype] = st.checkbox(
                     qtype,
