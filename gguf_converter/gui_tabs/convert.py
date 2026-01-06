@@ -448,51 +448,45 @@ def render_convert_tab(
             config["other_quants"] = {}
         intermediate_type = config.get("intermediate_type", "F16").upper()
 
-        # Track custom intermediate mode changes to save/restore checkbox states
+        # Track custom intermediate mode changes
         if 'previous_using_custom_intermediate' not in st.session_state:
             st.session_state.previous_using_custom_intermediate = using_custom_intermediate
 
-        if "custom_intermediate_saved_states" not in config:
-            config["custom_intermediate_saved_states"] = {}
-
-        # Handle entering custom intermediate mode
+        # Handle entering custom intermediate mode - save button selection and clear checkboxes
         if using_custom_intermediate and not st.session_state.previous_using_custom_intermediate:
-            # Save current checkbox states before disabling
-            if "other_quants" not in config:
-                config["other_quants"] = {}
+            # Save the current intermediate type (button selection)
+            config["custom_intermediate_saved_intermediate_type"] = intermediate_type
 
-            # Save ALL checkbox states (including the current intermediate)
-            for qtype in ["F32", "F16", "BF16"]:
-                # For the current intermediate format, it's always enabled, so save True
-                # For others, save their actual state
-                if qtype == intermediate_type:
-                    current_state = True
-                else:
-                    current_state = config["other_quants"].get(qtype, False)
+            # Clear all checkboxes (both active and saved states)
+            config["other_quants"]["F32"] = False
+            config["other_quants"]["F16"] = False
+            config["other_quants"]["BF16"] = False
 
-                config["custom_intermediate_saved_states"][qtype] = current_state
-                # Clear the checkbox state in config
-                config["other_quants"][qtype] = False
+            # Also clear saved states to prevent stale state from being restored
+            if "unquantized_saved_states" not in config:
+                config["unquantized_saved_states"] = {}
+            config["unquantized_saved_states"]["F32"] = False
+            config["unquantized_saved_states"]["F16"] = False
+            config["unquantized_saved_states"]["BF16"] = False
 
             st.session_state.previous_using_custom_intermediate = True
             save_config(config)
+            st.rerun()
 
-        # Handle exiting custom intermediate mode (returning to safetensors)
+        # Handle exiting custom intermediate mode - restore button selection only
         elif not using_custom_intermediate and st.session_state.previous_using_custom_intermediate:
-            # Restore saved checkbox states
-            if "other_quants" not in config:
-                config["other_quants"] = {}
+            # Restore the intermediate type (button selection)
+            if "custom_intermediate_saved_intermediate_type" in config:
+                saved_intermediate_type = config["custom_intermediate_saved_intermediate_type"]
+                config["intermediate_type"] = saved_intermediate_type
+                intermediate_type = saved_intermediate_type.upper()
+                st.session_state.previous_intermediate = intermediate_type
 
-            for qtype in ["F32", "F16", "BF16"]:
-                if qtype in config["custom_intermediate_saved_states"]:
-                    # Restore saved state to config
-                    saved_state = config["custom_intermediate_saved_states"][qtype]
-                    config["other_quants"][qtype] = saved_state
-
-            # Clear the saved states after restoring
-            config["custom_intermediate_saved_states"] = {}
+            # Clear the saved intermediate type
+            config["custom_intermediate_saved_intermediate_type"] = None
             st.session_state.previous_using_custom_intermediate = False
             save_config(config)
+
 
         # Output directory with Select Folder and Open Folder buttons
         cols, has_browse = path_input_columns()
@@ -1113,14 +1107,16 @@ def render_convert_tab(
             with format_cols[idx]:
                 is_intermediate = qtype == intermediate_type
 
-                if using_custom_intermediate:
-                    # When using custom intermediate, disable and uncheck all checkboxes
-                    checkbox_value = False
-                    checkbox_disabled = True
-                elif is_intermediate:
+                if is_intermediate and not using_custom_intermediate:
+                    # Intermediate format is checked and disabled (only in normal mode)
                     checkbox_value = True
                     checkbox_disabled = True
+                elif using_custom_intermediate:
+                    # In custom intermediate mode, all checkboxes are disabled and unchecked
+                    checkbox_value = config.get("other_quants", {}).get(qtype, False)
+                    checkbox_disabled = True
                 else:
+                    # Normal mode: show saved state and are enabled
                     checkbox_value = config.get("other_quants", {}).get(qtype, False)
                     checkbox_disabled = False
 
