@@ -111,14 +111,20 @@ def detect_intermediate_gguf_files(model_path: Path) -> Dict[str, Dict[str, Any]
         model_path: Path to model directory
 
     Returns:
-        Dictionary mapping format to file info:
+        Dictionary mapping format+type to file info:
         {
-            'F16': {
-                'type': 'single' or 'split',
+            'F16_single': {
+                'format': 'F16',
+                'type': 'single',
                 'files': [Path objects sorted],
                 'primary_file': Path (first file or single file),
                 'shard_count': int (1 for single, N for split),
                 'total_size_gb': float
+            },
+            'F16_split': {
+                'format': 'F16',
+                'type': 'split',
+                ...
             },
             ...
         }
@@ -141,33 +147,40 @@ def detect_intermediate_gguf_files(model_path: Path) -> Dict[str, Dict[str, Any]
             shard_num = int(split_match.group(3))
             total_shards = int(split_match.group(4))
 
-            if format_type not in intermediates:
-                intermediates[format_type] = {
+            # Use format+type as key to allow both single and split of same format
+            key = f"{format_type}_split"
+
+            if key not in intermediates:
+                intermediates[key] = {
+                    'format': format_type,
                     'type': 'split',
                     'files': [],
                     'shard_numbers': [],
                     'total_expected': total_shards
                 }
 
-            if intermediates[format_type]['type'] == 'split':
-                intermediates[format_type]['files'].append(gguf_file)
-                intermediates[format_type]['shard_numbers'].append(shard_num)
+            intermediates[key]['files'].append(gguf_file)
+            intermediates[key]['shard_numbers'].append(shard_num)
         else:
             # Try single pattern
             single_match = single_pattern.match(gguf_file.name)
             if single_match:
                 format_type = single_match.group(2)
 
-                # Only add if not already found as split
-                if format_type not in intermediates:
-                    intermediates[format_type] = {
+                # Use format+type as key to allow both single and split of same format
+                key = f"{format_type}_single"
+
+                # Add single file (multiple single files of same format will overwrite, which is expected)
+                if key not in intermediates:
+                    intermediates[key] = {
+                        'format': format_type,
                         'type': 'single',
                         'files': [gguf_file]
                     }
 
     # Validate and finalize each format
     validated = {}
-    for format_type, info in intermediates.items():
+    for key, info in intermediates.items():
         if info['type'] == 'split':
             # Sort files by shard number
             sorted_files = sorted(info['files'], key=lambda p:
@@ -179,7 +192,8 @@ def detect_intermediate_gguf_files(model_path: Path) -> Dict[str, Dict[str, Any]
 
             if expected == found:
                 # Complete set
-                validated[format_type] = {
+                validated[key] = {
+                    'format': info['format'],
                     'type': 'split',
                     'files': sorted_files,
                     'primary_file': sorted_files[0],
@@ -189,7 +203,8 @@ def detect_intermediate_gguf_files(model_path: Path) -> Dict[str, Dict[str, Any]
         else:
             # Single file
             file = info['files'][0]
-            validated[format_type] = {
+            validated[key] = {
+                'format': info['format'],
                 'type': 'single',
                 'files': [file],
                 'primary_file': file,
@@ -320,24 +335,24 @@ def render_convert_tab(
                 # Don't add to intermediate_info_map - safetensors needs conversion, not direct use
 
             # Add intermediate GGUF files
-            for format_type in ['F16', 'F32', 'BF16']:
-                if format_type in detected:
-                    info = detected[format_type]
+            # Sort by format type to keep consistent ordering
+            for key in sorted(detected.keys()):
+                info = detected[key]
 
-                    # Extract base filename
-                    if info['type'] == 'single':
-                        base_name = info['primary_file'].stem  # Remove .gguf extension
-                        option_text = f"{base_name} (single file, {info['total_size_gb']:.2f} GB)"
-                    else:
-                        # Remove shard numbering pattern: -00001-of-00003
-                        base_name = re.sub(r'-\d+-of-\d+$', '', info['primary_file'].stem)
-                        option_text = f"{base_name} ({info['shard_count']} shards, {info['total_size_gb']:.2f} GB)"
+                # Extract base filename
+                if info['type'] == 'single':
+                    base_name = info['primary_file'].stem  # Remove .gguf extension
+                    option_text = f"{base_name} (single file, {info['total_size_gb']:.2f} GB)"
+                else:
+                    # Remove shard numbering pattern: -00001-of-00003
+                    base_name = re.sub(r'-\d+-of-\d+$', '', info['primary_file'].stem)
+                    option_text = f"{base_name} ({info['shard_count']} shards, {info['total_size_gb']:.2f} GB)"
 
-                    intermediate_options.append(option_text)
-                    intermediate_info_map[option_text] = {
-                        'format': format_type,
-                        'info': info
-                    }
+                intermediate_options.append(option_text)
+                intermediate_info_map[option_text] = {
+                    'format': info['format'],
+                    'info': info
+                }
 
             # If no files found, show disabled message
             if not intermediate_options:
@@ -382,6 +397,7 @@ def render_convert_tab(
                     config["custom_intermediate_mode"] = intermediate_source
                     config["custom_intermediate_format"] = selected_data['format']
                     config["custom_intermediate_path"] = str(selected_data['info']['primary_file'])
+                    config["custom_intermediate_file_type"] = selected_data['info']['type']  # 'single' or 'split'
                     save_config(config)
             else:
                 # Not a custom intermediate - clear settings
@@ -389,6 +405,7 @@ def render_convert_tab(
                     config["custom_intermediate_mode"] = intermediate_source
                     config["custom_intermediate_format"] = None
                     config["custom_intermediate_path"] = None
+                    config["custom_intermediate_file_type"] = None
                     save_config(config)
 
         # Place button in middle column if tkinter available, otherwise last column
@@ -404,10 +421,12 @@ def render_convert_tab(
                         config["custom_intermediate_mode"] = current_selection
                         config["custom_intermediate_format"] = selected_data['format']
                         config["custom_intermediate_path"] = str(selected_data['info']['primary_file'])
+                        config["custom_intermediate_file_type"] = selected_data['info']['type']
                     else:
                         config["custom_intermediate_mode"] = current_selection
                         config["custom_intermediate_format"] = None
                         config["custom_intermediate_path"] = None
+                        config["custom_intermediate_file_type"] = None
                     save_config(config)
                 st.session_state.model_files_refresh_toast = "Refreshed - model file list"
                 st.rerun()
@@ -528,21 +547,45 @@ def render_convert_tab(
 
         # File Handling section
         with st.expander("File Handling"):
-            # Two-column layout: radio buttons on left, options on right
-            radio_col, options_col = st.columns([1, 3])
+            # Three-column layout: radio buttons on left, options in middle, info on right
+            radio_col, options_col, info_col = st.columns([1, 3, 2])
 
             with radio_col:
-                # File handling mode
+                # Determine if we should force file mode based on custom intermediate
+                force_file_mode = None
+                disable_file_mode = False
+                custom_file_type = config.get("custom_intermediate_file_type", "none")
+
+                if using_custom_intermediate:
+                    if custom_file_type == "single":
+                        force_file_mode = "Single files"
+                        disable_file_mode = True
+                    elif custom_file_type == "split":
+                        force_file_mode = "Split files"
+                        disable_file_mode = True
+
+                # Use forced mode if available, otherwise use saved config
+                if force_file_mode:
+                    file_mode_index = 0 if force_file_mode == "Single files" else 1
+                else:
+                    file_mode_index = 0 if config.get("file_mode", "Single files") == "Single files" else 1
+
+                # Include using_custom_intermediate and custom_file_type in key to force widget recreation
+                file_mode_key = f"file_mode_radio_{using_custom_intermediate}_{custom_file_type}"
+
+                # File handling mode callback
                 def save_file_mode():
-                    config["file_mode"] = st.session_state.file_mode_radio
-                    save_config(config)
+                    if file_mode_key in st.session_state:
+                        config["file_mode"] = st.session_state[file_mode_key]
+                        save_config(config)
 
                 file_mode = st.radio(
                     "File handling mode",
                     options=["Single files", "Split files"],
-                    index=0 if config.get("file_mode", "Single files") == "Single files" else 1,
-                    key="file_mode_radio",
-                    on_change=save_file_mode
+                    index=file_mode_index,
+                    key=file_mode_key,
+                    on_change=save_file_mode,
+                    disabled=disable_file_mode
                 )
 
                 # Add spacing to prevent size changes when switching modes
@@ -555,6 +598,10 @@ def render_convert_tab(
                     st.markdown("**Split file options:**")
 
                     st.markdown("- Split files will always overwrite existing split intermediates and quants.")
+
+                    # Disable shard size input if using split custom intermediate
+                    disable_shard_size = (using_custom_intermediate and
+                                        config.get("custom_intermediate_file_type") == "split")
 
                     # Use a narrow column for the number input to make it smaller
                     split_size_col1, split_size_col2 = st.columns([1, 2])
@@ -570,9 +617,10 @@ def render_convert_tab(
                             value=config.get("max_shard_size_gb", 2.0),
                             step=0.1,
                             format="%.1f",
-                            help="Maximum size per shard file in GB. llama.cpp will create as many shards as needed to stay under this limit.",
+                            help="Maximum size per shard file in GB. llama.cpp will create as many shards as needed to stay under this limit." if not disable_shard_size else "Disabled because existing intermediate file is already split.",
                             key="max_shard_size_input",
-                            on_change=save_max_shard_size
+                            on_change=save_max_shard_size,
+                            disabled=disable_shard_size
                         )
 
                     # Split mode doesn't use these settings, but set defaults for the converter call
@@ -584,12 +632,17 @@ def render_convert_tab(
                     # Single file options - show overwrite checkboxes
                     max_shard_size_gb = 0  # Not used in single file mode
 
+                    # Disable "Overwrite intermediates" when using custom intermediate
+                    disable_overwrite_intermediates = (using_custom_intermediate and
+                                                      config.get("custom_intermediate_file_type") == "single")
+
                     overwrite_intermediates = st.checkbox(
                         "Overwrite intermediates (F32, F16, BF16)",
-                        value=config.get("overwrite_intermediates", True),
-                        help="If enabled (default), regenerate intermediate formats even if they exist. If disabled, reuse existing intermediate files to save time.",
-                        key="overwrite_intermediates_checkbox",
-                        on_change=make_config_saver(config, "overwrite_intermediates", "overwrite_intermediates_checkbox")
+                        value=False if disable_overwrite_intermediates else config.get("overwrite_intermediates", True),
+                        help="If enabled (default), regenerate intermediate formats even if they exist. If disabled, reuse existing intermediate files to save time." if not disable_overwrite_intermediates else "Disabled when using custom intermediate file.",
+                        key=f"overwrite_intermediates_checkbox_{using_custom_intermediate}",
+                        on_change=make_config_saver(config, "overwrite_intermediates", f"overwrite_intermediates_checkbox_{using_custom_intermediate}"),
+                        disabled=disable_overwrite_intermediates
                     )
 
                     overwrite_quants = st.checkbox(
@@ -599,6 +652,11 @@ def render_convert_tab(
                         key="overwrite_quants_checkbox",
                         on_change=make_config_saver(config, "overwrite_quants", "overwrite_quants_checkbox")
                     )
+
+            with info_col:
+                # Show info when using custom intermediate
+                if using_custom_intermediate:
+                    st.info("Using existing intermediate. Some options disabled.")
 
         # Advanced quantization options
         with st.expander("Advanced Quantization Options"):
@@ -1016,7 +1074,7 @@ def render_convert_tab(
 
         # Gray out "Intermediate Formats:" label when using custom intermediate
         if using_custom_intermediate:
-            st.markdown('<span style="color: gray;">**Intermediate Formats (disabled)(selected model is intermediate):**</span>', unsafe_allow_html=True)
+            st.markdown('<span style="color: gray;">**Intermediate Formats (disabled because selected model is intermediate):**</span>', unsafe_allow_html=True)
         else:
             st.markdown("**Intermediate Formats:**")
 
