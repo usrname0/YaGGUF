@@ -67,3 +67,115 @@ class TestExtractRepoIdFromUrl:
         """Test repo ID with underscores"""
         url = "https://huggingface.co/some_user/some_model"
         assert extract_repo_id_from_url(url) == "some_user/some_model"
+
+
+class TestDetectAllModelFiles:
+    """Tests for detect_all_model_files function"""
+
+    def test_empty_directory(self, tmp_path):
+        """Test with empty directory"""
+        from gguf_converter.gui_utils import detect_all_model_files
+        result = detect_all_model_files(tmp_path)
+        assert result == {}
+
+    def test_single_gguf_file(self, tmp_path):
+        """Test detecting single GGUF file"""
+        from gguf_converter.gui_utils import detect_all_model_files
+        
+        model_file = tmp_path / "model.gguf"
+        model_file.write_bytes(b"x" * 1024 * 1024 * 100)  # 100MB
+        
+        result = detect_all_model_files(tmp_path)
+        
+        assert len(result) == 1
+        key = list(result.keys())[0]
+        assert result[key]['type'] == 'single'
+        assert result[key]['extension'] == 'gguf'
+        assert result[key]['shard_count'] == 1
+        assert 'model' in result[key]['display_name']
+
+    def test_single_safetensors_file(self, tmp_path):
+        """Test detecting single safetensors file"""
+        from gguf_converter.gui_utils import detect_all_model_files
+        
+        model_file = tmp_path / "model.safetensors"
+        model_file.write_bytes(b"x" * 1024 * 1024 * 100)  # 100MB
+        
+        result = detect_all_model_files(tmp_path)
+        
+        assert len(result) == 1
+        key = list(result.keys())[0]
+        assert result[key]['type'] == 'single'
+        assert result[key]['extension'] == 'safetensors'
+        # Safetensors should show full filename
+        assert 'model.safetensors' in result[key]['display_name']
+
+    def test_split_gguf_files(self, tmp_path):
+        """Test detecting split GGUF files"""
+        from gguf_converter.gui_utils import detect_all_model_files
+        
+        # Create split files
+        for i in range(1, 4):
+            shard = tmp_path / f"model-{i:05d}-of-00003.gguf"
+            shard.write_bytes(b"x" * 1024 * 1024 * 50)  # 50MB each
+        
+        result = detect_all_model_files(tmp_path)
+        
+        assert len(result) == 1
+        key = list(result.keys())[0]
+        assert result[key]['type'] == 'split'
+        assert result[key]['extension'] == 'gguf'
+        assert result[key]['shard_count'] == 3
+        assert '3 shards' in result[key]['display_name']
+
+    def test_split_safetensors_files(self, tmp_path):
+        """Test detecting split safetensors files"""
+        from gguf_converter.gui_utils import detect_all_model_files
+        
+        for i in range(1, 3):
+            shard = tmp_path / f"model-{i:05d}-of-00002.safetensors"
+            shard.write_bytes(b"x" * 1024 * 1024 * 50)
+        
+        result = detect_all_model_files(tmp_path)
+        
+        assert len(result) == 1
+        key = list(result.keys())[0]
+        assert result[key]['type'] == 'split'
+        assert result[key]['extension'] == 'safetensors'
+        assert result[key]['shard_count'] == 2
+
+    def test_incomplete_split_files(self, tmp_path):
+        """Test that incomplete split files are not detected"""
+        from gguf_converter.gui_utils import detect_all_model_files
+        
+        # Only create 2 out of 3 shards
+        (tmp_path / "model-00001-of-00003.gguf").write_bytes(b"x" * 100)
+        (tmp_path / "model-00002-of-00003.gguf").write_bytes(b"x" * 100)
+        # Missing 00003
+        
+        result = detect_all_model_files(tmp_path)
+        
+        # Should not detect incomplete sets
+        assert len(result) == 0
+
+    def test_multiple_models(self, tmp_path):
+        """Test detecting multiple different models"""
+        from gguf_converter.gui_utils import detect_all_model_files
+        
+        # Single GGUF
+        (tmp_path / "model_a.gguf").write_bytes(b"x" * 1024 * 1024)
+        
+        # Split safetensors
+        (tmp_path / "model_b-00001-of-00002.safetensors").write_bytes(b"x" * 1024 * 1024)
+        (tmp_path / "model_b-00002-of-00002.safetensors").write_bytes(b"x" * 1024 * 1024)
+        
+        result = detect_all_model_files(tmp_path)
+        
+        assert len(result) == 2
+
+    def test_nonexistent_directory(self, tmp_path):
+        """Test with non-existent directory"""
+        from gguf_converter.gui_utils import detect_all_model_files
+        
+        result = detect_all_model_files(tmp_path / "nonexistent")
+        assert result == {}

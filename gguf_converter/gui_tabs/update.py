@@ -59,6 +59,7 @@ def render_update_tab(converter: "GGUFConverter", config: Dict[str, Any]) -> Non
     with col1:
         st.subheader("Update YaGGUF")
         st.markdown("Update to the latest version of YaGGUF from GitHub.")
+        st.markdown("The GUI will close and restart automatically. All updates will run in the terminal.")
         st.markdown("[View YaGGUF on GitHub](https://github.com/usrname0/YaGGUF)")
         if st.button("Update YaGGUF & Restart"):
             # Check what version is available

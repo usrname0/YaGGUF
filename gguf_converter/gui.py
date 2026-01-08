@@ -18,7 +18,7 @@ try:
         render_imatrix_settings_tab,
         render_imatrix_stats_tab,
         render_downloader_tab,
-        render_merge_tab,
+        render_split_merge_tab,
         render_llama_cpp_tab,
         render_info_tab,
         render_update_tab
@@ -35,7 +35,7 @@ except ImportError:
         render_imatrix_settings_tab,
         render_imatrix_stats_tab,
         render_downloader_tab,
-        render_merge_tab,
+        render_split_merge_tab,
         render_llama_cpp_tab,
         render_info_tab,
         render_update_tab
@@ -127,12 +127,15 @@ def main() -> None:
             max_value=max_workers,
             value=int(config.get("num_threads") or default_threads),
             step=1,
-            help=f"Number of threads for llama.cpp. Default: maximum-1 to keep system responsive)",
+            help=f"Number of threads for llama.cpp. Default: maximum - 1 to keep system responsive)",
             key="num_threads_input",
             on_change=save_num_threads
         )
 
         st.markdown("---")
+        if st.button("Reload UI", use_container_width=True, help="Reload the user interface via st.rerun()"):
+            st.rerun()
+
         if st.button("Reset to defaults", use_container_width=True, help="Reset all settings to default values"):
             st.session_state.config = reset_config()
             st.session_state.reset_count += 1
@@ -160,7 +163,7 @@ def main() -> None:
         "Imatrix Settings",
         "Imatrix Statistics",
         "HuggingFace Downloader",
-        "Merge Shards",
+        "Split/Merge Shards",
         "Info",
         "llama.cpp",
         "Update"
@@ -179,7 +182,7 @@ def main() -> None:
         render_downloader_tab(converter, config)
 
     with tab5:
-        render_merge_tab(converter, config)
+        render_split_merge_tab(converter, config)
 
     with tab6:
         render_info_tab(converter, config)

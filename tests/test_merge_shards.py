@@ -1,5 +1,5 @@
 """
-Tests for shard merging functionality in gui_tabs/merge.py
+Tests for shard merging functionality in gui_tabs/split_merge.py
 
 Tests the shard analysis and merging utilities for both GGUF and safetensors files.
 """
@@ -7,10 +7,15 @@ Tests the shard analysis and merging utilities for both GGUF and safetensors fil
 import pytest
 from pathlib import Path
 from unittest.mock import Mock, patch, MagicMock
-from gguf_converter.gui_tabs.merge import (
+from gguf_converter.gui_tabs.split_merge import (
     analyze_shards,
     merge_gguf_shards,
-    merge_safetensors_shards
+    merge_safetensors_shards,
+    split_gguf_file,
+    split_safetensors_file,
+    resplit_gguf_shards,
+    resplit_safetensors_shards,
+    copy_auxiliary_files
 )
 
 
@@ -306,7 +311,7 @@ class TestMergeGGUFShards:
         fake_binary.touch()
 
         # Patch the __file__ location to make the binary discoverable
-        with patch('gguf_converter.gui_tabs.merge.__file__', str(tmp_path / "gguf_converter" / "gui_tabs" / "merge.py")):
+        with patch('gguf_converter.gui_tabs.split_merge.__file__', str(tmp_path / "gguf_converter" / "gui_tabs" / "split_merge.py")):
             merge_gguf_shards(shard_files, output_file)
 
         # Verify subprocess was called
@@ -343,7 +348,7 @@ class TestMergeGGUFShards:
         fake_binary.touch()
 
         # Patch the __file__ location to make the binary discoverable
-        with patch('gguf_converter.gui_tabs.merge.__file__', str(tmp_path / "gguf_converter" / "gui_tabs" / "merge.py")):
+        with patch('gguf_converter.gui_tabs.split_merge.__file__', str(tmp_path / "gguf_converter" / "gui_tabs" / "split_merge.py")):
             merge_gguf_shards(shard_files, output_file)
 
         # Directory should be created
@@ -367,7 +372,7 @@ class TestMergeGGUFShards:
         output_file.touch()  # Create existing file
         assert output_file.exists()
 
-        with patch('gguf_converter.gui_tabs.merge.Path.exists', return_value=True):
+        with patch('gguf_converter.gui_tabs.split_merge.Path.exists', return_value=True):
             merge_gguf_shards(shard_files, output_file)
 
         # File should have been deleted (and recreated by mock merge)
@@ -402,7 +407,7 @@ class TestMergeGGUFShards:
         fake_binary.touch()
 
         # Patch the __file__ location to make the binary discoverable
-        with patch('gguf_converter.gui_tabs.merge.__file__', str(tmp_path / "gguf_converter" / "gui_tabs" / "merge.py")):
+        with patch('gguf_converter.gui_tabs.split_merge.__file__', str(tmp_path / "gguf_converter" / "gui_tabs" / "split_merge.py")):
             with pytest.raises(RuntimeError, match="llama-gguf-split failed"):
                 merge_gguf_shards(shard_files, output_file)
 
@@ -421,7 +426,7 @@ class TestMergeGGUFShards:
 
         # Don't create the binary - it should be missing
         # Patch the __file__ location so it looks for binary in tmp_path
-        with patch('gguf_converter.gui_tabs.merge.__file__', str(tmp_path / "gguf_converter" / "gui_tabs" / "merge.py")):
+        with patch('gguf_converter.gui_tabs.split_merge.__file__', str(tmp_path / "gguf_converter" / "gui_tabs" / "split_merge.py")):
             with pytest.raises(FileNotFoundError, match="llama-gguf-split not found"):
                 merge_gguf_shards(shard_files, output_file)
 
@@ -555,3 +560,16 @@ class TestMergeSafetensorsShards:
         assert saved_tensors["layer1"] == "tensor1"
         assert saved_tensors["layer2"] == "tensor2"
         assert saved_tensors["layer3"] == "tensor3"
+
+
+class TestSplitGGUFFile:
+    """Tests for split_gguf_file()"""
+    
+    def test_empty_input_file_raises_error(self, tmp_path):
+        """Test that nonexistent input file raises FileNotFoundError"""
+        output_dir = tmp_path / "output"
+        output_dir.mkdir()
+
+        with pytest.raises(FileNotFoundError, match="Input file not found"):
+            split_gguf_file(tmp_path / "nonexistent.gguf", output_dir, "2000M")
+

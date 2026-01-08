@@ -365,25 +365,40 @@ def render_imatrix_settings_tab(converter: "GGUFConverter", config: Dict[str, An
 
         with col_proc2:
             # GPU offloading
+            # Disable GPU layers when using YaGGUF binaries (CPU-only)
+            using_custom_binaries = config.get("use_custom_binaries", False)
+            gpu_disabled = not using_custom_binaries
+
             # Auto-save callback for num_gpu_layers
             def save_num_gpu_layers():
-                key = f"imatrix_num_gpu_layers_{st.session_state.reset_count}"
+                key = f"imatrix_num_gpu_layers_{using_custom_binaries}_{st.session_state.reset_count}"
                 if key in st.session_state:
                     config["imatrix_num_gpu_layers"] = int(st.session_state[key])
                     save_config(config)
+
+            if gpu_disabled:
+                help_text = "Disabled: YaGGUF binaries are CPU-only. Enable custom binaries on the llama.cpp tab to use GPU."
+                gpu_value = 0
+            else:
+                help_text = "0 = CPU only, >99 = fully offloaded in most cases."
+                gpu_value = int(config.get("imatrix_num_gpu_layers", 0))
 
             imatrix_num_gpu_layers_input = st.number_input(
                 "GPU layers (-ngl)",
                 min_value=0,
                 max_value=999,
-                value=int(config.get("imatrix_num_gpu_layers", 0)),
+                value=gpu_value,
                 step=1,
-                help="0 = CPU only, >99 = fully offloaded in most cases.",
-                key=f"imatrix_num_gpu_layers_{st.session_state.reset_count}",
-                on_change=save_num_gpu_layers
+                help=help_text,
+                key=f"imatrix_num_gpu_layers_{using_custom_binaries}_{st.session_state.reset_count}",
+                on_change=save_num_gpu_layers,
+                disabled=gpu_disabled
             )
             st.caption("Number of model layers to offload to GPU.")
-            st.caption("Requires GPU-enabled llama.cpp build.")
+            if gpu_disabled:
+                st.caption("Requires custom GPU-enabled binaries.")
+            else:
+                st.caption("Requires GPU-enabled llama.cpp build.")
 
         with col_proc3:
             # Auto-save callback for no ppl

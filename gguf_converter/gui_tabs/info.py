@@ -23,9 +23,13 @@ def render_info_tab(converter: "GGUFConverter", config: Dict[str, Any]) -> None:
     **Features:**
     - **Convert & Quantize** - HuggingFace models to GGUF with multiple quantization formats at once
     - **All quantization types** - Full support for llama.cpp quantization types
+    - **Split files mode** - Generate split shards for intermediates and quants
+    - **Custom intermediates** - Use existing GGUF files as intermediates for quantization
+    - **Source dtype detection** - Automatically detects model precision (BF16, F16, F32)
     - **Importance Matrix** - Generate or reuse imatrix files for better low-bit quantization (IQ2, IQ3)
     - **Imatrix Statistics** - Analyze importance matrix files to view statistics
     - **HuggingFace Downloader** - Download models and their supporting files
+    - **Split/Merge Shards** - Split and merge GGUF and safetensors files with custom shard sizes
     - **Cross-platform** - Windows & Linux support (Mac should work too, but untested)
     - **Auto-downloads binaries** - Pre-compiled llama.cpp binaries (CPU)
     - **Customization** - Can use other llama.cpp binaries if desired
@@ -36,9 +40,10 @@ def render_info_tab(converter: "GGUFConverter", config: Dict[str, Any]) -> None:
     2. **Imatrix Settings** - Configure calibration data and processing settings
     3. **Imatrix Statistics** - Analyze existing imatrix files
     4. **HuggingFace Downloader** - Download models from HuggingFace
-    5. **Info** - This tab
-    6. **llama.cpp** - Customize llama.cpp setup
-    7. **Update** - Update YaGGUF, llama.cpp and dependencies
+    5. **Split/Merge Shards** - Split and merge GGUF and safetensors files
+    6. **Info** - This tab
+    7. **llama.cpp** - Customize llama.cpp setup
+    8. **Update** - Update YaGGUF, llama.cpp and dependencies
 
     **Settings:**
     - Your settings are automatically saved as you change them
@@ -79,11 +84,12 @@ def render_info_tab(converter: "GGUFConverter", config: Dict[str, Any]) -> None:
     | IQ1_S | Extreme | Poor | I-Quant | 1-bit small (use imatrix) |
 
     **Quick Guide:**
-    - Just starting? Use **Q4_K_M**
-    - Want better quality? Use **Q5_K_M** or **Q6_K**
-    - Need omega deluxe quality? Use **Q8_0** or **F16**
-    - Want smallest size? Use IQ3_M or IQ2_M with importance matrix
-
+    - Bigger is better (more precision)
+    - For best quality use **F16** or **Q8_0**
+    - For decent quality use **Q6_K** or **Q5_K_M**
+    - Medium quality? Use **Q4_K_M**
+    - For smallest size use IQ3_M or IQ2_M with importance matrix
+    
     Quantization is done by [llama.cpp](https://github.com/ggml-org/llama.cpp).
 
     """)

@@ -57,6 +57,41 @@ def sanitize_filename(filename: str) -> str:
     return clean
 
 
+def detect_source_dtype(model_path: Path) -> Optional[str]:
+    """
+    Detect the data type (precision) of source model from config.json.
+
+    Args:
+        model_path: Path to model directory
+
+    Returns:
+        Dtype string like "BF16", "F16", "F32", or None if unable to detect
+    """
+    import json
+
+    config_json = model_path / "config.json"
+    if config_json.exists():
+        try:
+            with open(config_json, 'r', encoding='utf-8') as f:
+                config_data = json.load(f)
+                # Check both "dtype" and "torch_dtype" fields
+                dtype_value = config_data.get("dtype", config_data.get("torch_dtype", "")).lower()
+
+                # Map torch dtypes to our format
+                dtype_map = {
+                    "bfloat16": "BF16",
+                    "float16": "F16",
+                    "float32": "F32",
+                }
+
+                if dtype_value in dtype_map:
+                    return dtype_map[dtype_value]
+        except Exception:
+            pass
+
+    return None
+
+
 def validate_calibration_file(config: Dict[str, Any]) -> Optional[Path]:
     """
     Validate and return the calibration file path.
@@ -293,6 +328,8 @@ def render_convert_tab(
         # Detect available intermediate files
         intermediate_options = []
         intermediate_info_map = {}  # Maps option string to file info
+        source_dtype = None
+        config_missing = False
 
         model_path_valid = bool(model_path_clean and Path(model_path_clean).exists())
 
@@ -309,6 +346,13 @@ def render_convert_tab(
             safetensors_files = list(model_path_obj.glob("*.safetensors"))
             has_safetensors = len(safetensors_files) > 0
 
+            # Detect source dtype if we have safetensors
+            if has_safetensors:
+                source_dtype = detect_source_dtype(model_path_obj)
+                # Check if config.json exists
+                if not (model_path_obj / "config.json").exists():
+                    config_missing = True
+
             # Scan for intermediate GGUF files
             detected = detect_intermediate_gguf_files(model_path_obj)
 
@@ -321,15 +365,18 @@ def render_convert_tab(
                 split_pattern = re.compile(r'-\d+of\d+\.safetensors$|\.safetensors\.\d+$')
                 split_files = [f for f in safetensors_files if split_pattern.search(f.name)]
 
+                # Build dtype part of label
+                dtype_part = f", {source_dtype}" if source_dtype else ""
+
                 if split_files:
                     total_size = sum(f.stat().st_size for f in safetensors_files) / (1024**3)
-                    option_text = f"safetensors ({len(safetensors_files)} files, {total_size:.2f} GB)"
+                    option_text = f"safetensors ({len(safetensors_files)} files{dtype_part}, {total_size:.2f} GB)"
                 else:
                     total_size = sum(f.stat().st_size for f in safetensors_files) / (1024**3)
                     if len(safetensors_files) == 1:
-                        option_text = f"safetensors (single file, {total_size:.2f} GB)"
+                        option_text = f"safetensors (single file{dtype_part}, {total_size:.2f} GB)"
                     else:
-                        option_text = f"safetensors ({len(safetensors_files)} files, {total_size:.2f} GB)"
+                        option_text = f"safetensors ({len(safetensors_files)} files{dtype_part}, {total_size:.2f} GB)"
 
                 intermediate_options.append(option_text)
                 # Don't add to intermediate_info_map - safetensors needs conversion, not direct use
@@ -650,7 +697,12 @@ def render_convert_tab(
             with info_col:
                 # Show info when using custom intermediate
                 if using_custom_intermediate:
-                    st.info("Using existing intermediate. Some options disabled.")
+                    st.info('Using existing intermediate. Some options disabled.\n\nTo change splits go to the "Split/Merge Shards" tab.')
+                # Show info when in split files mode without custom intermediate
+                elif file_mode == "Split files":
+                    st.info("Intermediate will be split into shards before quantization.\n\nQuantized outputs will then be split accordingly.")
+                elif file_mode == "Single files":
+                    st.info("Intermediate will be a single file.\n\nQuantized outputs will then be a single file.")
 
         # Advanced quantization options
         with st.expander("Advanced Quantization Options"):
@@ -1066,11 +1118,20 @@ def render_convert_tab(
             "IQ3_XXS", "IQ3_XS"
         ]
 
-        # Gray out "Intermediate Formats:" label when using custom intermediate
+        # Show label and custom intermediate info when applicable
         if using_custom_intermediate:
-            st.markdown('<span style="color: gray;">**Intermediate Formats (disabled because selected model is intermediate):**</span>', unsafe_allow_html=True)
+            custom_intermediate_mode = config.get("custom_intermediate_mode", "")
+            st.markdown(f'**Intermediate File:** `{custom_intermediate_mode}`')
+
         else:
-            st.markdown("**Intermediate Formats:**")
+            # Build header with source dtype info if available
+            if source_dtype:
+                header = f"**Intermediate Formats** (source is {source_dtype}):"
+            elif config_missing:
+                header = "**Intermediate Formats** (config.json is missing!)"
+            else:
+                header = "**Intermediate Formats:**"
+            st.markdown(header)
 
         # Override intermediate_type if using custom intermediate
         if using_custom_intermediate:

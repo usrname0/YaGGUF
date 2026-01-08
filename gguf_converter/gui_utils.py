@@ -641,3 +641,123 @@ def run_and_stream_command(command: List[str]) -> None:
         full_output += f"\n--- An error occurred ---\n{str(e)}"
         output_container.code(full_output, language='bash')
         st.toast(f"An error occurred: {e}")
+
+
+def detect_all_model_files(model_path: Path) -> Dict[str, Dict[str, Any]]:
+    """
+    Detect all GGUF and safetensors files in a directory (both single and split).
+
+    Args:
+        model_path: Path to model directory
+
+    Returns:
+        Dictionary mapping file identifier to file info:
+        {
+            'filename_single': {
+                'type': 'single',
+                'extension': 'gguf' or 'safetensors',
+                'files': [Path object],
+                'primary_file': Path,
+                'shard_count': 1,
+                'total_size_gb': float,
+                'display_name': str  # Formatted for dropdown
+            },
+            'filename_split': {
+                'type': 'split',
+                'extension': 'gguf' or 'safetensors',
+                'files': [Path objects sorted],
+                'primary_file': Path,
+                'shard_count': int,
+                'total_size_gb': float,
+                'display_name': str  # Formatted for dropdown
+            },
+            ...
+        }
+    """
+    import re
+    from collections import defaultdict
+
+    if not model_path.exists() or not model_path.is_dir():
+        return {}
+
+    detected_files = {}
+
+    # Detect GGUF files
+    for extension in ['gguf', 'safetensors']:
+        # Pattern for split files: {base}-00001-of-00003.{ext}
+        split_pattern = re.compile(rf'^(.+)-(\d+)-of-(\d+)\.{extension}$')
+
+        # Track split file groups
+        split_groups: Dict[str, Dict[str, Any]] = defaultdict(lambda: {
+            'files': [],
+            'shard_numbers': [],
+            'total_expected': 0
+        })
+
+        all_files = list(model_path.glob(f"*.{extension}"))
+
+        for file_path in all_files:
+            # Try split pattern first
+            split_match = split_pattern.match(file_path.name)
+            if split_match:
+                base_name = split_match.group(1)
+                shard_num = int(split_match.group(2))
+                total_shards = int(split_match.group(3))
+
+                split_groups[base_name]['files'].append(file_path)
+                split_groups[base_name]['shard_numbers'].append(shard_num)
+                if split_groups[base_name]['total_expected'] == 0:
+                    split_groups[base_name]['total_expected'] = total_shards
+            else:
+                # Single file
+                key = f"{file_path.stem}_{extension}_single"
+                file_size_gb = file_path.stat().st_size / (1024**3)
+
+                # For safetensors, show full filename; for GGUF, show stem only
+                if extension == 'safetensors':
+                    display_name = f"{file_path.name} (single file, {file_size_gb:.2f} GB)"
+                else:
+                    display_name = f"{file_path.stem} (single file, {file_size_gb:.2f} GB)"
+
+                detected_files[key] = {
+                    'type': 'single',
+                    'extension': extension,
+                    'files': [file_path],
+                    'primary_file': file_path,
+                    'shard_count': 1,
+                    'total_size_gb': file_size_gb,
+                    'display_name': display_name
+                }
+
+        # Process split file groups
+        for base_name, group_info in split_groups.items():
+            # Sort files by shard number
+            sorted_files = sorted(group_info['files'],
+                                key=lambda p: int(split_pattern.match(p.name).group(2)))  # type: ignore[arg-type, union-attr]
+
+            # Check if complete
+            expected = set(range(1, group_info['total_expected'] + 1))
+            found = set(group_info['shard_numbers'])
+
+            if expected == found:
+                # Complete set
+                key = f"{base_name}_{extension}_split"
+                total_size_gb = sum(f.stat().st_size for f in sorted_files) / (1024**3)
+
+                # For safetensors, show full filename; for GGUF, show base name only
+                if extension == 'safetensors':
+                    display_name = f"{base_name}.{extension} ({len(sorted_files)} shards, {total_size_gb:.2f} GB)"
+                else:
+                    display_name = f"{base_name} ({len(sorted_files)} shards, {total_size_gb:.2f} GB)"
+
+                detected_files[key] = {
+                    'type': 'split',
+                    'extension': extension,
+                    'files': sorted_files,
+                    'primary_file': sorted_files[0],
+                    'shard_count': len(sorted_files),
+                    'total_size_gb': total_size_gb,
+                    'display_name': display_name
+                }
+
+    return detected_files
