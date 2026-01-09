@@ -8,17 +8,15 @@ import json
 import io
 import time
 import shutil
+import re
 from datetime import datetime
 from pathlib import Path
 from typing import Optional, Union, List
 from huggingface_hub import snapshot_download, HfApi
-from colorama import init as colorama_init, Style
+from colorama import Style
 from .llama_cpp_manager import LlamaCppManager
 from . import imatrix_stats
 from .theme import THEME as theme
-
-# Initialize colorama for cross-platform color support
-colorama_init(autoreset=True)
 
 
 
@@ -40,6 +38,9 @@ class GGUFConverter:
         "IQ4_XS", "IQ4_NL",
         "F16", "BF16", "F32",
     ]
+
+    # Regex pattern for GGUF shard files (e.g., model-00001-of-00009.gguf)
+    SHARD_PATTERN = re.compile(r'-(\d+)-of-(\d+)\.gguf$')
 
     @staticmethod
     def _clean_llama_error(error_output: str) -> str:
@@ -224,12 +225,9 @@ class GGUFConverter:
         if not shard_files:
             return None
 
-        import re
-        shard_pattern = re.compile(r'-(\d+)-of-(\d+)\.gguf$')
-
         total_count = None
         for file in shard_files:
-            match = shard_pattern.search(file.name)
+            match = GGUFConverter.SHARD_PATTERN.search(file.name)
             if match:
                 shard_total = int(match.group(2))
                 if total_count is None:
@@ -254,15 +252,12 @@ class GGUFConverter:
         if not shard_files:
             return False
 
-        import re
-        shard_pattern = re.compile(r'-(\d+)-of-(\d+)\.gguf$')
-
         # Extract shard numbers and total count
         shard_info = []
         total_count = None
 
         for file in shard_files:
-            match = shard_pattern.search(file.name)
+            match = GGUFConverter.SHARD_PATTERN.search(file.name)
             if match:
                 shard_num = int(match.group(1))
                 shard_total = int(match.group(2))

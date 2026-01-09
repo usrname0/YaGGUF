@@ -12,12 +12,7 @@ import stat
 from pathlib import Path
 from typing import Optional, Dict
 from urllib.request import urlretrieve, urlopen
-from colorama import init as colorama_init, Style
-
-# Initialize colorama for cross-platform color support
-colorama_init(autoreset=True)
-
-# Import shared theme
+from colorama import Style
 from .theme import THEME as theme
 
 

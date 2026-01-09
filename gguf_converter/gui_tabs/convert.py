@@ -6,7 +6,7 @@ import streamlit as st
 import re
 from pathlib import Path
 from typing import Dict, Any, Optional, TYPE_CHECKING
-from colorama import init as colorama_init, Style
+from colorama import Style
 from ..theme import THEME as theme
 
 from ..gui_utils import (
@@ -17,9 +17,6 @@ from ..gui_utils import (
 
 if TYPE_CHECKING:
     from ..converter import GGUFConverter
-
-# Initialize colorama for cross-platform color support
-colorama_init(autoreset=True)
 
 
 def sanitize_filename(filename: str) -> str:
@@ -697,12 +694,12 @@ def render_convert_tab(
             with info_col:
                 # Show info when using custom intermediate
                 if using_custom_intermediate:
-                    st.info('Using existing intermediate. Some options disabled.\n\nTo change splits go to the "Split/Merge Shards" tab.')
+                    st.info('Using existing intermediate. Some options disabled.\n\nTo change splits go to the "Split/Merge Shards" tab.<br><br><br>')
                 # Show info when in split files mode without custom intermediate
                 elif file_mode == "Split files":
-                    st.info("Intermediate will be split into shards before quantization.\n\nQuantized outputs will then be split accordingly.")
+                    st.info("Intermediate will be split into shards before quantization.\n\nQuantized outputs will then be split accordingly.<br><br><br>")
                 elif file_mode == "Single files":
-                    st.info("Intermediate will be a single file.\n\nQuantized outputs will then be a single file.")
+                    st.info("Intermediate will be a single file.\n\nQuantized outputs will then be a single file.<br><br><br>")
 
         # Advanced quantization options
         with st.expander("Advanced Quantization Options"):

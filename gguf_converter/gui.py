@@ -127,7 +127,7 @@ def main() -> None:
             max_value=max_workers,
             value=int(config.get("num_threads") or default_threads),
             step=1,
-            help=f"Number of threads for llama.cpp. Default: maximum - 1 to keep system responsive)",
+            help=f"Number of threads for llama.cpp. Default = max - 1 to keep system responsive)",
             key="num_threads_input",
             on_change=save_num_threads
         )

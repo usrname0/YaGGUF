@@ -9,11 +9,8 @@ import re
 from pathlib import Path
 from typing import Dict, List, Tuple
 import math
-from colorama import init as colorama_init, Style
+from colorama import Style
 from .theme import THEME as theme
-
-# Initialize colorama for cross-platform color support
-colorama_init(autoreset=True)
 
 
 class TensorStatistics:

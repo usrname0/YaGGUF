@@ -11,7 +11,7 @@ import os
 import sys
 from contextlib import redirect_stdout
 from typing import Dict, Any, TYPE_CHECKING
-from colorama import init as colorama_init, Style
+from colorama import Style
 from ..theme import THEME as theme
 
 from ..gui_utils import (
@@ -23,9 +23,6 @@ from ..gui_utils import (
 
 if TYPE_CHECKING:
     from ..converter import GGUFConverter
-
-# Initialize colorama for cross-platform color support
-colorama_init(autoreset=True)
 
 
 class TeeOutput(io.TextIOBase):

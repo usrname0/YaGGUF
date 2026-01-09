@@ -8,7 +8,7 @@ import webbrowser
 from typing import Dict, Any, TYPE_CHECKING
 from huggingface_hub import HfApi, login as hf_login, get_token, logout as hf_logout
 from huggingface_hub.errors import GatedRepoError
-from colorama import init as colorama_init, Style
+from colorama import Style
 from ..theme import THEME as theme
 
 from ..gui_utils import (
@@ -19,9 +19,6 @@ from ..gui_utils import (
 
 if TYPE_CHECKING:
     from ..converter import GGUFConverter
-
-# Initialize colorama for cross-platform color support
-colorama_init(autoreset=True)
 
 
 def render_downloader_tab(converter: "GGUFConverter", config: Dict[str, Any]) -> None:

@@ -8,10 +8,7 @@ import argparse
 from pathlib import Path
 from .llama_cpp_manager import LlamaCppManager
 from .theme import THEME as theme
-from colorama import init as colorama_init, Style
-
-# Initialize colorama for cross-platform color support
-colorama_init(autoreset=True)
+from colorama import Style
 
 
 def main() -> int:
