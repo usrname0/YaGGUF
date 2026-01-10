@@ -17,6 +17,7 @@ from colorama import Style
 from .llama_cpp_manager import LlamaCppManager
 from . import imatrix_stats
 from .theme import THEME as theme
+from .model_quirks import ModelQuirks
 
 
 
@@ -202,12 +203,17 @@ class GGUFConverter:
             print(f"{theme['warning']}Warning: Could not check repository size: {e}{Style.RESET_ALL}")
             print(f"{theme['warning']}Proceeding with download anyway...{Style.RESET_ALL}")
 
-        print(f"{theme['info']}Downloading {repo_id} from HuggingFace...{Style.RESET_ALL}")
+        print(f"{theme['success']}Downloading {repo_id} from HuggingFace...{Style.RESET_ALL}")
         model_path = snapshot_download(
             repo_id=repo_id,
             local_dir=output_dir / Path(repo_id).name,
             revision=revision
         )
+
+        # Brief pause to let progress bars finish flushing to terminal
+        # (snapshot_download returns before all parallel progress bars complete)
+        import time
+        time.sleep(0.5)
 
         return Path(model_path)
 
@@ -341,10 +347,10 @@ class GGUFConverter:
         if split_max_tensors:
             cmd.extend(["--split-max-tensors", str(split_max_tensors)])
 
-        # Check if model requires special handling
-        if self._is_ministral3_model(model_path):
-            print(f"{theme['info']}Detected Ministral-3 model, using --mistral-format flag{Style.RESET_ALL}")
-            cmd.append("--mistral-format")
+        # Add model-specific flags and print detection info
+        ModelQuirks.print_model_detection(model_path)
+        model_flags = ModelQuirks.get_conversion_flags(model_path)
+        cmd.extend(model_flags)
 
         print(f"{theme['info']}Converting {model_path.name} to GGUF format...{Style.RESET_ALL}")
         print(f"{theme['highlight']}Running: {' '.join(cmd)}{Style.RESET_ALL}\n")
@@ -379,41 +385,50 @@ class GGUFConverter:
         else:
             print(f"\n{theme['success']}Conversion complete: {output_path}{Style.RESET_ALL}")
 
+        # For vision models, generate the vision projector (mmproj) file separately
+        if ModelQuirks.is_vision_model(model_path):
+            print(f"\n{theme['info']}Generating vision projector (mmproj) file...{Style.RESET_ALL}")
+
+            # Build mmproj output path
+            mmproj_output = output_path.parent / f"mmproj-{output_path.stem}.gguf"
+
+            # Check if mmproj file already exists
+            if mmproj_output.exists():
+                print(f"{theme['warning']}Overwriting existing mmproj file: {mmproj_output.name}{Style.RESET_ALL}")
+
+            # Build mmproj conversion command
+            mmproj_cmd = [
+                sys.executable,
+                str(convert_script),
+                str(model_path),
+                "--outfile", str(mmproj_output),
+                "--outtype", output_type.lower(),
+            ]
+
+            # Add model-specific flags WITH mmproj
+            mmproj_flags = ModelQuirks.get_conversion_flags(model_path, include_mmproj=True)
+            mmproj_cmd.extend(mmproj_flags)
+
+            if verbose:
+                mmproj_cmd.append("--verbose")
+
+            print(f"{theme['highlight']}Running: {' '.join(mmproj_cmd)}{Style.RESET_ALL}\n")
+
+            mmproj_result = subprocess.run(mmproj_cmd, capture_output=not verbose, text=True)
+
+            if mmproj_result.returncode != 0:
+                error_output = (mmproj_result.stderr or '') + (mmproj_result.stdout or '')
+                raw_error = error_output.strip() if error_output.strip() else 'Unknown error'
+                error_msg = self._clean_llama_error(raw_error)
+                raise RuntimeError(f"Vision projector export failed:\n\n{error_msg}")
+
+            if verbose and mmproj_result.stdout:
+                print(mmproj_result.stdout)
+
+            print(f"{theme['success']}Vision projector exported: {mmproj_output}{Style.RESET_ALL}")
+            print(f"{theme['info']}Use both files together: {actual_output_path.name} + {mmproj_output.name}{Style.RESET_ALL}\n")
+
         return actual_output_path
-
-    def _is_ministral3_model(self, model_path: Path) -> bool:
-        """
-        Check if the model is a Ministral-3 model that requires --mistral-format flag
-
-        Args:
-            model_path: Path to the model directory
-
-        Returns:
-            True if this is a Ministral-3 model
-        """
-        config_file = model_path / "config.json"
-        if not config_file.exists():
-            return False
-
-        try:
-            with open(config_file, 'r', encoding='utf-8') as f:
-                config = json.load(f)
-
-            # Check for Ministral-3 indicators
-            architectures = config.get("architectures", [])
-            model_type = config.get("model_type", "")
-            text_config = config.get("text_config", {})
-            text_model_type = text_config.get("model_type", "")
-
-            # Ministral-3 has Mistral3ForConditionalGeneration architecture
-            # and ministral3 as the text model type
-            return (
-                "Mistral3ForConditionalGeneration" in architectures or
-                model_type == "mistral3" or
-                text_model_type == "ministral3"
-            )
-        except (json.JSONDecodeError, IOError):
-            return False
 
     def _ensure_llama_cpp_repo(self):
         """
@@ -996,7 +1011,7 @@ class GGUFConverter:
 
         # Check if it's a HuggingFace repo ID (before Path conversion changes the separators)
         if not model_path.exists() and "/" in model_path_str:
-            print(f"{theme['info']}Downloading from HuggingFace: {model_path_str}{Style.RESET_ALL}")
+            print(f"{theme['success']}Downloading from HuggingFace: {model_path_str}{Style.RESET_ALL}")
             model_path = self.download_model(model_path_str, output_dir / "downloads")
 
         # Validate model path - skip config.json check if using custom intermediate

@@ -23,9 +23,12 @@ def render_info_tab(converter: "GGUFConverter", config: Dict[str, Any]) -> None:
     **Features:**
     - **Convert & Quantize** - HuggingFace models to GGUF with multiple quantization formats at once
     - **All quantization types** - Full support for llama.cpp quantization types
+    - **Vision/Multimodal models** - Automatic detection and two-step conversion (text model + vision projector)
+    - **Sentence-transformers** - Auto-detect and include dense modules for embedding models
+    - **Model quirks detection** - Handles Mistral format, pre-quantized models, and architecture-specific flags
     - **Split files mode** - Generate split shards for intermediates and quants
     - **Custom intermediates** - Use existing GGUF files as intermediates for quantization
-    - **Source dtype detection** - Automatically detects model precision (BF16, F16, F32)
+    - **Enhanced dtype detection** - Reads safetensors headers for accurate precision detection (BF16, F16, F32, FP8)
     - **Importance Matrix** - Generate or reuse imatrix files for better low-bit quantization (IQ2, IQ3)
     - **Imatrix Statistics** - Analyze importance matrix files to view statistics
     - **HuggingFace Downloader** - Download models and their supporting files

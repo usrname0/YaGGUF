@@ -10,13 +10,19 @@ There are simultaneously too many and not enough GGUF converters in the world.
 - **[llama.cpp](https://github.com/ggerganov/llama.cpp) under the hood** - so that part works
 - **Convert** - safetensors and PyTorch models to GGUF format
 - **Quantize** - to multiple formats at once
-- **Split files mode** - generate split shards for intermediates and quants with custom shard sizes
-- **Custom intermediates** - use existing GGUF files as intermediates for quantization
-- **Split/Merge Shards** - split, merge or resplit GGUF and safetensors files 
 - **Cross-platform** - works on Windows and Linux (and probably Mac but untested)
 - **Easy** - auto-installs an environment + llama.cpp + CPU binaries for quantizing
 - **Flexible** - can use any local llama.cpp repo or binary installation for quantizing
 - **Minimal mess** - everything but a settings.json lives in one folder/venv
+
+Also
+
+- **Custom intermediates** - use existing GGUF files as intermediates for quantization
+- **Split files mode** - generate split shards for intermediates and quants with custom shard sizes
+- **Split/Merge/Resplit Shards** - split, merge or resplit GGUF and safetensors files
+- **Model quirks detection** - handles Mistral format, pre-quantized models, and architecture-specific flags
+- **Vision/Multimodal models** - automatic detection and two-step conversion (text model + `mmproj-*.gguf`)
+- **Sentence-transformers** - auto-detect and include dense modules for embedding models
 
 ## Quantization Types
 

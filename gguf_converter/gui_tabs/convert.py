@@ -15,236 +15,13 @@ from ..gui_utils import (
     get_platform_path
 )
 
+from .convert_helpers import (
+    sanitize_filename, detect_source_dtype,
+    validate_calibration_file, detect_intermediate_gguf_files
+)
+
 if TYPE_CHECKING:
     from ..converter import GGUFConverter
-
-
-def sanitize_filename(filename: str) -> str:
-    """
-    Sanitize filename by removing or replacing problematic characters.
-
-    Removes:
-    - Leading/trailing whitespace
-    - Invalid Windows filename characters: < > : " / \\ | ? *
-    - Control characters
-    - Collapses multiple spaces to single space
-
-    Args:
-        filename: The filename to sanitize
-
-    Returns:
-        Sanitized filename safe for all platforms
-    """
-    if not filename:
-        return filename
-
-    # Strip leading/trailing whitespace
-    clean = filename.strip()
-
-    # Remove invalid filename characters (Windows is most restrictive)
-    # < > : " / \ | ? * and control characters
-    clean = re.sub(r'[<>:"/\\|?*\x00-\x1f]', '', clean)
-
-    # Collapse multiple spaces to single space
-    clean = re.sub(r'\s+', ' ', clean)
-
-    # Strip again in case we created leading/trailing spaces
-    clean = clean.strip()
-
-    return clean
-
-
-def detect_source_dtype(model_path: Path) -> Optional[str]:
-    """
-    Detect the data type (precision) of source model from config.json.
-
-    Args:
-        model_path: Path to model directory
-
-    Returns:
-        Dtype string like "BF16", "F16", "F32", or None if unable to detect
-    """
-    import json
-
-    config_json = model_path / "config.json"
-    if config_json.exists():
-        try:
-            with open(config_json, 'r', encoding='utf-8') as f:
-                config_data = json.load(f)
-                # Check both "dtype" and "torch_dtype" fields
-                dtype_value = config_data.get("dtype", config_data.get("torch_dtype", "")).lower()
-
-                # Map torch dtypes to our format
-                dtype_map = {
-                    "bfloat16": "BF16",
-                    "float16": "F16",
-                    "float32": "F32",
-                }
-
-                if dtype_value in dtype_map:
-                    return dtype_map[dtype_value]
-        except Exception:
-            pass
-
-    return None
-
-
-def validate_calibration_file(config: Dict[str, Any]) -> Optional[Path]:
-    """
-    Validate and return the calibration file path.
-
-    Builds the path from config, validates it exists, and shows errors if not found.
-
-    Args:
-        config: Configuration dictionary
-
-    Returns:
-        Path to calibration file if valid, None if not found
-    """
-    cal_dir = config.get("imatrix_calibration_dir", "")
-    cal_file = config.get("imatrix_calibration_file", "wiki.train.raw")
-
-    if cal_dir:
-        calibration_file_path = Path(cal_dir) / cal_file
-    else:
-        # Use default calibration_data directory (one level up from gguf_converter module)
-        default_cal_dir = Path(__file__).parent.parent.parent / "calibration_data"
-        calibration_file_path = default_cal_dir / cal_file
-
-    # Validate calibration file exists
-    if not calibration_file_path.exists():
-        # Print detailed error to terminal
-        print(f"\n{theme['error']}Calibration file not found:{Style.RESET_ALL}")
-        print(f"{theme['error']}  Looking for: {calibration_file_path}{Style.RESET_ALL}")
-        print(f"{theme['error']}  Config has: {cal_file}{Style.RESET_ALL}")
-        if cal_dir:
-            print(f"{theme['error']}  In directory: {cal_dir}{Style.RESET_ALL}")
-        print(f"{theme['warning']}  Tip: Go to Imatrix Settings tab and reselect your calibration file{Style.RESET_ALL}\n")
-
-        # Show detailed error in GUI
-        st.error(f"**Calibration file not found:** `{cal_file}`\n\n"
-               f"Expected path: `{calibration_file_path}`\n\n"
-               f"**Fix:** Go to the **Imatrix Settings** tab and select a valid calibration file, "
-               f"use an existing imatrix, or turn off imatrix generation.")
-        return None
-
-    return calibration_file_path
-
-
-def detect_intermediate_gguf_files(model_path: Path) -> Dict[str, Dict[str, Any]]:
-    """
-    Detect intermediate GGUF files in model directory.
-
-    Looks for files matching patterns:
-    - Single: {anything}_F16.gguf, {anything}_F32.gguf, {anything}_BF16.gguf
-    - Split: {anything}_F16-00001-of-00003.gguf, etc.
-
-    Args:
-        model_path: Path to model directory
-
-    Returns:
-        Dictionary mapping format+type to file info:
-        {
-            'F16_single': {
-                'format': 'F16',
-                'type': 'single',
-                'files': [Path objects sorted],
-                'primary_file': Path (first file or single file),
-                'shard_count': int (1 for single, N for split),
-                'total_size_gb': float
-            },
-            'F16_split': {
-                'format': 'F16',
-                'type': 'split',
-                ...
-            },
-            ...
-        }
-    """
-    intermediates = {}
-
-    # Pattern for intermediate files
-    single_pattern = re.compile(r'^(.+)_(F16|F32|BF16)\.gguf$')
-    split_pattern = re.compile(r'^(.+)_(F16|F32|BF16)-(\d+)-of-(\d+)\.gguf$')
-
-    # Scan directory for GGUF files
-    if not model_path.exists() or not model_path.is_dir():
-        return {}
-
-    for gguf_file in model_path.glob("*.gguf"):
-        # Try split pattern first (more specific)
-        split_match = split_pattern.match(gguf_file.name)
-        if split_match:
-            format_type = split_match.group(2)
-            shard_num = int(split_match.group(3))
-            total_shards = int(split_match.group(4))
-
-            # Use format+type as key to allow both single and split of same format
-            key = f"{format_type}_split"
-
-            if key not in intermediates:
-                intermediates[key] = {
-                    'format': format_type,
-                    'type': 'split',
-                    'files': [],
-                    'shard_numbers': [],
-                    'total_expected': total_shards
-                }
-
-            intermediates[key]['files'].append(gguf_file)
-            intermediates[key]['shard_numbers'].append(shard_num)
-        else:
-            # Try single pattern
-            single_match = single_pattern.match(gguf_file.name)
-            if single_match:
-                format_type = single_match.group(2)
-
-                # Use format+type as key to allow both single and split of same format
-                key = f"{format_type}_single"
-
-                # Add single file (multiple single files of same format will overwrite, which is expected)
-                if key not in intermediates:
-                    intermediates[key] = {
-                        'format': format_type,
-                        'type': 'single',
-                        'files': [gguf_file]
-                    }
-
-    # Validate and finalize each format
-    validated = {}
-    for key, info in intermediates.items():
-        if info['type'] == 'split':
-            # Sort files by shard number
-            sorted_files = sorted(info['files'], key=lambda p:
-                int(split_pattern.match(p.name).group(3)))
-
-            # Validate complete set
-            expected = set(range(1, info['total_expected'] + 1))
-            found = set(info['shard_numbers'])
-
-            if expected == found:
-                # Complete set
-                validated[key] = {
-                    'format': info['format'],
-                    'type': 'split',
-                    'files': sorted_files,
-                    'primary_file': sorted_files[0],
-                    'shard_count': len(sorted_files),
-                    'total_size_gb': sum(f.stat().st_size for f in sorted_files) / (1024**3)
-                }
-        else:
-            # Single file
-            file = info['files'][0]
-            validated[key] = {
-                'format': info['format'],
-                'type': 'single',
-                'files': [file],
-                'primary_file': file,
-                'shard_count': 1,
-                'total_size_gb': file.stat().st_size / (1024**3)
-            }
-
-    return validated
 
 
 def render_convert_tab(
@@ -694,12 +471,12 @@ def render_convert_tab(
             with info_col:
                 # Show info when using custom intermediate
                 if using_custom_intermediate:
-                    st.info('Using existing intermediate. Some options disabled.\n\nTo change splits go to the "Split/Merge Shards" tab.<br><br><br>')
+                    st.info('Using existing intermediate. Some options disabled.\n\nTo change splits go to the "Split/Merge Shards" tab.')
                 # Show info when in split files mode without custom intermediate
                 elif file_mode == "Split files":
-                    st.info("Intermediate will be split into shards before quantization.\n\nQuantized outputs will then be split accordingly.<br><br><br>")
+                    st.info("Intermediate will be split into shards before quantization.\n\nQuantized outputs will then be split accordingly.")
                 elif file_mode == "Single files":
-                    st.info("Intermediate will be a single file.\n\nQuantized outputs will then be a single file.<br><br><br>")
+                    st.info("Intermediate will be a single file.\n\nQuantized outputs will then be a single file.")
 
         # Advanced quantization options
         with st.expander("Advanced Quantization Options"):
@@ -1028,6 +805,48 @@ def render_convert_tab(
                         key=f"imatrix_custom_name_{st.session_state.reset_count}",
                         on_change=save_custom_imatrix_name
                     )
+
+                    # Auto-append .imatrix extension and sanitize
+                    if imatrix_generate_name:
+                        # Sanitize the filename
+                        sanitized_name = sanitize_filename(imatrix_generate_name)
+
+                        # Show if sanitization changed the name
+                        if sanitized_name != imatrix_generate_name:
+                            st.warning(f"Filename cleaned: `{imatrix_generate_name}` → `{sanitized_name}`")
+
+                        # Add .imatrix extension if needed
+                        if sanitized_name and not sanitized_name.endswith('.imatrix'):
+                            final_name = f"{sanitized_name}.imatrix"
+                            st.info(f"Will be saved as: `{final_name}`")
+                        elif sanitized_name:
+                            final_name = sanitized_name
+                            st.info(f"Will be saved as: `{final_name}`")
+                        else:
+                            # Sanitization resulted in empty string - fall back to default
+                            if model_path_clean:
+                                final_name = f"{Path(model_path_clean).name}.imatrix"
+                                st.warning(f"Invalid filename - using default: `{final_name}`")
+                            else:
+                                final_name = None
+
+                        # Warn if file exists
+                        if final_name and output_dir_clean:
+                            imatrix_file_path = Path(output_dir_clean) / final_name
+                            if imatrix_file_path.exists():
+                                st.warning(f"WARNING: File already exists and will be overwritten: `{final_name}`")
+                    else:
+                        # Show default name when field is blank
+                        if model_path_clean:
+                            default_name = f"{Path(model_path_clean).name}.imatrix"
+                            st.info(f"Will use default name: `{default_name}`")
+
+                            # Warn if default file exists
+                            if output_dir_clean:
+                                imatrix_file_path = Path(output_dir_clean) / default_name
+                                if imatrix_file_path.exists():
+                                    st.warning(f"WARNING: File already exists and will be overwritten: `{default_name}`")
+
                 with col_imatrix_default:
                     st.markdown("<br>", unsafe_allow_html=True)  # Align with input
                     if st.button("Set to default", key="set_default_imatrix_name", use_container_width=True):
@@ -1040,47 +859,6 @@ def render_convert_tab(
                         st.session_state.reset_count += 1
                         st.rerun()
 
-                # Auto-append .imatrix extension and sanitize
-                if imatrix_generate_name:
-                    # Sanitize the filename
-                    sanitized_name = sanitize_filename(imatrix_generate_name)
-
-                    # Show if sanitization changed the name
-                    if sanitized_name != imatrix_generate_name:
-                        st.warning(f"Filename cleaned: `{imatrix_generate_name}` → `{sanitized_name}`")
-
-                    # Add .imatrix extension if needed
-                    if sanitized_name and not sanitized_name.endswith('.imatrix'):
-                        final_name = f"{sanitized_name}.imatrix"
-                        st.info(f"Will be saved as: `{final_name}`")
-                    elif sanitized_name:
-                        final_name = sanitized_name
-                        st.info(f"Will be saved as: `{final_name}`")
-                    else:
-                        # Sanitization resulted in empty string - fall back to default
-                        if model_path_clean:
-                            final_name = f"{Path(model_path_clean).name}.imatrix"
-                            st.warning(f"Invalid filename - using default: `{final_name}`")
-                        else:
-                            final_name = None
-
-                    # Warn if file exists
-                    if final_name and output_dir_clean:
-                        imatrix_file_path = Path(output_dir_clean) / final_name
-                        if imatrix_file_path.exists():
-                            st.warning(f"WARNING: File already exists and will be overwritten: `{final_name}`")
-                else:
-                    # Show default name when field is blank
-                    if model_path_clean:
-                        default_name = f"{Path(model_path_clean).name}.imatrix"
-                        st.info(f"Will use default name: `{default_name}`")
-
-                        # Warn if default file exists
-                        if output_dir_clean:
-                            imatrix_file_path = Path(output_dir_clean) / default_name
-                            if imatrix_file_path.exists():
-                                st.warning(f"WARNING: File already exists and will be overwritten: `{default_name}`")
-
                 imatrix_reuse_path = None
                 imatrix_mode = "GENERATE (custom name)"
 
@@ -1091,11 +869,12 @@ def render_convert_tab(
                 config["imatrix_mode"] = "generate"
                 save_config(config)
 
-                # Warn if file exists
-                if output_dir_clean and model_path_clean:
-                    imatrix_file_path = Path(output_dir_clean) / default_name
-                    if imatrix_file_path.exists():
-                        st.warning(f"WARNING: File already exists and will be overwritten: `{default_name}`")
+                # Warn if file exists (in same column as selectbox for consistent width)
+                with cols[0]:
+                    if output_dir_clean and model_path_clean:
+                        imatrix_file_path = Path(output_dir_clean) / default_name
+                        if imatrix_file_path.exists():
+                            st.warning(f"WARNING: File already exists and will be overwritten: `{default_name}`")
 
             else:
                 imatrix_generate_name = None
@@ -1123,7 +902,7 @@ def render_convert_tab(
         else:
             # Build header with source dtype info if available
             if source_dtype:
-                header = f"**Intermediate Formats** (source is {source_dtype}):"
+                header = f"**Intermediate Formats** (source: `{source_dtype}`):"
             elif config_missing:
                 header = "**Intermediate Formats** (config.json is missing!)"
             else:
