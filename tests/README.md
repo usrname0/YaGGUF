@@ -14,16 +14,17 @@ pytest && pytest -m integration
 
 ## Test Overview
 
-**Total Tests**: 178
-- Fast tests: 165 (unit, smoke, validation)
+**Total Tests**: ~200
+- Fast tests: ~185 (unit, smoke, validation)
 - Integration tests: 13 (require model download)
 
 ### Test Files
 
 | File | Tests | Time | Description |
 |------|-------|------|-------------|
-| `test_split_file_handling.py` | 20 | <1s | Shard validation utilities |
-| `test_merge_shards.py` | 23 | <2s | Shard analysis and merging |
+| `test_split_merge.py` | 33 | <3s | Shard analysis, splitting, merging, and resplitting (GGUF & Safetensors) |
+| `test_model_quirks.py` | 17 | <1s | Model quirk detection (Mistral, Vision, Sentence-Transformers) |
+| `test_split_file_handling.py` | 20 | <1s | Core shard validation utilities |
 | `test_llama_cpp_manager.py` | 22 | <1s | Binary manager functionality |
 | `test_imatrix_stats.py` | 26 | <1s | Imatrix statistics |
 | `test_quantization_validation.py` | 16 | <1s | Quantization type validation |
@@ -34,6 +35,8 @@ pytest && pytest -m integration
 | `test_path_utils.py` | 12 | <1s | Path utilities |
 | `test_code_quality.py` | 2 | <1s | Code standards |
 | `test_integration.py` | 13 | 10-15m | End-to-end workflow |
+| `test_source_dtype_detection.py` | 12 | <1s | Source datatype detection |
+| `test_intermediate_detection.py` | 8 | <1s | Intermediate file detection |
 
 ## Common Commands
 
@@ -43,7 +46,7 @@ pytest && pytest -m integration
 pytest
 
 # Run specific test file
-pytest tests/test_split_file_handling.py -v
+pytest tests/test_split_merge.py -v
 
 # Stop on first failure
 pytest -x
@@ -84,10 +87,11 @@ pytest --collect-only
 
 ## Test Types
 
-### Unit Tests (95 tests, <5 seconds)
+### Unit Tests (~180 tests, <10 seconds)
 Fast tests of individual components:
-- Split file handling and shard validation
-- Merge shard analysis
+- Split/Merge functionality (GGUF & Safetensors)
+- Model quirks detection
+- Shard validation
 - Binary path resolution
 - Configuration management
 - Path utilities

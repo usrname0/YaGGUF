@@ -266,14 +266,14 @@ def render_downloader_tab(converter: "GGUFConverter", config: Dict[str, Any]) ->
                         "HuggingFace Token",
                         key="hf_token_saved",
                         value="",
-                        placeholder="Token saved",
+                        placeholder="Token detected",
                         disabled=True,
                         help="Your token is saved on this system"
                     )
 
                 with col_buttons:
                     st.markdown("<br>", unsafe_allow_html=True)  # Spacer to align with input
-                    if st.button("Logout", key="hf_logout_btn", use_container_width=True):
+                    if st.button("Delete Token", key="hf_logout_btn", use_container_width=True):
                         hf_logout()
                         # Keep expander open to show login UI
                         st.session_state.show_hf_login = True

@@ -8,12 +8,13 @@ There are simultaneously too many and not enough GGUF converters in the world.
 ## Features
 
 - **[llama.cpp](https://github.com/ggerganov/llama.cpp) under the hood** - so that part works
+- **Download** - automatically download models and their auxilliary files from HuggingFace
 - **Convert** - safetensors and PyTorch models to GGUF format
 - **Quantize** - to multiple formats at once
 - **Cross-platform** - works on Windows and Linux (and probably Mac but untested)
 - **Easy** - auto-installs an environment + llama.cpp + CPU binaries for quantizing
 - **Flexible** - can use any local llama.cpp repo or binary installation for quantizing
-- **Minimal mess** - everything but a settings.json lives in one folder/venv
+- **Minimal mess** - everything but a settings.json and HuggingFace token lives in one folder/venv
 
 Also
 
