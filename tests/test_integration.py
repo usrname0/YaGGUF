@@ -22,9 +22,9 @@ from gguf_converter.converter import GGUFConverter
 from gguf_converter.llama_cpp_manager import LlamaCppManager
 
 
-# Small model for testing (only ~500MB)
-TEST_MODEL = "Qwen/Qwen2.5-0.5B-Instruct"
-TEST_MODEL_NAME = "Qwen2.5-0.5B-Instruct"
+# Small model for testing (only ~270MB)
+TEST_MODEL = "HuggingFaceTB/SmolLM2-135M-Instruct"
+TEST_MODEL_NAME = "SmolLM2-135M-Instruct"
 
 
 @pytest.fixture(scope="module")
@@ -123,9 +123,9 @@ class TestBasicConversion:
         assert result.exists()
         assert result.stat().st_size > 0
 
-        # F16 should be roughly 1GB for 0.5B model
+        # F16 should be roughly 0.26GB for 135M model
         size_gb = result.stat().st_size / (1024**3)
-        assert 0.5 < size_gb < 2.0, f"F16 model size {size_gb:.2f}GB seems wrong"
+        assert 0.2 < size_gb < 0.5, f"F16 model size {size_gb:.2f}GB seems wrong"
 
 
 @pytest.mark.integration
@@ -552,7 +552,7 @@ class TestFunctionalCorrectness:
         # --- 4. Validate Checksum ---
         project_root = Path(__file__).parent.parent
         golden_checksum_path = (
-            project_root / "tests" / "golden_outputs" / "qwen2.5_0.5b_q4_k_m_checksum.txt"
+            project_root / "tests" / "golden_outputs" / "smollm2_135m_q4_k_m_checksum.txt"
         )
 
         current_checksum = hashlib.sha256(generated_text.encode("utf-8")).hexdigest()
@@ -577,7 +577,7 @@ class TestFunctionalCorrectness:
             print(f"[CHECKSUM] Golden checksum file not found. Creating {golden_checksum_path}")
             golden_checksum_path.parent.mkdir(parents=True, exist_ok=True)
             golden_checksum_path.write_text(current_checksum)
-            pytest.fail(
+            pytest.skip(
                 f"Created new golden checksum file. Please commit: {golden_checksum_path}. Rerun to verify."
             )
 

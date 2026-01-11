@@ -51,8 +51,12 @@ def render_info_tab(converter: "GGUFConverter", config: Dict[str, Any]) -> None:
     **Settings:**
     - Your settings are automatically saved as you change them
     - Settings are stored in: `{CONFIG_FILE}`
-    - HuggingFace token: `{HF_TOKEN_PATH}` (managed by huggingface_hub)
+    - HuggingFace token stored in: `{HF_TOKEN_PATH}` (managed by huggingface_hub)
     - Use "Reset to defaults" in the sidebar to restore default settings
+
+    **Testing (Sidebar):**
+    - **Test Models** - Test GGUF models in your output directory with llama-server
+    - **Dev Tests** - Run the full pytest suite (downloads test model, runs all tests)
 
     **Quantization Types (via llama.cpp):**
 

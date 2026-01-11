@@ -112,6 +112,13 @@ All quantization types from llama.cpp are supported. Choose based on your size/q
 
 The GUI will automatically open in your browser on a free port like: `http://localhost:8501`
 
+### Testing
+
+The GUI sidebar includes convenient testing options:
+
+- **Test Models** - Opens a new terminal window to interactively test all GGUF models in your output directory using llama-server
+- **Dev Tests** - Runs the full pytest suite (downloads a small test model and validates all functionality)
+
 ## Troubleshooting
 
 ### Out of Memory
