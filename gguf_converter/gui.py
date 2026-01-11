@@ -8,6 +8,29 @@ from pathlib import Path
 import multiprocessing
 import shutil
 
+
+def get_python_executable():
+    """
+    Get the correct Python executable to use.
+    Prefers venv Python if it exists, otherwise uses sys.executable.
+    """
+    import platform
+
+    # Check for venv in project root
+    project_root = Path(__file__).parent.parent
+
+    # Platform-specific venv paths
+    if platform.system() == "Windows":
+        venv_python = project_root / "venv" / "Scripts" / "python.exe"
+    else:
+        venv_python = project_root / "venv" / "bin" / "python"
+
+    if venv_python.exists():
+        return str(venv_python)
+
+    # Fallback to sys.executable
+    return sys.executable
+
 # Handle both direct execution and module import
 try:
     from .converter import GGUFConverter
@@ -137,7 +160,7 @@ def main() -> None:
         if st.button("Reload UI", use_container_width=True, help="Reload the user interface via st.rerun()"):
             st.rerun()
 
-        if st.button("Test Model Variants", use_container_width=True, help="Test all GGUF variants in the output directory interactively with llama-server"):
+        if st.button("Test Models", use_container_width=True, help="Test all GGUF variants in the output directory interactively with llama-server"):
             import subprocess
             import platform
             script_path = Path(__file__).parent.parent / "tests" / "manual_variant_testing.py"
@@ -145,28 +168,49 @@ def main() -> None:
             # Get output directory from config
             output_dir = config.get("output_dir", "")
 
+            # Get correct Python executable (venv if available)
+            python_exe = get_python_executable()
+
             # Build command arguments
             if output_dir and Path(output_dir).exists():
                 # Run with output directory
-                cmd_args = [sys.executable, str(script_path), str(output_dir)]
+                cmd_args = [python_exe, str(script_path), str(output_dir)]
                 toast_msg = f"Testing variants in: {output_dir}"
             elif output_dir:
                 # Output dir set but doesn't exist
                 st.toast(f"Output directory not found: {output_dir}")
-                cmd_args = [sys.executable, str(script_path), "--help"]
+                cmd_args = [python_exe, str(script_path), "--help"]
                 toast_msg = "Showing help (invalid output directory)"
             else:
                 # No output dir set, show help
                 st.toast("No output directory set. Showing help.")
-                cmd_args = [sys.executable, str(script_path), "--help"]
+                cmd_args = [python_exe, str(script_path), "--help"]
                 toast_msg = "Showing help (no output directory)"
 
             # Launch the script in a new terminal window
             system = platform.system()
             if system == "Windows":
-                # Windows: use start to open new cmd window
+                # Windows: Create a bat file to avoid quoting issues
+                import tempfile
+                import os
+
+                # Get project root directory
+                project_root = Path(__file__).parent.parent
+
+                # Create a temporary batch file
+                with tempfile.NamedTemporaryFile(mode='w', suffix='.bat', delete=False) as bat_file:
+                    bat_path = bat_file.name
+                    # Write commands to batch file
+                    bat_file.write('@echo off\n')
+                    bat_file.write(f'cd /d "{project_root}"\n')  # Change to project directory
+                    # Quote each argument that might have spaces
+                    cmd_line = ' '.join(f'"{arg}"' for arg in cmd_args)
+                    bat_file.write(f'{cmd_line}\n')
+                    bat_file.write('pause\n')
+
+                # Launch the batch file in a new window
                 subprocess.Popen(
-                    ["cmd", "/c", "start", "cmd", "/k"] + cmd_args,
+                    ['cmd', '/c', 'start', 'Test Model Variants', bat_path],
                     creationflags=subprocess.CREATE_NEW_CONSOLE
                 )
             elif system == "Darwin":
@@ -188,6 +232,57 @@ def main() -> None:
                         break
 
             st.toast(toast_msg)
+
+        if st.button("Dev Tests", use_container_width=True, help="Run the full test suite (pytest) in a new terminal window"):
+            import subprocess
+            import platform
+            import tempfile
+
+            # Get correct Python executable (venv if available)
+            python_exe = get_python_executable()
+
+            # Build command - run pytest directly without exclusions
+            cmd_args = [python_exe, "-m", "pytest"]
+
+            # Launch in a new terminal window
+            system = platform.system()
+            project_root = Path(__file__).parent.parent
+
+            if system == "Windows":
+                # Create a simple batch file
+                with tempfile.NamedTemporaryFile(mode='w', suffix='.bat', delete=False) as bat_file:
+                    bat_path = bat_file.name
+                    bat_file.write('@echo off\n')
+                    bat_file.write(f'cd /d "{project_root}"\n')
+                    cmd_line = ' '.join(f'"{arg}"' for arg in cmd_args)
+                    bat_file.write(f'{cmd_line}\n')
+                    bat_file.write('echo.\n')
+                    bat_file.write('echo Press any key to continue or just close this terminal...\n')
+                    bat_file.write('pause > nul\n')
+
+                subprocess.Popen(
+                    ['cmd', '/c', 'start', 'Dev Tests', bat_path],
+                    creationflags=subprocess.CREATE_NEW_CONSOLE
+                )
+            elif system == "Darwin":
+                # macOS: use osascript to open new Terminal window
+                cmd_str = " ".join(f'"{arg}"' for arg in cmd_args)
+                subprocess.Popen([
+                    "osascript", "-e",
+                    f'tell app "Terminal" to do script "cd {project_root} && {cmd_str}"'
+                ])
+            else:
+                # Linux: try various terminal emulators
+                terminals = ["gnome-terminal", "konsole", "xterm"]
+                for term in terminals:
+                    if shutil.which(term):
+                        if term == "gnome-terminal":
+                            subprocess.Popen([term, "--"] + cmd_args)
+                        else:
+                            subprocess.Popen([term, "-e", " ".join(cmd_args)])
+                        break
+
+            st.toast("Running dev tests...")
 
         st.markdown("---")
         st.markdown("**Reset:**")
