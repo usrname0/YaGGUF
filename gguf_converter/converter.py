@@ -293,7 +293,8 @@ class GGUFConverter:
         vocab_only: bool = False,
         verbose: bool = False,
         split_max_size: Optional[str] = None,
-        split_max_tensors: Optional[int] = None
+        split_max_tensors: Optional[int] = None,
+        mmproj_precision: str = "F16"
     ) -> Path:
         """
         Convert a model to GGUF format
@@ -306,6 +307,7 @@ class GGUFConverter:
             verbose: Enable verbose logging
             split_max_size: Maximum size per split (e.g., "2G")
             split_max_tensors: Maximum tensors per split
+            mmproj_precision: Precision for mmproj (vision projector) file (F16, F32, BF16, Q8_0). Default: F16 for compatibility.
 
         Returns:
             Path to the created GGUF file (or first shard if split)
@@ -389,8 +391,8 @@ class GGUFConverter:
         if ModelQuirks.is_vision_model(model_path):
             print(f"\n{theme['info']}Generating vision projector (mmproj) file...{Style.RESET_ALL}")
 
-            # Build mmproj output path
-            mmproj_output = output_path.parent / f"mmproj-{output_path.stem}.gguf"
+            # Build mmproj output path using model name and mmproj precision
+            mmproj_output = output_path.parent / f"mmproj-{model_path.name}-{mmproj_precision.upper()}.gguf"
 
             # Check if mmproj file already exists
             if mmproj_output.exists():
@@ -402,7 +404,7 @@ class GGUFConverter:
                 str(convert_script),
                 str(model_path),
                 "--outfile", str(mmproj_output),
-                "--outtype", output_type.lower(),
+                "--outtype", mmproj_precision.lower(),
             ]
 
             # Add model-specific flags WITH mmproj
@@ -880,7 +882,8 @@ class GGUFConverter:
         token_embedding_type: Optional[str] = None,
         overwrite_intermediates: bool = False,
         overwrite_quants: bool = True,
-        split_max_size: Optional[str] = None
+        split_max_size: Optional[str] = None,
+        mmproj_precision: str = "F16"
     ) -> List[Path]:
         """
         Convert to GGUF and quantize in one go
@@ -912,6 +915,7 @@ class GGUFConverter:
             overwrite_intermediates: Regenerate intermediate formats (F32/F16/BF16) even if they exist
             overwrite_quants: Regenerate quantized formats even if they exist
             split_max_size: Maximum size per shard when splitting (e.g., "5G" or "2.5G"). If None, no splitting.
+            mmproj_precision: Precision for mmproj (vision projector) file (F16, F32, BF16, Q8_0). Default: F16 for compatibility.
 
         Returns:
             List of paths to created quantized files
@@ -1115,7 +1119,8 @@ class GGUFConverter:
                         output_type=intermediate_type,
                         verbose=verbose,
                         split_max_size=split_max_size,
-                        split_max_tensors=split_max_tensors
+                        split_max_tensors=split_max_tensors,
+                        mmproj_precision=mmproj_precision
                     )
                 else:
                     # No split files exist, create them
@@ -1127,7 +1132,8 @@ class GGUFConverter:
                         output_type=intermediate_type,
                         verbose=verbose,
                         split_max_size=split_max_size,
-                        split_max_tensors=split_max_tensors
+                        split_max_tensors=split_max_tensors,
+                        mmproj_precision=mmproj_precision
                     )
             else:
                 # Normal mode: check for single intermediate file, ignore split files
@@ -1140,7 +1146,8 @@ class GGUFConverter:
                             model_path=model_path,
                             output_path=intermediate_file,
                             output_type=intermediate_type,
-                            verbose=verbose
+                            verbose=verbose,
+                            mmproj_precision=mmproj_precision
                         )
                     else:
                         print(f"{theme['success']}Intermediate file already exists: {intermediate_file}{Style.RESET_ALL}")
@@ -1152,7 +1159,8 @@ class GGUFConverter:
                         model_path=model_path,
                         output_path=intermediate_file,
                         output_type=intermediate_type,
-                        verbose=verbose
+                        verbose=verbose,
+                        mmproj_precision=mmproj_precision
                     )
 
         # Step 1.5: Generate importance matrix if requested
@@ -1263,7 +1271,8 @@ class GGUFConverter:
                                 output_type=quant_type.lower(),
                                 verbose=verbose,
                                 split_max_size=split_max_size,
-                                split_max_tensors=split_max_tensors
+                                split_max_tensors=split_max_tensors,
+                                mmproj_precision=mmproj_precision
                             )
                             # Get all new shards
                             new_shards = sorted(output_dir.glob(f"{output_file.stem}-*-of-*.gguf"))
@@ -1277,7 +1286,8 @@ class GGUFConverter:
                                 output_type=quant_type.lower(),
                                 verbose=verbose,
                                 split_max_size=split_max_size,
-                                split_max_tensors=split_max_tensors
+                                split_max_tensors=split_max_tensors,
+                                mmproj_precision=mmproj_precision
                             )
                             # Get all shards
                             new_shards = sorted(output_dir.glob(f"{output_file.stem}-*-of-*.gguf"))
@@ -1293,7 +1303,8 @@ class GGUFConverter:
                                     model_path=model_path,
                                     output_path=output_file,
                                     output_type=quant_type.lower(),
-                                    verbose=verbose
+                                    verbose=verbose,
+                                    mmproj_precision=mmproj_precision
                                 )
                                 quantized_files.append(actual_output)
                             else:
@@ -1307,7 +1318,8 @@ class GGUFConverter:
                                 model_path=model_path,
                                 output_path=output_file,
                                 output_type=quant_type.lower(),
-                                verbose=verbose
+                                verbose=verbose,
+                                mmproj_precision=mmproj_precision
                             )
                             quantized_files.append(actual_output)
             else:

@@ -261,6 +261,10 @@ def detect_intermediate_gguf_files(model_path: Path) -> Dict[str, Dict[str, Any]
         return {}
 
     for gguf_file in model_path.glob("*.gguf"):
+        # Skip mmproj files (vision model projectors) - they're not intermediates
+        if gguf_file.name.startswith("mmproj-"):
+            continue
+
         # Try split pattern first (more specific)
         split_match = split_pattern.match(gguf_file.name)
         if split_match:

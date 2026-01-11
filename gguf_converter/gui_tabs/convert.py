@@ -435,8 +435,8 @@ def render_convert_tab(
                     disable_shard_size = (using_custom_intermediate and
                                         config.get("custom_intermediate_file_type") == "split")
 
-                    # Use a narrow column for the number input to make it smaller
-                    split_size_col1, split_size_col2 = st.columns([1, 2])
+                    # Use half-width column for the number input
+                    split_size_col1, split_size_col2 = st.columns([1, 1])
 
                     with split_size_col1:
                         def save_max_shard_size():
@@ -558,6 +558,27 @@ def render_convert_tab(
                 on_change=make_config_saver(config, "pure_quantization", "pure_quantization_checkbox")
             )
 
+            st.markdown("---")
+
+            mmproj_precision_options = ["F16 (recommended)", "F32", "BF16", "Q8_0"]
+
+            def save_mmproj_precision():
+                config["mmproj_precision"] = st.session_state.mmproj_precision_radio
+                save_config(config)
+
+            # Default to F16 for compatibility
+            saved_mmproj_precision = config.get("mmproj_precision", "F16 (recommended)")
+
+            mmproj_precision = st.radio(
+                "Vision Model Settings: mmproj precision",
+                options=mmproj_precision_options,
+                index=mmproj_precision_options.index(saved_mmproj_precision) if saved_mmproj_precision in mmproj_precision_options else 0,
+                horizontal=True,
+                help="Precision for vision projector file. F16 recommended for best compatibility (BF16 has known CUDA issues). Only applies to vision/multimodal models.",
+                key="mmproj_precision_radio",
+                on_change=save_mmproj_precision
+            )
+
         # Track intermediate format changes to restore checkbox states
         if 'previous_intermediate' not in st.session_state:
             st.session_state.previous_intermediate = intermediate_type
@@ -584,7 +605,9 @@ def render_convert_tab(
 
             # Save non-intermediate checkbox states
             for qtype in ["F32", "F16", "BF16"]:
-                checkbox_key = f"full_{qtype}_{prev_format}"
+                # Use previous using_custom_intermediate state for the key
+                prev_custom = st.session_state.get('previous_using_custom_intermediate', using_custom_intermediate)
+                checkbox_key = f"full_{qtype}_{prev_format}_{prev_custom}"
                 if checkbox_key in st.session_state and qtype != prev_format:
                     config["other_quants"][qtype] = st.session_state[checkbox_key]
 
@@ -792,14 +815,16 @@ def render_convert_tab(
                 del st.session_state.imatrix_refresh_toast
 
             # Show imatrix fallback warning right below the dropdown (if applicable)
+            # Wrap in cols[0] to match dropdown width
             if "imatrix_fallback_warning" in st.session_state:
-                warning_data = st.session_state.imatrix_fallback_warning
-                if warning_data["is_file"]:
-                    st.warning(f"`{warning_data['previous']}` not found.  "
-                             f"Auto-selected newest file: `{warning_data['current']}`.  ")
-                else:
-                    st.warning(f"**Imatrix mode changed:** Previously selected `{warning_data['previous']}` not found.  "
-                             f"Switched to: `{warning_data['current']}`.")
+                with cols[0]:
+                    warning_data = st.session_state.imatrix_fallback_warning
+                    if warning_data["is_file"]:
+                        st.warning(f"`{warning_data['previous']}` not found.  "
+                                 f"Auto-selected newest file: `{warning_data['current']}`.  ")
+                    else:
+                        st.warning(f"**Imatrix mode changed:** Previously selected `{warning_data['previous']}` not found.  "
+                                 f"Switched to: `{warning_data['current']}`.")
 
             # Handle selection
             if imatrix_selection == generate_custom_option:
@@ -976,13 +1001,14 @@ def render_convert_tab(
 
                 def save_full_selection(qt, inter_type):
                     def save_to_config():
-                        key = f"full_{qt}_{inter_type}"
+                        key = f"full_{qt}_{inter_type}_{using_custom_intermediate}"
                         if key in st.session_state and not st.session_state[key]:
                             config["other_quants"][qt] = False
                             save_config(config)
                     return save_to_config
 
-                widget_key = f"full_{qtype}_{intermediate_type}"
+                # Include using_custom_intermediate in key to force widget recreation when switching modes
+                widget_key = f"full_{qtype}_{intermediate_type}_{using_custom_intermediate}"
 
                 full_checkboxes[qtype] = st.checkbox(
                     qtype,
@@ -1002,7 +1028,7 @@ def render_convert_tab(
 
             # Save checkbox states before switching
             for qtype in ["F32", "F16", "BF16"]:
-                checkbox_key = f"full_{qtype}_{intermediate_type}"
+                checkbox_key = f"full_{qtype}_{intermediate_type}_{using_custom_intermediate}"
                 if checkbox_key in st.session_state:
                     if qtype != intermediate_type:
                         config["other_quants"][qtype] = st.session_state[checkbox_key]
@@ -1296,6 +1322,11 @@ def render_convert_tab(
                         custom_intermediate_path = config.get("custom_intermediate_path")
                         custom_intermediate_format = config.get("custom_intermediate_format")
 
+                    # Handle mmproj precision selection
+                    mmproj_precision_raw = config.get("mmproj_precision", "F16 (recommended)")
+                    # Strip the "(recommended)" suffix if present
+                    mmproj_precision_clean = mmproj_precision_raw.replace(" (recommended)", "").strip()
+
                     output_files = converter.convert_and_quantize(
                         model_path=model_path_clean,
                         output_dir=output_dir_clean,
@@ -1321,7 +1352,8 @@ def render_convert_tab(
                         token_embedding_type=token_embedding_type_param,
                         overwrite_intermediates=config.get("overwrite_intermediates", False),
                         overwrite_quants=config.get("overwrite_quants", True),
-                        split_max_size=split_size_override
+                        split_max_size=split_size_override,
+                        mmproj_precision=mmproj_precision_clean
                     )
 
                 st.success(f"Successfully processed {len(output_files)} files!")
