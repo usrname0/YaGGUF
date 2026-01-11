@@ -24,11 +24,18 @@ except ImportError:
 # Export TKINTER_AVAILABLE for use in other modules
 __all__ = ['TKINTER_AVAILABLE', 'browse_folder', 'open_folder', 'strip_quotes',
            'save_config', 'load_config', 'make_config_saver', 'path_input_columns',
-           'extract_repo_id_from_url', 'get_platform_path']
+           'extract_repo_id_from_url', 'get_platform_path', 'CONFIG_FILE', 'HF_TOKEN_PATH']
 
 
 # Config file location
 CONFIG_FILE = Path.home() / ".gguf_converter_config.json"
+
+# HuggingFace token location (managed by huggingface_hub)
+try:
+    from huggingface_hub.constants import HF_TOKEN_PATH
+except ImportError:
+    # Fallback for older versions or if constant is moved
+    HF_TOKEN_PATH = Path.home() / ".cache" / "huggingface" / "token"
 
 
 def get_default_config() -> Dict[str, Any]:
@@ -87,9 +94,27 @@ def get_default_config() -> Dict[str, Any]:
         "repo_id": "",
         "download_dir": "",
 
-        # Merge tab
+        # Merge tab (deprecated - now in Split/Merge tab)
         "merge_input_dir": "",
         "merge_output_dir": "",
+
+        # Split/Merge tab
+        "split_merge_input_dir": "",
+        "split_merge_selected_file": None,
+        "split_merge_output_dir": "",
+        "split_merge_operation_mode": "Split",
+        "split_merge_max_shard_size_gb": 2.0,
+        "split_merge_copy_aux_files": True,
+
+        # Custom intermediate (used when selecting existing intermediate file)
+        "custom_intermediate_mode": None,
+        "custom_intermediate_format": None,
+        "custom_intermediate_path": None,
+        "custom_intermediate_file_type": None,
+        "custom_intermediate_saved_intermediate_type": None,
+
+        # Imatrix statistics output
+        "imatrix_stats_output_dir": "",
 
         # Custom binaries
         "use_custom_binaries": False,

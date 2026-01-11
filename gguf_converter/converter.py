@@ -355,7 +355,7 @@ class GGUFConverter:
         print(f"{theme['info']}Converting {model_path.name} to GGUF format...{Style.RESET_ALL}")
         print(f"{theme['highlight']}Running: {' '.join(cmd)}{Style.RESET_ALL}\n")
 
-        result = subprocess.run(cmd, capture_output=not verbose, text=True)
+        result = subprocess.run(cmd, capture_output=not verbose, text=True, encoding='utf-8', errors='replace')
 
         if result.returncode != 0:
             # Combine stdout and stderr since errors can be in either
@@ -414,7 +414,7 @@ class GGUFConverter:
 
             print(f"{theme['highlight']}Running: {' '.join(mmproj_cmd)}{Style.RESET_ALL}\n")
 
-            mmproj_result = subprocess.run(mmproj_cmd, capture_output=not verbose, text=True)
+            mmproj_result = subprocess.run(mmproj_cmd, capture_output=not verbose, text=True, encoding='utf-8', errors='replace')
 
             if mmproj_result.returncode != 0:
                 error_output = (mmproj_result.stderr or '') + (mmproj_result.stdout or '')
@@ -582,6 +582,8 @@ class GGUFConverter:
                 cmd,
                 capture_output=True,
                 text=True,
+                encoding='utf-8',
+                errors='replace',
                 check=True
             )
 
@@ -767,6 +769,8 @@ class GGUFConverter:
                 cmd,
                 capture_output=not verbose,
                 text=True,
+                encoding='utf-8',
+                errors='replace',
                 check=True
             )
 
@@ -939,6 +943,8 @@ class GGUFConverter:
                     [str(binary_path), "--version"],
                     capture_output=True,
                     text=True,
+                    encoding='utf-8',
+                    errors='replace',
                     timeout=5
                 )
 
@@ -948,6 +954,8 @@ class GGUFConverter:
                         [str(binary_path), "--help"],
                         capture_output=True,
                         text=True,
+                        encoding='utf-8',
+                        errors='replace',
                         timeout=5
                     )
 
@@ -989,6 +997,8 @@ class GGUFConverter:
                         cwd=llama_cpp_dir,
                         capture_output=True,
                         text=True,
+                        encoding='utf-8',
+                        errors='replace',
                         timeout=5
                     )
                     if result.returncode == 0 and result.stdout.strip():

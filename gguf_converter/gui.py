@@ -6,6 +6,7 @@ import streamlit as st
 import sys
 from pathlib import Path
 import multiprocessing
+import shutil
 
 # Handle both direct execution and module import
 try:
@@ -95,7 +96,6 @@ def main() -> None:
     with st.sidebar:
         st.header("Settings")
         st.markdown("[YaGGUF (GitHub)](https://github.com/usrname0/YaGGUF)")
-        st.markdown("---")
 
         def save_verbose():
             config["verbose"] = st.session_state.verbose_checkbox
@@ -133,15 +133,71 @@ def main() -> None:
         )
 
         st.markdown("---")
+        st.markdown("**Testing:**")
         if st.button("Reload UI", use_container_width=True, help="Reload the user interface via st.rerun()"):
             st.rerun()
 
+        if st.button("Test Model Variants", use_container_width=True, help="Test all GGUF variants in the output directory interactively with llama-server"):
+            import subprocess
+            import platform
+            script_path = Path(__file__).parent.parent / "tests" / "manual_variant_testing.py"
+
+            # Get output directory from config
+            output_dir = config.get("output_dir", "")
+
+            # Build command arguments
+            if output_dir and Path(output_dir).exists():
+                # Run with output directory
+                cmd_args = [sys.executable, str(script_path), str(output_dir)]
+                toast_msg = f"Testing variants in: {output_dir}"
+            elif output_dir:
+                # Output dir set but doesn't exist
+                st.toast(f"Output directory not found: {output_dir}")
+                cmd_args = [sys.executable, str(script_path), "--help"]
+                toast_msg = "Showing help (invalid output directory)"
+            else:
+                # No output dir set, show help
+                st.toast("No output directory set. Showing help.")
+                cmd_args = [sys.executable, str(script_path), "--help"]
+                toast_msg = "Showing help (no output directory)"
+
+            # Launch the script in a new terminal window
+            system = platform.system()
+            if system == "Windows":
+                # Windows: use start to open new cmd window
+                subprocess.Popen(
+                    ["cmd", "/c", "start", "cmd", "/k"] + cmd_args,
+                    creationflags=subprocess.CREATE_NEW_CONSOLE
+                )
+            elif system == "Darwin":
+                # macOS: use osascript to open new Terminal window
+                cmd_str = " ".join(f'"{arg}"' for arg in cmd_args)
+                subprocess.Popen([
+                    "osascript", "-e",
+                    f'tell app "Terminal" to do script "cd {Path.cwd()} && {cmd_str}"'
+                ])
+            else:
+                # Linux: try various terminal emulators
+                terminals = ["gnome-terminal", "konsole", "xterm"]
+                for term in terminals:
+                    if shutil.which(term):
+                        if term == "gnome-terminal":
+                            subprocess.Popen([term, "--"] + cmd_args)
+                        else:
+                            subprocess.Popen([term, "-e", " ".join(cmd_args)])
+                        break
+
+            st.toast(toast_msg)
+
+        st.markdown("---")
+        st.markdown("**Reset:**")
         if st.button("Reset to defaults", use_container_width=True, help="Reset all settings to default values"):
             st.session_state.config = reset_config()
             st.session_state.reset_count += 1
             if "download_just_completed" in st.session_state:
                 st.session_state.download_just_completed = False
             st.session_state.model_path_input = ""
+            st.session_state.output_dir_input = ""
             if "pending_model_path" in st.session_state:
                 del st.session_state.pending_model_path
             keys_to_delete = [k for k in st.session_state.keys() if isinstance(k, str) and k.startswith(('trad_', 'k_', 'i_'))]
@@ -154,6 +210,11 @@ def main() -> None:
             st.session_state.output_tensor_type_select = "Same as quant type (default)"
             st.session_state.token_embedding_type_select = "Same as quant type (default)"
             st.session_state.pure_quantization_checkbox = False
+            # Reset split/merge options
+            if "split_merge_operation_mode" in st.session_state:
+                st.session_state.split_merge_operation_mode = "Split"
+            if "split_merge_max_shard_size_input" in st.session_state:
+                st.session_state.split_merge_max_shard_size_input = 2.0
             st.session_state.pending_reset_defaults = True
             st.rerun()
 

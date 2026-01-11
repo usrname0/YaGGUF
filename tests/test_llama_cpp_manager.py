@@ -339,5 +339,21 @@ def test_download_url_construction():
     arch = manager.platform_info['arch']
 
     # These should be valid values for URL construction
-    assert os_name in ['win', 'linux', 'mac']
+    assert os_name in ['win', 'linux', 'mac', 'ubuntu', 'macos']
     assert arch in ['x64', 'arm64', 'unknown']
+
+
+def test_get_server_path():
+    """
+    Test get_server_path convenience method
+    """
+    manager = LlamaCppManager()
+
+    path = manager.get_server_path()
+
+    # Should return a Path
+    assert isinstance(path, Path)
+
+    # Should contain 'llama-server'
+    assert 'llama-server' in str(path)
+

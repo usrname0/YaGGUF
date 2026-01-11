@@ -5,7 +5,7 @@ Info tab for GGUF Converter GUI
 import streamlit as st
 from typing import Dict, Any, TYPE_CHECKING
 
-from ..gui_utils import CONFIG_FILE
+from ..gui_utils import CONFIG_FILE, HF_TOKEN_PATH
 
 if TYPE_CHECKING:
     from ..converter import GGUFConverter
@@ -28,7 +28,7 @@ def render_info_tab(converter: "GGUFConverter", config: Dict[str, Any]) -> None:
     - **Model quirks detection** - Handles Mistral format, pre-quantized models, and architecture-specific flags
     - **Split files mode** - Generate split shards for intermediates and quants
     - **Custom intermediates** - Use existing GGUF files as intermediates for quantization
-    - **Enhanced dtype detection** - Reads safetensors headers for accurate precision detection (BF16, F16, F32, FP8)
+    - **Enhanced dtype detection** - Detects model precision (BF16, F16, etc.) from configs and safetensors headers
     - **Importance Matrix** - Generate or reuse imatrix files for better low-bit quantization (IQ2, IQ3)
     - **Imatrix Statistics** - Analyze importance matrix files to view statistics
     - **HuggingFace Downloader** - Download models and their supporting files
@@ -51,6 +51,7 @@ def render_info_tab(converter: "GGUFConverter", config: Dict[str, Any]) -> None:
     **Settings:**
     - Your settings are automatically saved as you change them
     - Settings are stored in: `{CONFIG_FILE}`
+    - HuggingFace token: `{HF_TOKEN_PATH}` (managed by huggingface_hub)
     - Use "Reset to defaults" in the sidebar to restore default settings
 
     **Quantization Types (via llama.cpp):**

@@ -6,7 +6,7 @@ Provides functionality to split and merge sharded files (safetensors or GGUF).
 
 import streamlit as st
 from pathlib import Path
-from typing import Optional, Dict, Any, List, Tuple
+from typing import Optional, Dict, Any, List, Tuple, TypedDict, cast
 import re
 import sys
 import subprocess
@@ -20,10 +20,20 @@ from ..gui_utils import (
     save_config, path_input_columns, get_platform_path,
     detect_all_model_files
 )
-from ..theme import THEME as theme
+from ..theme import THEME
 
 
-def analyze_shards(directory: Path, extension: str) -> Dict[str, Dict[str, Any]]:
+class ShardInfo(TypedDict):
+    total_expected: int
+    shards_found: List[int]
+    files: List[Path]
+    complete: bool
+    output_filename: str
+    error: Optional[str]
+    missing_shards: Optional[List[int]]
+
+
+def analyze_shards(directory: Path, extension: str) -> Dict[str, ShardInfo]:
     """
     Analyze sharded files in a directory and group them by base model name.
 
@@ -32,28 +42,14 @@ def analyze_shards(directory: Path, extension: str) -> Dict[str, Dict[str, Any]]
         extension: File extension to look for (e.g., 'gguf' or 'safetensors')
 
     Returns:
-        Dictionary mapping base names to shard information:
-        {
-            'base_name': {
-                'total_expected': int,
-                'shards_found': [shard_numbers],
-                'files': [Path objects],
-                'complete': bool,
-                'output_filename': str
-            }
-        }
+        Dictionary mapping base names to shard information.
     """
     # Pattern: {base_name}-{shard_num}-of-{total_shards}.{extension}
     # Example: Qwen3-VL-4B-Instruct_F16-00001-of-00009.gguf
     pattern = re.compile(r'^(.+)-(\d+)-of-(\d+)\.' + re.escape(extension) + r'$')
 
-    models = defaultdict(lambda: {
-        'total_expected': 0,
-        'shards_found': [],
-        'files': [],
-        'complete': False,
-        'output_filename': ''
-    })
+    # Use a standard dict since we need specific TypedDict structure that defaultdict makes hard to type
+    models: Dict[str, ShardInfo] = {}
 
     # Find all matching files
     for file_path in directory.glob(f"*-*-of-*.{extension}"):
@@ -67,29 +63,45 @@ def analyze_shards(directory: Path, extension: str) -> Dict[str, Dict[str, Any]]
             if total_shards == 1:
                 continue
 
-            # Initialize or update model info
-            if models[base_name]['total_expected'] == 0:
-                models[base_name]['total_expected'] = total_shards
-                models[base_name]['output_filename'] = f"{base_name}.{extension}"
-            elif models[base_name]['total_expected'] != total_shards:
-                # Inconsistent total counts - this is an error
-                models[base_name]['error'] = f"Inconsistent shard counts found"
+            # Initialize model info if not present
+            if base_name not in models:
+                models[base_name] = {
+                    'total_expected': total_shards,
+                    'shards_found': [],
+                    'files': [],
+                    'complete': False,
+                    'output_filename': f"{base_name}.{extension}",
+                    'error': None,
+                    'missing_shards': None
+                }
+            
+            info = models[base_name]
 
-            models[base_name]['shards_found'].append(shard_num)
-            models[base_name]['files'].append(file_path)
+            # Check for consistency
+            if info['total_expected'] != total_shards:
+                info['error'] = f"Inconsistent shard counts found"
+
+            info['shards_found'].append(shard_num)
+            info['files'].append(file_path)
 
     # Check completeness for each model
     for base_name, info in models.items():
-        if 'error' not in info:
-            expected_shards = set(range(1, info['total_expected'] + 1))
+        if not info.get('error'):
+            total = int(info['total_expected']) # Ensure int for range
+            expected_shards = set(range(1, total + 1))
             found_shards = set(info['shards_found'])
             info['complete'] = expected_shards == found_shards
-            info['missing_shards'] = sorted(expected_shards - found_shards)
+            info['missing_shards'] = sorted(list(expected_shards - found_shards))
 
             # Sort files by shard number for proper merging
-            info['files'] = sorted(info['files'], key=lambda p: int(pattern.match(p.name).group(2)))
+            # We know pattern matches because these files were added based on the match
+            def get_shard_num(p: Path) -> int:
+                m = pattern.match(p.name)
+                return int(m.group(2)) if m else 0
+                
+            info['files'] = sorted(info['files'], key=get_shard_num)
 
-    return dict(models)
+    return models
 
 
 def render_split_merge_tab(converter, config: Dict[str, Any]):
@@ -502,6 +514,9 @@ def render_split_merge_tab(converter, config: Dict[str, Any]):
                 elif not output_dir:
                     st.error("Please specify an output directory")
                 else:
+                    # Type assertion: button is only enabled when selected_file_info is not None
+                    assert selected_file_info is not None
+
                     output_dir_path = Path(strip_quotes(output_dir))
 
                     if not output_dir_path.exists():
@@ -516,16 +531,16 @@ def render_split_merge_tab(converter, config: Dict[str, Any]):
 
                         # Delete existing output file if it exists
                         if output_path.exists():
-                            print(f"{theme['warning']}Deleting existing file: {output_path.name}{Style.RESET_ALL}")
+                            print(f"{THEME['warning']}Deleting existing file: {output_path.name}{Style.RESET_ALL}")
                             output_path.unlink()
 
                         # Print header banner
                         timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                         banner_line = "=" * 80
-                        print(f"\n{theme['info']}{banner_line}{Style.RESET_ALL}")
-                        print(f"{theme['info']}{'MERGE SHARDS'.center(80)}{Style.RESET_ALL}")
-                        print(f"{theme['info']}{timestamp.center(80)}{Style.RESET_ALL}")
-                        print(f"{theme['info']}{banner_line}{Style.RESET_ALL}\n")
+                        print(f"\n{THEME['info']}{banner_line}{Style.RESET_ALL}")
+                        print(f"{THEME['info']}{'MERGE SHARDS'.center(80)}{Style.RESET_ALL}")
+                        print(f"{THEME['info']}{timestamp.center(80)}{Style.RESET_ALL}")
+                        print(f"{THEME['info']}{banner_line}{Style.RESET_ALL}\n")
 
                         try:
                             with st.spinner(f"Merging {selected_file_info['extension'].upper()} shards..."):
@@ -566,6 +581,9 @@ def render_split_merge_tab(converter, config: Dict[str, Any]):
                 elif not output_dir:
                     st.error("Please specify an output directory")
                 else:
+                    # Type assertion: button is only enabled when selected_file_info is not None
+                    assert selected_file_info is not None
+
                     output_dir_path = Path(strip_quotes(output_dir))
 
                     if not output_dir_path.exists():
@@ -578,9 +596,9 @@ def render_split_merge_tab(converter, config: Dict[str, Any]):
                         pattern = f"{base_name}-*-of-*.{selected_file_info['extension']}"
                         existing_shards = list(output_dir_path.glob(pattern))
                         if existing_shards:
-                            print(f"{theme['warning']}Deleting {len(existing_shards)} existing shard(s):{Style.RESET_ALL}")
+                            print(f"{THEME['warning']}Deleting {len(existing_shards)} existing shard(s):{Style.RESET_ALL}")
                             for shard in existing_shards:
-                                print(f"{theme['warning']}  - {shard.name}{Style.RESET_ALL}")
+                                print(f"{THEME['warning']}  - {shard.name}{Style.RESET_ALL}")
                                 shard.unlink()
 
                         # Convert GB to MB (same as convert tab)
@@ -589,10 +607,10 @@ def render_split_merge_tab(converter, config: Dict[str, Any]):
                         # Print header banner
                         timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                         banner_line = "=" * 80
-                        print(f"\n{theme['info']}{banner_line}{Style.RESET_ALL}")
-                        print(f"{theme['info']}{'SPLIT FILE'.center(80)}{Style.RESET_ALL}")
-                        print(f"{theme['info']}{timestamp.center(80)}{Style.RESET_ALL}")
-                        print(f"{theme['info']}{banner_line}{Style.RESET_ALL}\n")
+                        print(f"\n{THEME['info']}{banner_line}{Style.RESET_ALL}")
+                        print(f"{THEME['info']}{'SPLIT FILE'.center(80)}{Style.RESET_ALL}")
+                        print(f"{THEME['info']}{timestamp.center(80)}{Style.RESET_ALL}")
+                        print(f"{THEME['info']}{banner_line}{Style.RESET_ALL}\n")
 
                         try:
                             with st.spinner(f"Splitting {selected_file_info['extension'].upper()} file..."):
@@ -634,6 +652,9 @@ def render_split_merge_tab(converter, config: Dict[str, Any]):
                 elif not output_dir:
                     st.error("Please specify an output directory")
                 else:
+                    # Type assertion: button is only enabled when selected_file_info is not None
+                    assert selected_file_info is not None
+
                     output_dir_path = Path(strip_quotes(output_dir))
 
                     if not output_dir_path.exists():
@@ -645,10 +666,10 @@ def render_split_merge_tab(converter, config: Dict[str, Any]):
                         # Print header banner
                         timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                         banner_line = "=" * 80
-                        print(f"\n{theme['info']}{banner_line}{Style.RESET_ALL}")
-                        print(f"{theme['info']}{'RESPLIT SHARDS'.center(80)}{Style.RESET_ALL}")
-                        print(f"{theme['info']}{timestamp.center(80)}{Style.RESET_ALL}")
-                        print(f"{theme['info']}{banner_line}{Style.RESET_ALL}\n")
+                        print(f"\n{THEME['info']}{banner_line}{Style.RESET_ALL}")
+                        print(f"{THEME['info']}{'RESPLIT SHARDS'.center(80)}{Style.RESET_ALL}")
+                        print(f"{THEME['info']}{timestamp.center(80)}{Style.RESET_ALL}")
+                        print(f"{THEME['info']}{banner_line}{Style.RESET_ALL}\n")
 
                         try:
                             with st.spinner(f"Resplitting {selected_file_info['extension'].upper()} shards..."):
@@ -727,14 +748,14 @@ def copy_auxiliary_files(input_dir: Path, output_dir: Path) -> List[Path]:
             # Check if file extension matches auxiliary types and not excluded
             if file_path.suffix.lower() in auxiliary_extensions:
                 dest_path = output_dir / file_path.name
-                print(f"{theme['info']}Copying {file_path.name}...{Style.RESET_ALL}")
+                print(f"{THEME['info']}Copying {file_path.name}...{Style.RESET_ALL}")
                 shutil.copy2(file_path, dest_path)
                 copied_files.append(dest_path)
 
     if copied_files:
-        print(f"{theme['success']}Copied {len(copied_files)} auxiliary file(s){Style.RESET_ALL}\n")
+        print(f"{THEME['success']}Copied {len(copied_files)} auxiliary file(s){Style.RESET_ALL}\n")
     else:
-        print(f"{theme['info']}No auxiliary files found to copy{Style.RESET_ALL}\n")
+        print(f"{THEME['info']}No auxiliary files found to copy{Style.RESET_ALL}\n")
 
     return copied_files
 
@@ -751,7 +772,7 @@ def resplit_gguf_shards(shard_files: List[Path], output_dir: Path, split_size: s
     Returns:
         List of newly created shard files
     """
-    print(f"{theme['info']}Resplitting {len(shard_files)} shard(s) with new size {split_size}:{Style.RESET_ALL}\n")
+    print(f"{THEME['info']}Resplitting {len(shard_files)} shard(s) with new size {split_size}:{Style.RESET_ALL}\n")
 
     # Extract base name from first shard (remove -00001-of-00003 pattern)
     base_name = re.sub(r'-\d+-of-\d+$', '', shard_files[0].stem)
@@ -762,34 +783,34 @@ def resplit_gguf_shards(shard_files: List[Path], output_dir: Path, split_size: s
 
     try:
         # Step 1: Merge shards into temporary file
-        print(f"{theme['info']}Step 1: Merging shards into temporary file...{Style.RESET_ALL}")
-        print(f"{theme['info']}Temp file: {temp_merged_file.name}{Style.RESET_ALL}")
+        print(f"{THEME['info']}Step 1: Merging shards into temporary file...{Style.RESET_ALL}")
+        print(f"{THEME['info']}Temp file: {temp_merged_file.name}{Style.RESET_ALL}")
         merge_gguf_shards(shard_files, temp_merged_file)
 
         # Step 1.5: Delete existing shards in output directory (now safe since we have the merged temp file)
         pattern = f"{base_name}-*-of-*.gguf"
         existing_shards = list(output_dir.glob(pattern))
         if existing_shards:
-            print(f"{theme['warning']}Deleting {len(existing_shards)} existing shard(s):{Style.RESET_ALL}")
+            print(f"{THEME['warning']}Deleting {len(existing_shards)} existing shard(s):{Style.RESET_ALL}")
             for shard in existing_shards:
-                print(f"{theme['warning']}  - {shard.name}{Style.RESET_ALL}")
+                print(f"{THEME['warning']}  - {shard.name}{Style.RESET_ALL}")
                 shard.unlink()
 
         # Step 2: Split the merged file with new size (use original base name, not temp name)
-        print(f"{theme['info']}Step 2: Splitting with new shard size...{Style.RESET_ALL}")
+        print(f"{THEME['info']}Step 2: Splitting with new shard size...{Style.RESET_ALL}")
         output_files = split_gguf_file(temp_merged_file, output_dir, split_size, output_base_name=base_name)
 
         # Step 3: Clean up temp file
-        print(f"{theme['info']}Cleaning up temporary file...{Style.RESET_ALL}")
+        print(f"{THEME['info']}Cleaning up temporary file...{Style.RESET_ALL}")
         temp_merged_file.unlink()
 
-        print(f"{theme['success']}Resplit complete!{Style.RESET_ALL}\n")
+        print(f"{THEME['success']}Resplit complete!{Style.RESET_ALL}\n")
         return output_files
 
     except Exception as e:
         # Clean up temp file on error if it exists
         if temp_merged_file.exists():
-            print(f"{theme['warning']}Cleaning up temporary file after error...{Style.RESET_ALL}")
+            print(f"{THEME['warning']}Cleaning up temporary file after error...{Style.RESET_ALL}")
             temp_merged_file.unlink()
         raise
 
@@ -811,7 +832,7 @@ def split_gguf_file(input_file: Path, output_dir: Path, split_size: str, output_
         raise FileNotFoundError(f"Input file not found: {input_file}")
 
     # Print file info to terminal
-    print(f"{theme['info']}Splitting {input_file.name} into shards of max {split_size} each:{Style.RESET_ALL}\n")
+    print(f"{THEME['info']}Splitting {input_file.name} into shards of max {split_size} each:{Style.RESET_ALL}\n")
 
     # Ensure output directory exists
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -832,7 +853,7 @@ def split_gguf_file(input_file: Path, output_dir: Path, split_size: str, output_
     # Run llama-gguf-split --split
     cmd = [str(gguf_split_exe), "--split", "--split-max-size", split_size, str(input_file), str(output_base)]
 
-    print(f"{theme['highlight']}Running: {' '.join(cmd)}{Style.RESET_ALL}\n")
+    print(f"{THEME['highlight']}Running: {' '.join(cmd)}{Style.RESET_ALL}\n")
 
     result = subprocess.run(
         cmd,
@@ -846,7 +867,7 @@ def split_gguf_file(input_file: Path, output_dir: Path, split_size: str, output_
     if result.stdout:
         # Print tool output to terminal
         for line in result.stdout.strip().split('\n'):
-            print(f"{theme['metadata']}{line}{Style.RESET_ALL}")
+            print(f"{THEME['metadata']}{line}{Style.RESET_ALL}")
 
     # Find the created shard files
     pattern = f"{base_name}-*-of-*.gguf"
@@ -855,7 +876,7 @@ def split_gguf_file(input_file: Path, output_dir: Path, split_size: str, output_
     if not output_files:
         raise RuntimeError(f"No output files found matching pattern: {pattern}")
 
-    print(f"{theme['success']}Successfully split into {len(output_files)} shard(s){Style.RESET_ALL}\n")
+    print(f"{THEME['success']}Successfully split into {len(output_files)} shard(s){Style.RESET_ALL}\n")
 
     return output_files
 
@@ -872,9 +893,9 @@ def merge_gguf_shards(shard_files: List[Path], output_file: Path):
         raise ValueError("No GGUF shard files provided")
 
     # Print model info to terminal
-    print(f"{theme['info']}Merging {output_file.name} from {len(shard_files)} shard(s):{Style.RESET_ALL}")
+    print(f"{THEME['info']}Merging {output_file.name} from {len(shard_files)} shard(s):{Style.RESET_ALL}")
     for shard in shard_files:
-        print(f"{theme['metadata']}  {shard.name}{Style.RESET_ALL}")
+        print(f"{THEME['metadata']}  {shard.name}{Style.RESET_ALL}")
     print()
 
     # Ensure output directory exists
@@ -882,7 +903,7 @@ def merge_gguf_shards(shard_files: List[Path], output_file: Path):
 
     # Delete existing file if it exists (llama-gguf-split won't overwrite)
     if output_file.exists():
-        print(f"{theme['warning']}Deleting existing file: {output_file.name}{Style.RESET_ALL}")
+        print(f"{THEME['warning']}Deleting existing file: {output_file.name}{Style.RESET_ALL}")
         output_file.unlink()
 
     # Find llama-gguf-split executable
@@ -898,7 +919,7 @@ def merge_gguf_shards(shard_files: List[Path], output_file: Path):
     # Run llama-gguf-split --merge
     cmd = [str(gguf_split_exe), "--merge", str(first_shard), str(output_file)]
 
-    print(f"{theme['highlight']}Running: {' '.join(cmd)}{Style.RESET_ALL}\n")
+    print(f"{THEME['highlight']}Running: {' '.join(cmd)}{Style.RESET_ALL}\n")
 
     result = subprocess.run(
         cmd,
@@ -912,9 +933,9 @@ def merge_gguf_shards(shard_files: List[Path], output_file: Path):
     if result.stdout:
         # Print tool output to terminal
         for line in result.stdout.strip().split('\n'):
-            print(f"{theme['metadata']}{line}{Style.RESET_ALL}")
+            print(f"{THEME['metadata']}{line}{Style.RESET_ALL}")
 
-    print(f"{theme['success']}Successfully merged: {output_file.name}{Style.RESET_ALL}\n")
+    print(f"{THEME['success']}Successfully merged: {output_file.name}{Style.RESET_ALL}\n")
 
 
 def merge_safetensors_shards(shard_files: List[Path], output_file: Path):
@@ -938,9 +959,9 @@ def merge_safetensors_shards(shard_files: List[Path], output_file: Path):
         raise ValueError("No safetensors shard files provided")
 
     # Print model info to terminal
-    print(f"{theme['info']}Merging {output_file.name} from {len(shard_files)} shard(s):{Style.RESET_ALL}")
+    print(f"{THEME['info']}Merging {output_file.name} from {len(shard_files)} shard(s):{Style.RESET_ALL}")
     for shard in shard_files:
-        print(f"{theme['metadata']}  {shard.name}{Style.RESET_ALL}")
+        print(f"{THEME['metadata']}  {shard.name}{Style.RESET_ALL}")
     print()
 
     # Ensure output directory exists
@@ -950,14 +971,14 @@ def merge_safetensors_shards(shard_files: List[Path], output_file: Path):
     merged_tensors = {}
 
     for shard in shard_files:
-        print(f"{theme['info']}Loading {shard.name}...{Style.RESET_ALL}")
+        print(f"{THEME['info']}Loading {shard.name}...{Style.RESET_ALL}")
         tensors = load_file(str(shard))
         merged_tensors.update(tensors)
 
-    print(f"{theme['info']}Saving merged file...{Style.RESET_ALL}")
+    print(f"{THEME['info']}Saving merged file...{Style.RESET_ALL}")
     save_file(merged_tensors, str(output_file))
 
-    print(f"{theme['success']}Successfully merged: {output_file.name}{Style.RESET_ALL}\n")
+    print(f"{THEME['success']}Successfully merged: {output_file.name}{Style.RESET_ALL}\n")
 
 
 def split_safetensors_file(input_file: Path, output_dir: Path, max_shard_size_gb: float) -> List[Path]:
@@ -984,13 +1005,13 @@ def split_safetensors_file(input_file: Path, output_dir: Path, max_shard_size_gb
     if not input_file.exists():
         raise FileNotFoundError(f"Input file not found: {input_file}")
 
-    print(f"{theme['info']}Splitting {input_file.name} into shards of max {max_shard_size_gb:.2f} GB each:{Style.RESET_ALL}\n")
+    print(f"{THEME['info']}Splitting {input_file.name} into shards of max {max_shard_size_gb:.2f} GB each:{Style.RESET_ALL}\n")
 
     # Ensure output directory exists
     output_dir.mkdir(parents=True, exist_ok=True)
 
     # Load tensors
-    print(f"{theme['info']}Loading tensors...{Style.RESET_ALL}")
+    print(f"{THEME['info']}Loading tensors...{Style.RESET_ALL}")
     tensors = load_file(str(input_file))
 
     # Calculate tensor sizes
@@ -1028,11 +1049,11 @@ def split_safetensors_file(input_file: Path, output_dir: Path, max_shard_size_gb
         shard_filename = f"{base_name}-{i:05d}-of-{len(shards):05d}.safetensors"
         shard_path = output_dir / shard_filename
 
-        print(f"{theme['info']}Writing shard {i}/{len(shards)}: {shard_filename}{Style.RESET_ALL}")
+        print(f"{THEME['info']}Writing shard {i}/{len(shards)}: {shard_filename}{Style.RESET_ALL}")
         save_file(shard_tensors, str(shard_path))
         output_files.append(shard_path)
 
-    print(f"{theme['success']}Successfully split into {len(output_files)} shard(s){Style.RESET_ALL}\n")
+    print(f"{THEME['success']}Successfully split into {len(output_files)} shard(s){Style.RESET_ALL}\n")
 
     return output_files
 
@@ -1049,7 +1070,7 @@ def resplit_safetensors_shards(shard_files: List[Path], output_dir: Path, max_sh
     Returns:
         List of newly created shard files
     """
-    print(f"{theme['info']}Resplitting {len(shard_files)} shard(s) with new size {max_shard_size_gb:.2f} GB:{Style.RESET_ALL}\n")
+    print(f"{THEME['info']}Resplitting {len(shard_files)} shard(s) with new size {max_shard_size_gb:.2f} GB:{Style.RESET_ALL}\n")
 
     # Extract base name from first shard (remove -00001-of-00003 pattern)
     base_name = re.sub(r'-\d+-of-\d+$', '', shard_files[0].stem)
@@ -1060,33 +1081,33 @@ def resplit_safetensors_shards(shard_files: List[Path], output_dir: Path, max_sh
 
     try:
         # Step 1: Merge shards into temporary file
-        print(f"{theme['info']}Step 1: Merging shards into temporary file...{Style.RESET_ALL}")
-        print(f"{theme['info']}Temp file: {temp_merged_file.name}{Style.RESET_ALL}")
+        print(f"{THEME['info']}Step 1: Merging shards into temporary file...{Style.RESET_ALL}")
+        print(f"{THEME['info']}Temp file: {temp_merged_file.name}{Style.RESET_ALL}")
         merge_safetensors_shards(shard_files, temp_merged_file)
 
         # Step 1.5: Delete existing shards in output directory (now safe since we have the merged temp file)
         pattern = f"{base_name}-*-of-*.safetensors"
         existing_shards = list(output_dir.glob(pattern))
         if existing_shards:
-            print(f"{theme['warning']}Deleting {len(existing_shards)} existing shard(s):{Style.RESET_ALL}")
+            print(f"{THEME['warning']}Deleting {len(existing_shards)} existing shard(s):{Style.RESET_ALL}")
             for shard in existing_shards:
-                print(f"{theme['warning']}  - {shard.name}{Style.RESET_ALL}")
+                print(f"{THEME['warning']}  - {shard.name}{Style.RESET_ALL}")
                 shard.unlink()
 
         # Step 2: Split the merged file with new size
-        print(f"{theme['info']}Step 2: Splitting with new shard size...{Style.RESET_ALL}")
+        print(f"{THEME['info']}Step 2: Splitting with new shard size...{Style.RESET_ALL}")
         output_files = split_safetensors_file(temp_merged_file, output_dir, max_shard_size_gb)
 
         # Step 3: Clean up temp file
-        print(f"{theme['info']}Cleaning up temporary file...{Style.RESET_ALL}")
+        print(f"{THEME['info']}Cleaning up temporary file...{Style.RESET_ALL}")
         temp_merged_file.unlink()
 
-        print(f"{theme['success']}Resplit complete!{Style.RESET_ALL}\n")
+        print(f"{THEME['success']}Resplit complete!{Style.RESET_ALL}\n")
         return output_files
 
     except Exception as e:
         # Clean up temp file on error if it exists
         if temp_merged_file.exists():
-            print(f"{theme['warning']}Cleaning up temporary file after error...{Style.RESET_ALL}")
+            print(f"{THEME['warning']}Cleaning up temporary file after error...{Style.RESET_ALL}")
             temp_merged_file.unlink()
         raise

@@ -41,13 +41,21 @@ def render_convert_tab(
         # Model path with Select Folder and Open Folder buttons
         cols, has_browse = path_input_columns()
 
+        def save_model_path():
+            """Save model path to config when changed"""
+            raw_value = st.session_state.get("model_path_input", "")
+            cleaned_value = strip_quotes(raw_value)
+            config["model_path"] = cleaned_value
+            save_config(config)
+
         with cols[0]:
             # Only set value if key not in session state (prevents warning)
             model_path_kwargs = {
                 "label": "Model path",
                 "placeholder": get_platform_path("C:\\Models\\my-model", "/home/user/Models/my-model"),
                 "help": "Local model directory containing config.json and model files.",
-                "key": "model_path_input"
+                "key": "model_path_input",
+                "on_change": save_model_path
             }
             if "model_path_input" not in st.session_state:
                 model_path_kwargs["value"] = config.get("model_path", "")
@@ -312,12 +320,21 @@ def render_convert_tab(
         # Output directory with Select Folder and Open Folder buttons
         cols, has_browse = path_input_columns()
 
+        def save_output_dir():
+            """Save output directory to config when changed"""
+            raw_value = st.session_state.get("output_dir_input", "")
+            cleaned_value = strip_quotes(raw_value)
+            config["output_dir"] = cleaned_value
+            save_config(config)
+
         with cols[0]:
             output_dir = st.text_input(
                 "Output directory",
                 value=config.get("output_dir", ""),
                 placeholder=get_platform_path("C:\\Models\\output", "/home/user/Models/output"),
-                help="Where to save the converted files"
+                help="Where to save the converted files",
+                key="output_dir_input",
+                on_change=save_output_dir
             )
 
         if has_browse:

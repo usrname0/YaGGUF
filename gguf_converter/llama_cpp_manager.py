@@ -587,6 +587,10 @@ class LlamaCppManager:
         """Get path to llama-imatrix executable"""
         return self._get_binary_path_with_fallback('llama-imatrix')
 
+    def get_server_path(self) -> Path:
+        """Get path to llama-server executable"""
+        return self._get_binary_path_with_fallback('llama-server')
+
     def update_conversion_scripts(self, force: bool = False, version: Optional[str] = None) -> Dict[str, str]:
         """
         Update llama.cpp conversion scripts to recommended or specific version

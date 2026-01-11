@@ -8,7 +8,7 @@ There are simultaneously too many and not enough GGUF converters in the world.
 ## Features
 
 - **[llama.cpp](https://github.com/ggerganov/llama.cpp) under the hood** - so that part works
-- **Download** - automatically download models and their auxilliary files from HuggingFace
+- **Download** - automatically download models and their auxiliary files from HuggingFace
 - **Convert** - safetensors and PyTorch models to GGUF format
 - **Quantize** - to multiple formats at once
 - **Cross-platform** - works on Windows and Linux (and probably Mac but untested)
@@ -16,14 +16,17 @@ There are simultaneously too many and not enough GGUF converters in the world.
 - **Flexible** - can use any local llama.cpp repo or binary installation for quantizing
 - **Minimal mess** - everything but a settings.json and HuggingFace token lives in one folder/venv
 
-Also
+### Advanced Features
 
-- **Custom intermediates** - use existing GGUF files as intermediates for quantization
-- **Split files mode** - generate split shards for intermediates and quants with custom shard sizes
-- **Split/Merge/Resplit Shards** - split, merge or resplit GGUF and safetensors files
-- **Model quirks detection** - handles Mistral format, pre-quantized models, and architecture-specific flags
-- **Vision/Multimodal models** - automatic detection and two-step conversion (text model + `mmproj-*.gguf`)
-- **Sentence-transformers** - auto-detect and include dense modules for embedding models
+- **Split/Merge Shards** - Split, merge, or resplit GGUF and safetensors files with custom shard sizes
+- **Importance Matrix** - Generate or reuse imatrix files for better low-bit quantization (IQ2, IQ3)
+- **Imatrix Statistics** - Analyze importance matrix files to view statistics
+- **Custom intermediates** - Use existing GGUF files as intermediates for quantization
+- **Split files mode** - Generate split shards for intermediates and quants
+- **Enhanced dtype detection** - Detects model precision (BF16, F16, etc.) from configs and safetensors headers
+- **Model quirks detection** - Handles Mistral format, pre-quantized models, and architecture-specific flags
+- **Vision/Multimodal models** - Automatic detection and two-step conversion (text model + `mmproj-*.gguf`)
+- **Sentence-transformers** - Auto-detect and include dense modules for embedding models
 
 ## Quantization Types
 
@@ -32,35 +35,33 @@ All quantization types from llama.cpp are supported. Choose based on your size/q
 | Type | Size | Quality | Category | Notes |
 |------|------|---------|----------|-------|
 | **F32** | Largest | Original | Unquantized | Full 32-bit precision |
-| **F16** | Large | Near-original | Unquantized | Half precision, minimal quality loss |
-| BF16 | Large | Near-original | Unquantized | Brain float 16-bit |
-| Q8_0 | Very Large | Excellent | Legacy | Near-original quality, 8-bit |
-| Q5_1 | Medium | Good | Legacy | Legacy 5-bit improved |
-| Q5_0 | Medium | Good | Legacy | Legacy 5-bit |
-| Q4_1 | Small | Fair | Legacy | Legacy 4-bit improved |
-| Q4_0 | Small | Fair | Legacy | Legacy 4-bit |
-| **Q6_K** | Large | Very High | K-Quant | Near-F16 quality, larger size |
-| **Q5_K_M** | Medium | Better | K-Quant | Higher quality with acceptable size |
+| **F16** | Large | Near-original | Unquantized | Half precision (default intermediate) |
+| **BF16** | Large | Near-original | Unquantized | Brain float 16-bit |
+| **Q8_0** | Very Large | Excellent | Legacy | Near-original quality |
+| Q5_1, Q5_0 | Medium | Good | Legacy | Legacy 5-bit |
+| Q4_1, Q4_0 | Small | Fair | Legacy | Legacy 4-bit |
+| **Q6_K** | Large | Very High | K-Quant | Near-F16 quality |
+| **Q5_K_M** | Medium | Better | K-Quant | Higher quality |
 | Q5_K_S | Medium | Better | K-Quant | 5-bit K small |
-| **Q4_K_M** | Small | Good | K-Quant | 
+| **Q4_K_M** | Small | Good | K-Quant | **Recommended** - best balance |
 | Q4_K_S | Small | Good | K-Quant | 4-bit K small |
-| Q3_K_M | Very Small | Fair | K-Quant | Aggressive compression |
 | Q3_K_L | Very Small | Fair | K-Quant | 3-bit K large |
+| Q3_K_M | Very Small | Fair | K-Quant | 3-bit K medium |
 | Q3_K_S | Very Small | Fair | K-Quant | 3-bit K small |
-| Q2_K | Tiny | Minimal | K-Quant | Maximum compression |
+| Q2_K | Tiny | Minimal | K-Quant | 2-bit K |
 | Q2_K_S | Tiny | Minimal | K-Quant | 2-bit K small |
-| IQ4_NL | Small | Good | I-Quant | 4-bit non-linear (use imatrix) |
+| **IQ4_NL** | Small | Good | I-Quant | 4-bit non-linear (use imatrix) |
 | IQ4_XS | Small | Good | I-Quant | 4-bit extra-small (use imatrix) |
 | IQ3_M | Very Small | Fair | I-Quant | 3-bit medium (use imatrix) |
-| IQ3_S | Very Small | Fair+ | I-Quant | 3.4-bit compression (use imatrix) |
+| IQ3_S | Very Small | Fair+ | I-Quant | 3.4-bit (use imatrix) |
 | IQ3_XS | Very Small | Fair | I-Quant | 3-bit extra-small (use imatrix) |
 | IQ3_XXS | Very Small | Fair | I-Quant | 3-bit extra-extra-small (use imatrix) |
 | IQ2_M | Tiny | Minimal | I-Quant | 2-bit medium (use imatrix) |
 | IQ2_S | Tiny | Minimal | I-Quant | 2-bit small (use imatrix) |
 | IQ2_XS | Tiny | Minimal | I-Quant | 2-bit extra-small (use imatrix) |
 | IQ2_XXS | Tiny | Minimal | I-Quant | 2-bit extra-extra-small (use imatrix) |
-| IQ1_M | Extreme | Poor | I-Quant | 1-bit medium, experimental (use imatrix) |
-| IQ1_S | Extreme | Poor | I-Quant | 1-bit small, experimental (use imatrix) |
+| IQ1_M | Extreme | Poor | I-Quant | 1-bit medium (use imatrix) |
+| IQ1_S | Extreme | Poor | I-Quant | 1-bit small (use imatrix) |
 
 
 **Quick Guide:**
