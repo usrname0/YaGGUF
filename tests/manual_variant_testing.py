@@ -27,11 +27,8 @@ from colorama import Style
 def print_success_message():
     """Print success message and instructions"""
     print(f"\n{theme['success']}{'='*70}{Style.RESET_ALL}")
-    print(f"{theme['info']}Instructions for next model:{Style.RESET_ALL}")
-    print(f"{theme['info']}  1. Close the browser tab/window{Style.RESET_ALL}")
-    print(f"{theme['info']}  2. Return to this terminal{Style.RESET_ALL}")
-    print(f"{theme['info']}  3. Press ENTER below to load the next variant{Style.RESET_ALL}")
-    print(f"\n{theme['success']}>>> Press ENTER to load the next model >>> {Style.RESET_ALL}")
+    print(f"{theme['info']}Model tested.  Continue testing or...{Style.RESET_ALL}")
+    print(f"\n{theme['success']}>>> Press ENTER to load the next model >>>{Style.RESET_ALL}")
     print(f"{theme['success']}{'='*70}{Style.RESET_ALL}")
 
 
@@ -178,22 +175,41 @@ def test_gguf_file(gguf_path: Path, server_path: Path, mmproj_path: Optional[Pat
 
             # Wait for browser to make its initial requests (GET /, /props, /v1/models)
             time.sleep(3)
-            
-        # Wait for completion request in browser
-        print(f"\n{theme['success']}Waiting for you to test the model in the browser...{Style.RESET_ALL}")
-        while not completion_event.is_set():
+
+        # Wait for completion request in browser or user pressing Enter to skip
+        print(f"\n{theme['success']}{'='*70}{Style.RESET_ALL}")
+        print(f"{theme['info']}Waiting for you to test the model in the browser.  Or...{Style.RESET_ALL}")
+        print(f"\n{theme['success']}>>> Press ENTER to load the next model >>>{Style.RESET_ALL}")
+        print(f"{theme['success']}{'='*70}{Style.RESET_ALL}")
+
+        # Set up a thread to wait for Enter key
+        skip_event = threading.Event()
+
+        def wait_for_skip():
+            try:
+                input()
+                skip_event.set()
+            except (EOFError, KeyboardInterrupt):
+                skip_event.set()
+
+        skip_thread = threading.Thread(target=wait_for_skip, daemon=True)
+        skip_thread.start()
+
+        # Wait for either completion event or skip event
+        while not completion_event.is_set() and not skip_event.is_set():
             if process.poll() is not None:
                 print(f"\n{theme['error']}Server stopped unexpectedly.{Style.RESET_ALL}")
                 return
             time.sleep(0.5)
 
-        # Wait for user input (prompt printed by monitor thread)
-        try:
-            input()
+        # If user tested the model, wait for them to press Enter to continue
+        if completion_event.is_set() and not skip_event.is_set():
+            # The monitor thread already printed "Press ENTER to load the next model"
+            # The skip_thread is still waiting for input(), so just wait for skip_event
+            skip_event.wait()  # Reuse the skip thread to wait for Enter
             print()  # Blank line after input
-        except EOFError:
-            # Handle Ctrl+D gracefully
-            print(f"\n{theme['info']}Received EOF, moving to next model...{Style.RESET_ALL}")
+        else:
+            # User skipped, just add a blank line
             print()
 
         # Terminate the server
@@ -444,6 +460,24 @@ This script will:
                 included_files.append(f)
         gguf_files = included_files
 
+    # Filter out non-first shards from split files
+    # Split files follow pattern: {base_name}-00001-of-00005.gguf, {base_name}-00002-of-00005.gguf, etc.
+    # We only want to test the first shard (llama.cpp will automatically load the rest)
+    import re
+    split_pattern = re.compile(r'-(\d+)-of-(\d+)\.gguf$')
+    final_files = []
+    for f in gguf_files:
+        match = split_pattern.search(f.name)
+        if match:
+            shard_num = match.group(1)
+            if shard_num == "00001":
+                # First shard - include it
+                final_files.append(f)
+            # else: skip non-first shards
+        else:
+            # Not a split file - include it
+            final_files.append(f)
+    gguf_files = final_files
 
     if not gguf_files:
         print(f"\n{theme['error']}Error: No .gguf model files found (or all were excluded) in {model_dir}{Style.RESET_ALL}")

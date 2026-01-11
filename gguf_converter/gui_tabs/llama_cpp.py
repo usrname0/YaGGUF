@@ -459,7 +459,7 @@ def render_llama_cpp_tab(converter: "GGUFConverter", config: Dict[str, Any]) -> 
     # YaGGUF Binary Information (Reference)
     col_info1, col_info2 = st.columns(2)
     with col_info1:
-        st.subheader("YaGGUF Binary Information (for comparison)")
+        st.subheader("YaGGUF Binary Version (for comparison)")
 
     with col_info2:
         binary_info = get_binary_version(st.session_state.converter)
