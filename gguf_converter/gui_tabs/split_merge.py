@@ -413,30 +413,27 @@ def render_split_merge_tab(converter, config: Dict[str, Any]):
                 if input_path.exists() and output_path.exists():
                     same_directory = input_path.resolve() == output_path.resolve()
 
-        # Copy auxiliary files checkbox (only enabled for safetensors and when directories are different)
-        is_safetensors = selected_file_info and selected_file_info.get('extension') == 'safetensors'
-        enable_copy_aux = is_safetensors and not same_directory
+        # Copy auxiliary files checkbox (only enabled when directories are different)
+        has_file_selected = selected_file_info is not None
+        enable_copy_aux = has_file_selected and not same_directory
 
         def save_copy_aux_files():
-            widget_key = f"split_merge_copy_aux_files_{is_safetensors}_{same_directory}"
+            widget_key = f"split_merge_copy_aux_files_{has_file_selected}_{same_directory}"
             if widget_key in st.session_state:
                 config["split_merge_copy_aux_files"] = st.session_state[widget_key]
                 save_config(config)
 
         if enable_copy_aux:
-            help_text = "Copy auxiliary files from input to output directory. Includes: .json, .txt, .md, .proto, .model, .py, .yaml, .yml, .jinja, .spm, .toml, .msgpack"
+            help_text = "Copy non-model files from input to output directory (config.json, tokenizer files, imatrix files, mmproj files, etc.). Includes: .json, .txt, .md, .proto, .model, .py, .yaml, .yml, .jinja, .spm, .toml, .msgpack, .imatrix"
             checkbox_value = config.get("split_merge_copy_aux_files", False)
-        elif not is_safetensors:
-            help_text = "Only available for safetensors files."
-            checkbox_value = False
         else:
-            help_text = "Disabled when input and output directories are the same."
+            help_text = "Disabled when input and output directories are the same, or when no file is selected."
             checkbox_value = False
 
         copy_aux_files = st.checkbox(
-            "Copy auxiliary safetensor files (config.json, tokenizer files, etc.)",
+            "Copy auxiliary files (config, tokenizer, imatrix, mmproj, etc.)",
             value=checkbox_value,
-            key=f"split_merge_copy_aux_files_{is_safetensors}_{same_directory}",
+            key=f"split_merge_copy_aux_files_{has_file_selected}_{same_directory}",
             on_change=save_copy_aux_files,
             disabled=not enable_copy_aux,
             help=help_text
@@ -481,13 +478,19 @@ def render_split_merge_tab(converter, config: Dict[str, Any]):
                         input_dir_path = Path(input_dir_clean)
                         auxiliary_extensions = {
                             '.json', '.txt', '.md', '.proto', '.model', '.py',
-                            '.yaml', '.yml', '.jinja', '.spm', '.toml', '.msgpack',
+                            '.yaml', '.yml', '.jinja', '.spm', '.toml', '.msgpack', '.imatrix',
                         }
-                        exclude_extensions = {'.gguf', '.safetensors', '.bin', '.pth', '.pt'}
 
                         for file_path in input_dir_path.iterdir():
                             if file_path.is_file():
-                                if file_path.suffix.lower() in auxiliary_extensions:
+                                suffix_lower = file_path.suffix.lower()
+                                # Check auxiliary extensions
+                                if suffix_lower in auxiliary_extensions:
+                                    dest_path = output_dir_path / file_path.name
+                                    if dest_path.exists():
+                                        aux_files_to_overwrite.append(dest_path)
+                                # Also check for mmproj files
+                                elif suffix_lower == '.gguf' and 'mmproj' in file_path.name.lower():
                                     dest_path = output_dir_path / file_path.name
                                     if dest_path.exists():
                                         aux_files_to_overwrite.append(dest_path)
@@ -553,10 +556,12 @@ def render_split_merge_tab(converter, config: Dict[str, Any]):
                             st.success(f"Successfully merged shards!")
                             st.write(f"`{output_path}` ({file_size:.2f} GB)")
 
-                            # Copy auxiliary files if requested (only for safetensors)
-                            if copy_aux_files and not same_directory and selected_file_info['extension'] == 'safetensors':
+                            # Copy auxiliary files if requested
+                            if copy_aux_files and not same_directory:
                                 input_path = Path(strip_quotes(input_dir))
-                                copy_auxiliary_files(input_path, output_dir_path)
+                                copied_files = copy_auxiliary_files(input_path, output_dir_path)
+                                if copied_files:
+                                    st.write(f"+ {len(copied_files)} auxiliary file(s)")
 
                         except Exception as e:
                             st.error(f"Failed to merge: {e}")
@@ -624,10 +629,12 @@ def render_split_merge_tab(converter, config: Dict[str, Any]):
                                 file_size = output_path.stat().st_size / (1024**3)
                                 st.write(f"`{output_path.name}` ({file_size:.2f} GB)")
 
-                            # Copy auxiliary files if requested (only for safetensors)
-                            if copy_aux_files and not same_directory and selected_file_info['extension'] == 'safetensors':
+                            # Copy auxiliary files if requested
+                            if copy_aux_files and not same_directory:
                                 input_path = Path(strip_quotes(input_dir))
-                                copy_auxiliary_files(input_path, output_dir_path)
+                                copied_files = copy_auxiliary_files(input_path, output_dir_path)
+                                if copied_files:
+                                    st.write(f"+ {len(copied_files)} auxiliary file(s)")
 
                         except Exception as e:
                             st.error(f"Failed to split: {e}")
@@ -692,10 +699,12 @@ def render_split_merge_tab(converter, config: Dict[str, Any]):
                                 file_size = output_path.stat().st_size / (1024**3)
                                 st.write(f"`{output_path.name}` ({file_size:.2f} GB)")
 
-                            # Copy auxiliary files if requested (only for safetensors)
-                            if copy_aux_files and not same_directory and selected_file_info['extension'] == 'safetensors':
+                            # Copy auxiliary files if requested
+                            if copy_aux_files and not same_directory:
                                 input_path = Path(strip_quotes(input_dir))
-                                copy_auxiliary_files(input_path, output_dir_path)
+                                copied_files = copy_auxiliary_files(input_path, output_dir_path)
+                                if copied_files:
+                                    st.write(f"+ {len(copied_files)} auxiliary file(s)")
 
                         except Exception as e:
                             st.error(f"Failed to resplit: {e}")
@@ -705,8 +714,9 @@ def render_split_merge_tab(converter, config: Dict[str, Any]):
 
 def copy_auxiliary_files(input_dir: Path, output_dir: Path) -> List[Path]:
     """
-    Copy auxiliary files (JSON, text files, etc.) from input to output directory.
-    Excludes model weight files (.gguf, .safetensors).
+    Copy auxiliary files from input to output directory.
+    Includes config files, tokenizer files, and mmproj files for vision models.
+    Excludes main model weight files.
 
     Args:
         input_dir: Source directory containing auxiliary files
@@ -729,11 +739,12 @@ def copy_auxiliary_files(input_dir: Path, output_dir: Path) -> List[Path]:
         '.spm',
         '.toml',
         '.msgpack',
+        '.imatrix',
     }
 
     # Extensions to exclude (model weight files)
+    # Note: .gguf files with 'mmproj' in the name are copied (vision model projectors)
     exclude_extensions = {
-        '.gguf',
         '.safetensors',
         '.bin',  # PyTorch .bin files
         '.pth',
@@ -745,10 +756,20 @@ def copy_auxiliary_files(input_dir: Path, output_dir: Path) -> List[Path]:
     # Iterate through all files in input directory
     for file_path in input_dir.iterdir():
         if file_path.is_file():
-            # Check if file extension matches auxiliary types and not excluded
-            if file_path.suffix.lower() in auxiliary_extensions:
+            suffix_lower = file_path.suffix.lower()
+
+            # Copy files with auxiliary extensions
+            if suffix_lower in auxiliary_extensions:
                 dest_path = output_dir / file_path.name
                 print(f"{THEME['info']}Copying {file_path.name}...{Style.RESET_ALL}")
+                shutil.copy2(file_path, dest_path)
+                copied_files.append(dest_path)
+
+            # Also copy mmproj files (vision model projectors)
+            # These are .gguf files but should be copied as auxiliary files
+            elif suffix_lower == '.gguf' and 'mmproj' in file_path.name.lower():
+                dest_path = output_dir / file_path.name
+                print(f"{THEME['info']}Copying {file_path.name} (vision projector)...{Style.RESET_ALL}")
                 shutil.copy2(file_path, dest_path)
                 copied_files.append(dest_path)
 

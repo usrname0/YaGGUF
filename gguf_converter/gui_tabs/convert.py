@@ -320,21 +320,12 @@ def render_convert_tab(
         # Output directory with Select Folder and Open Folder buttons
         cols, has_browse = path_input_columns()
 
-        def save_output_dir():
-            """Save output directory to config when changed"""
-            raw_value = st.session_state.get("output_dir_input", "")
-            cleaned_value = strip_quotes(raw_value)
-            config["output_dir"] = cleaned_value
-            save_config(config)
-
         with cols[0]:
             output_dir = st.text_input(
                 "Output directory",
                 value=config.get("output_dir", ""),
                 placeholder=get_platform_path("C:\\Models\\output", "/home/user/Models/output"),
-                help="Where to save the converted files",
-                key="output_dir_input",
-                on_change=save_output_dir
+                help="Where to save the converted files"
             )
 
         if has_browse:
@@ -352,8 +343,6 @@ def render_convert_tab(
                     if selected_folder:
                         config["output_dir"] = selected_folder
                         save_config(config)
-                        # Increment reset_count to refresh imatrix dropdown with new directory
-                        st.session_state.reset_count += 1
                         st.rerun()
 
         with cols[-1]:
@@ -374,8 +363,11 @@ def render_convert_tab(
                     except Exception as e:
                         st.toast(f"Could not open folder: {e}")
 
-        # Strip quotes from paths
+        # Strip quotes and update config if changed
         output_dir_clean = strip_quotes(output_dir)
+        if output_dir_clean != config.get("output_dir", ""):
+            config["output_dir"] = output_dir_clean
+            save_config(config)
 
         # File Handling section
         with st.expander("File Handling"):

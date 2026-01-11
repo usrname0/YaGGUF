@@ -292,7 +292,6 @@ def main() -> None:
             if "download_just_completed" in st.session_state:
                 st.session_state.download_just_completed = False
             st.session_state.model_path_input = ""
-            st.session_state.output_dir_input = ""
             if "pending_model_path" in st.session_state:
                 del st.session_state.pending_model_path
             keys_to_delete = [k for k in st.session_state.keys() if isinstance(k, str) and k.startswith(('trad_', 'k_', 'i_'))]
