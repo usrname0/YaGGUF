@@ -633,6 +633,9 @@ def render_convert_tab(
                 if key in st.session_state:
                     config["use_imatrix"] = st.session_state[key]
                     save_config(config)
+                    # Clear auto-switch warning if user turns imatrix OFF - this is a valid decision
+                    if not st.session_state[key] and "imatrix_fallback_warning" in st.session_state:
+                        del st.session_state.imatrix_fallback_warning
 
             use_imatrix = st.checkbox(
                 "Use imatrix",
@@ -752,6 +755,13 @@ def render_convert_tab(
                         config["imatrix_mode"] = "reuse"
                         config["imatrix_reuse_path"] = imatrix_selection
                         save_config(config)
+
+                # Clear auto-switch warning if user manually changed selection
+                if "imatrix_fallback_warning" in st.session_state:
+                    warning_current = st.session_state.imatrix_fallback_warning["current"]
+                    if imatrix_selection != warning_current:
+                        # User manually changed selection - clear the warning
+                        del st.session_state.imatrix_fallback_warning
 
                 # Track fallback for warning display later
                 if fallback_happened:
@@ -1192,6 +1202,16 @@ def render_convert_tab(
         elif not selected_quants:
             st.error("Please select at least one quantization type")
         else:
+            # Create output directory if it doesn't exist
+            output_path = Path(output_dir_clean)
+            if not output_path.exists():
+                try:
+                    output_path.mkdir(parents=True, exist_ok=True)
+                    print(f"{theme['info']}Created output directory: {output_dir_clean}{Style.RESET_ALL}")
+                except Exception as e:
+                    st.error(f"Failed to create output directory: {e}")
+                    return
+
             # Update config with current values
             config["verbose"] = verbose
             config["num_threads"] = num_threads

@@ -525,51 +525,57 @@ def render_split_merge_tab(converter, config: Dict[str, Any]):
 
                     output_dir_path = Path(strip_quotes(output_dir))
 
+                    # Create output directory if it doesn't exist
                     if not output_dir_path.exists():
-                        st.error(f"Output directory does not exist: {output_dir}")
-                    else:
-                        # Determine output filename (remove shard pattern)
-                        base_name = selected_file_info['primary_file'].stem
-                        # Remove -00001-of-00003 pattern
-                        base_name = re.sub(r'-\d+-of-\d+$', '', base_name)
-                        output_filename = f"{base_name}.{selected_file_info['extension']}"
-                        output_path = output_dir_path / output_filename
-
-                        # Delete existing output file if it exists
-                        if output_path.exists():
-                            print(f"{THEME['warning']}Deleting existing file: {output_path.name}{Style.RESET_ALL}")
-                            output_path.unlink()
-
-                        # Print header banner
-                        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                        banner_line = "=" * 80
-                        print(f"\n{THEME['info']}{banner_line}{Style.RESET_ALL}")
-                        print(f"{THEME['info']}{'MERGE SHARDS'.center(80)}{Style.RESET_ALL}")
-                        print(f"{THEME['info']}{timestamp.center(80)}{Style.RESET_ALL}")
-                        print(f"{THEME['info']}{banner_line}{Style.RESET_ALL}\n")
-
                         try:
-                            with st.spinner(f"Merging {selected_file_info['extension'].upper()} shards..."):
-                                if selected_file_info['extension'] == 'gguf':
-                                    merge_gguf_shards(selected_file_info['files'], output_path)
-                                else:
-                                    merge_safetensors_shards(selected_file_info['files'], output_path)
-
-                            file_size = output_path.stat().st_size / (1024**3)
-                            st.success(f"Successfully merged shards!")
-                            st.write(f"`{output_path}` ({file_size:.2f} GB)")
-
-                            # Copy auxiliary files if requested
-                            if copy_aux_files and not same_directory:
-                                input_path = Path(strip_quotes(input_dir))
-                                copied_files = copy_auxiliary_files(input_path, output_dir_path)
-                                if copied_files:
-                                    st.write(f"+ {len(copied_files)} auxiliary file(s)")
-
+                            output_dir_path.mkdir(parents=True, exist_ok=True)
+                            print(f"{THEME['info']}Created output directory: {output_dir}{Style.RESET_ALL}")
                         except Exception as e:
-                            st.error(f"Failed to merge: {e}")
-                            import traceback
-                            st.exception(e)
+                            st.error(f"Failed to create output directory: {e}")
+                            return
+
+                    # Determine output filename (remove shard pattern)
+                    base_name = selected_file_info['primary_file'].stem
+                    # Remove -00001-of-00003 pattern
+                    base_name = re.sub(r'-\d+-of-\d+$', '', base_name)
+                    output_filename = f"{base_name}.{selected_file_info['extension']}"
+                    output_path = output_dir_path / output_filename
+
+                    # Delete existing output file if it exists
+                    if output_path.exists():
+                        print(f"{THEME['warning']}Deleting existing file: {output_path.name}{Style.RESET_ALL}")
+                        output_path.unlink()
+
+                    # Print header banner
+                    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                    banner_line = "=" * 80
+                    print(f"\n{THEME['info']}{banner_line}{Style.RESET_ALL}")
+                    print(f"{THEME['info']}{'MERGE SHARDS'.center(80)}{Style.RESET_ALL}")
+                    print(f"{THEME['info']}{timestamp.center(80)}{Style.RESET_ALL}")
+                    print(f"{THEME['info']}{banner_line}{Style.RESET_ALL}\n")
+
+                    try:
+                        with st.spinner(f"Merging {selected_file_info['extension'].upper()} shards..."):
+                            if selected_file_info['extension'] == 'gguf':
+                                merge_gguf_shards(selected_file_info['files'], output_path)
+                            else:
+                                merge_safetensors_shards(selected_file_info['files'], output_path)
+
+                        file_size = output_path.stat().st_size / (1024**3)
+                        st.success(f"Successfully merged shards!")
+                        st.write(f"`{output_path}` ({file_size:.2f} GB)")
+
+                        # Copy auxiliary files if requested
+                        if copy_aux_files and not same_directory:
+                            input_path = Path(strip_quotes(input_dir))
+                            copied_files = copy_auxiliary_files(input_path, output_dir_path)
+                            if copied_files:
+                                st.write(f"+ {len(copied_files)} auxiliary file(s)")
+
+                    except Exception as e:
+                        st.error(f"Failed to merge: {e}")
+                        import traceback
+                        st.exception(e)
 
         elif operation_mode == "Split":
             # Split button (only enabled if single file is selected)
@@ -594,55 +600,61 @@ def render_split_merge_tab(converter, config: Dict[str, Any]):
 
                     output_dir_path = Path(strip_quotes(output_dir))
 
+                    # Create output directory if it doesn't exist
                     if not output_dir_path.exists():
-                        st.error(f"Output directory does not exist: {output_dir}")
-                    else:
-                        input_file = selected_file_info['primary_file']
-                        base_name = input_file.stem
-
-                        # Delete existing shards with same base name
-                        pattern = f"{base_name}-*-of-*.{selected_file_info['extension']}"
-                        existing_shards = list(output_dir_path.glob(pattern))
-                        if existing_shards:
-                            print(f"{THEME['warning']}Deleting {len(existing_shards)} existing shard(s):{Style.RESET_ALL}")
-                            for shard in existing_shards:
-                                print(f"{THEME['warning']}  - {shard.name}{Style.RESET_ALL}")
-                                shard.unlink()
-
-                        # Convert GB to MB (same as convert tab)
-                        split_size_mb = f"{round(max_shard_size_gb * 1000)}M"
-
-                        # Print header banner
-                        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                        banner_line = "=" * 80
-                        print(f"\n{THEME['info']}{banner_line}{Style.RESET_ALL}")
-                        print(f"{THEME['info']}{'SPLIT FILE'.center(80)}{Style.RESET_ALL}")
-                        print(f"{THEME['info']}{timestamp.center(80)}{Style.RESET_ALL}")
-                        print(f"{THEME['info']}{banner_line}{Style.RESET_ALL}\n")
-
                         try:
-                            with st.spinner(f"Splitting {selected_file_info['extension'].upper()} file..."):
-                                if selected_file_info['extension'] == 'gguf':
-                                    output_files = split_gguf_file(input_file, output_dir_path, split_size_mb)
-                                else:
-                                    output_files = split_safetensors_file(input_file, output_dir_path, max_shard_size_gb)
-
-                            st.success(f"Successfully split into {len(output_files)} shards!")
-                            for output_path in output_files:
-                                file_size = output_path.stat().st_size / (1024**3)
-                                st.write(f"`{output_path.name}` ({file_size:.2f} GB)")
-
-                            # Copy auxiliary files if requested
-                            if copy_aux_files and not same_directory:
-                                input_path = Path(strip_quotes(input_dir))
-                                copied_files = copy_auxiliary_files(input_path, output_dir_path)
-                                if copied_files:
-                                    st.write(f"+ {len(copied_files)} auxiliary file(s)")
-
+                            output_dir_path.mkdir(parents=True, exist_ok=True)
+                            print(f"{THEME['info']}Created output directory: {output_dir}{Style.RESET_ALL}")
                         except Exception as e:
-                            st.error(f"Failed to split: {e}")
-                            import traceback
-                            st.exception(e)
+                            st.error(f"Failed to create output directory: {e}")
+                            return
+
+                    input_file = selected_file_info['primary_file']
+                    base_name = input_file.stem
+
+                    # Delete existing shards with same base name
+                    pattern = f"{base_name}-*-of-*.{selected_file_info['extension']}"
+                    existing_shards = list(output_dir_path.glob(pattern))
+                    if existing_shards:
+                        print(f"{THEME['warning']}Deleting {len(existing_shards)} existing shard(s):{Style.RESET_ALL}")
+                        for shard in existing_shards:
+                            print(f"{THEME['warning']}  - {shard.name}{Style.RESET_ALL}")
+                            shard.unlink()
+
+                    # Convert GB to MB (same as convert tab)
+                    split_size_mb = f"{round(max_shard_size_gb * 1000)}M"
+
+                    # Print header banner
+                    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                    banner_line = "=" * 80
+                    print(f"\n{THEME['info']}{banner_line}{Style.RESET_ALL}")
+                    print(f"{THEME['info']}{'SPLIT FILE'.center(80)}{Style.RESET_ALL}")
+                    print(f"{THEME['info']}{timestamp.center(80)}{Style.RESET_ALL}")
+                    print(f"{THEME['info']}{banner_line}{Style.RESET_ALL}\n")
+
+                    try:
+                        with st.spinner(f"Splitting {selected_file_info['extension'].upper()} file..."):
+                            if selected_file_info['extension'] == 'gguf':
+                                output_files = split_gguf_file(input_file, output_dir_path, split_size_mb)
+                            else:
+                                output_files = split_safetensors_file(input_file, output_dir_path, max_shard_size_gb)
+
+                        st.success(f"Successfully split into {len(output_files)} shards!")
+                        for output_path in output_files:
+                            file_size = output_path.stat().st_size / (1024**3)
+                            st.write(f"`{output_path.name}` ({file_size:.2f} GB)")
+
+                        # Copy auxiliary files if requested
+                        if copy_aux_files and not same_directory:
+                            input_path = Path(strip_quotes(input_dir))
+                            copied_files = copy_auxiliary_files(input_path, output_dir_path)
+                            if copied_files:
+                                st.write(f"+ {len(copied_files)} auxiliary file(s)")
+
+                    except Exception as e:
+                        st.error(f"Failed to split: {e}")
+                        import traceback
+                        st.exception(e)
 
         else:  # Resplit
             # Resplit button (only enabled if split files are selected)
@@ -667,52 +679,58 @@ def render_split_merge_tab(converter, config: Dict[str, Any]):
 
                     output_dir_path = Path(strip_quotes(output_dir))
 
+                    # Create output directory if it doesn't exist
                     if not output_dir_path.exists():
-                        st.error(f"Output directory does not exist: {output_dir}")
-                    else:
-                        # Convert GB to MB (same as convert tab)
-                        split_size_mb = f"{round(max_shard_size_gb * 1000)}M"
-
-                        # Print header banner
-                        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                        banner_line = "=" * 80
-                        print(f"\n{THEME['info']}{banner_line}{Style.RESET_ALL}")
-                        print(f"{THEME['info']}{'RESPLIT SHARDS'.center(80)}{Style.RESET_ALL}")
-                        print(f"{THEME['info']}{timestamp.center(80)}{Style.RESET_ALL}")
-                        print(f"{THEME['info']}{banner_line}{Style.RESET_ALL}\n")
-
                         try:
-                            with st.spinner(f"Resplitting {selected_file_info['extension'].upper()} shards..."):
-                                # Deletion happens inside resplit function after merge but before split
-                                if selected_file_info['extension'] == 'gguf':
-                                    output_files = resplit_gguf_shards(
-                                        selected_file_info['files'],
-                                        output_dir_path,
-                                        split_size_mb
-                                    )
-                                else:
-                                    output_files = resplit_safetensors_shards(
-                                        selected_file_info['files'],
-                                        output_dir_path,
-                                        max_shard_size_gb
-                                    )
-
-                            st.success(f"Successfully resplit into {len(output_files)} shards!")
-                            for output_path in output_files:
-                                file_size = output_path.stat().st_size / (1024**3)
-                                st.write(f"`{output_path.name}` ({file_size:.2f} GB)")
-
-                            # Copy auxiliary files if requested
-                            if copy_aux_files and not same_directory:
-                                input_path = Path(strip_quotes(input_dir))
-                                copied_files = copy_auxiliary_files(input_path, output_dir_path)
-                                if copied_files:
-                                    st.write(f"+ {len(copied_files)} auxiliary file(s)")
-
+                            output_dir_path.mkdir(parents=True, exist_ok=True)
+                            print(f"{THEME['info']}Created output directory: {output_dir}{Style.RESET_ALL}")
                         except Exception as e:
-                            st.error(f"Failed to resplit: {e}")
-                            import traceback
-                            st.exception(e)
+                            st.error(f"Failed to create output directory: {e}")
+                            return
+
+                    # Convert GB to MB (same as convert tab)
+                    split_size_mb = f"{round(max_shard_size_gb * 1000)}M"
+
+                    # Print header banner
+                    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                    banner_line = "=" * 80
+                    print(f"\n{THEME['info']}{banner_line}{Style.RESET_ALL}")
+                    print(f"{THEME['info']}{'RESPLIT SHARDS'.center(80)}{Style.RESET_ALL}")
+                    print(f"{THEME['info']}{timestamp.center(80)}{Style.RESET_ALL}")
+                    print(f"{THEME['info']}{banner_line}{Style.RESET_ALL}\n")
+
+                    try:
+                        with st.spinner(f"Resplitting {selected_file_info['extension'].upper()} shards..."):
+                            # Deletion happens inside resplit function after merge but before split
+                            if selected_file_info['extension'] == 'gguf':
+                                output_files = resplit_gguf_shards(
+                                    selected_file_info['files'],
+                                    output_dir_path,
+                                    split_size_mb
+                                )
+                            else:
+                                output_files = resplit_safetensors_shards(
+                                    selected_file_info['files'],
+                                    output_dir_path,
+                                    max_shard_size_gb
+                                )
+
+                        st.success(f"Successfully resplit into {len(output_files)} shards!")
+                        for output_path in output_files:
+                            file_size = output_path.stat().st_size / (1024**3)
+                            st.write(f"`{output_path.name}` ({file_size:.2f} GB)")
+
+                        # Copy auxiliary files if requested
+                        if copy_aux_files and not same_directory:
+                            input_path = Path(strip_quotes(input_dir))
+                            copied_files = copy_auxiliary_files(input_path, output_dir_path)
+                            if copied_files:
+                                st.write(f"+ {len(copied_files)} auxiliary file(s)")
+
+                    except Exception as e:
+                        st.error(f"Failed to resplit: {e}")
+                        import traceback
+                        st.exception(e)
 
 
 def copy_auxiliary_files(input_dir: Path, output_dir: Path) -> List[Path]:
