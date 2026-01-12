@@ -33,6 +33,7 @@ def get_python_executable():
 
 # Handle both direct execution and module import
 try:
+    from . import __version__
     from .converter import GGUFConverter
     from .gui_utils import (
         load_config, save_config, reset_config, get_default_config
@@ -50,6 +51,7 @@ try:
 except ImportError:
     # Add parent directory for direct execution
     sys.path.insert(0, str(Path(__file__).parent.parent))
+    from gguf_converter import __version__
     from gguf_converter.converter import GGUFConverter
     from gguf_converter.gui_utils import (
         load_config, save_config, reset_config, get_default_config
@@ -119,22 +121,9 @@ def main() -> None:
     with st.sidebar:
         st.header("Settings")
         st.markdown("[YaGGUF (GitHub)](https://github.com/usrname0/YaGGUF)")
-
-        def save_verbose():
-            config["verbose"] = st.session_state.verbose_checkbox
-            save_config(config)
-
-        # Only set value if not already in session state (prevents warning)
-        verbose_kwargs = {
-            "label": "Verbose output",
-            "help": "Show detailed command output in the terminal for debugging and monitoring progress",
-            "key": "verbose_checkbox",
-            "on_change": save_verbose
-        }
-        if "verbose_checkbox" not in st.session_state:
-            verbose_kwargs["value"] = config.get("verbose", False)
-        verbose = st.checkbox(**verbose_kwargs)  # type: ignore[arg-type]
+        st.caption(f"Version {__version__}")
         st.markdown("---")
+
         st.markdown("**Performance:**")
         max_workers = multiprocessing.cpu_count()
         default_threads = max(1, max_workers - 1)
@@ -255,132 +244,32 @@ def main() -> None:
             if st.button("Dev Tests", use_container_width=True, help="Run the full test suite (pytest) in a new terminal window"):
                 import subprocess
                 import platform
-                import tempfile
 
-                # Get correct Python executable (venv if available)
-                python_exe = get_python_executable()
-
-                # Launch in a new terminal window
                 system = platform.system()
                 project_root = Path(__file__).parent.parent
 
                 if system == "Windows":
-                    # Create a batch file that checks for pytest and installs if needed
-                    with tempfile.NamedTemporaryFile(mode='w', suffix='.bat', delete=False) as bat_file:
-                        bat_path = bat_file.name
-                        bat_file.write('@echo off\n')
-                        bat_file.write(f'cd /d "{project_root}"\n')
-                        bat_file.write('echo Checking for pytest...\n')
-                        bat_file.write(f'"{python_exe}" -m pytest --version >nul 2>&1\n')
-                        bat_file.write('if errorlevel 1 (\n')
-                        bat_file.write('    echo pytest is not installed.\n')
-                        bat_file.write('    echo.\n')
-                        bat_file.write('    set /p "install=Install test dependencies? (y/n): "\n')
-                        bat_file.write('    if /i "%install%"=="y" (\n')
-                        bat_file.write(f'        "{python_exe}" -m pip install -r tests\\requirements-dev.txt\n')
-                        bat_file.write('        if errorlevel 1 (\n')
-                        bat_file.write('            echo.\n')
-                        bat_file.write('            echo Installation failed!\n')
-                        bat_file.write('            pause\n')
-                        bat_file.write('            exit /b 1\n')
-                        bat_file.write('        )\n')
-                        bat_file.write('    ) else (\n')
-                        bat_file.write('        echo.\n')
-                        bat_file.write('        echo Cancelled.\n')
-                        bat_file.write('        pause\n')
-                        bat_file.write('        exit /b 0\n')
-                        bat_file.write('    )\n')
-                        bat_file.write(')\n')
-                        bat_file.write('echo.\n')
-                        bat_file.write('echo Running tests...\n')
-                        bat_file.write('echo.\n')
-                        bat_file.write(f'"{python_exe}" -m pytest\n')
-                        bat_file.write('echo.\n')
-                        bat_file.write('echo Press any key to continue or just close this terminal...\n')
-                        bat_file.write('pause > nul\n')
-
+                    test_script = project_root / "scripts" / "run_tests.bat"
                     subprocess.Popen(
-                        ['cmd', '/c', 'start', 'Dev Tests', bat_path],
+                        ['cmd', '/c', 'start', 'Dev Tests', str(test_script)],
                         creationflags=subprocess.CREATE_NEW_CONSOLE
                     )
                 elif system == "Darwin":
-                    # macOS: use osascript to open new Terminal window
-                    script = f'''cd {project_root}
-echo "Checking for pytest..."
-if ! "{python_exe}" -m pytest --version >/dev/null 2>&1; then
-    echo "pytest is not installed."
-    echo ""
-    read -p "Install test dependencies? (y/n): " install
-    if [ "$install" = "y" ] || [ "$install" = "Y" ]; then
-        "{python_exe}" -m pip install -r tests/requirements-dev.txt
-        if [ $? -ne 0 ]; then
-            echo ""
-            echo "Installation failed!"
-            read -p "Press Enter to close..."
-            exit 1
-        fi
-    else
-        echo ""
-        echo "Cancelled."
-        read -p "Press Enter to close..."
-        exit 0
-    fi
-fi
-echo ""
-echo "Running tests..."
-echo ""
-"{python_exe}" -m pytest
-echo ""
-read -p "Press Enter to close..."'''
+                    test_script = project_root / "scripts" / "run_tests.sh"
                     subprocess.Popen([
                         "osascript", "-e",
-                        f'tell app "Terminal" to do script "{script}"'
+                        f'tell app "Terminal" to do script "cd {project_root} && ./scripts/run_tests.sh"'
                     ])
                 else:
                     # Linux: try various terminal emulators
-                    # x-terminal-emulator is Debian/Ubuntu's default terminal symlink
-                    # Build script that checks for pytest and installs if needed
-                    script = f'''cd {project_root}
-echo "Checking for pytest..."
-if ! "{python_exe}" -m pytest --version >/dev/null 2>&1; then
-    echo "pytest is not installed."
-    echo ""
-    echo -n "Install test dependencies? (y/n): "
-    read install
-    if [ "$install" = "y" ] || [ "$install" = "Y" ]; then
-        "{python_exe}" -m pip install -r tests/requirements-dev.txt
-        if [ $? -ne 0 ]; then
-            echo ""
-            echo "Installation failed!"
-            echo ""
-            echo "Press Enter to close..."
-            read dummy
-            exit 1
-        fi
-    else
-        echo ""
-        echo "Cancelled."
-        echo ""
-        echo "Press Enter to close..."
-        read dummy
-        exit 0
-    fi
-fi
-echo ""
-echo "Running tests..."
-echo ""
-"{python_exe}" -m pytest
-echo ""
-echo "Press Enter to close..."
-read dummy
-exec bash'''
+                    test_script = project_root / "scripts" / "run_tests.sh"
                     terminals = [
-                        ("x-terminal-emulator", ["-e", "bash", "-c", script]),
-                        ("gnome-terminal", ["--", "bash", "-c", script]),
-                        ("konsole", ["--", "bash", "-c", script]),
-                        ("xfce4-terminal", ["-x", "bash", "-c", script]),
-                        ("mate-terminal", ["-e", "bash", "-c", script]),
-                        ("xterm", ["-e", "bash", "-c", script]),
+                        ("x-terminal-emulator", ["-e", "bash", str(test_script)]),
+                        ("gnome-terminal", ["--", "bash", str(test_script)]),
+                        ("konsole", ["-e", "bash", str(test_script)]),
+                        ("xfce4-terminal", ["-e", "bash", str(test_script)]),
+                        ("mate-terminal", ["-e", "bash", str(test_script)]),
+                        ("xterm", ["-e", "bash", str(test_script)]),
                     ]
                     launched = False
                     for term, term_args in terminals:
@@ -389,7 +278,7 @@ exec bash'''
                                 subprocess.Popen([term] + term_args)
                                 launched = True
                                 break
-                            except Exception as e:
+                            except Exception:
                                 continue
 
                     if not launched:
@@ -398,6 +287,21 @@ exec bash'''
 
                 st.toast("Opening dev tests terminal...")
 
+        def save_verbose():
+            config["verbose"] = st.session_state.verbose_checkbox
+            save_config(config)
+
+        # Only set value if not already in session state (prevents warning)
+        verbose_kwargs = {
+            "label": "Verbose output",
+            "help": "Show detailed command output in the terminal for debugging and monitoring progress",
+            "key": "verbose_checkbox",
+            "on_change": save_verbose
+        }
+        if "verbose_checkbox" not in st.session_state:
+            verbose_kwargs["value"] = config.get("verbose", False)
+        verbose = st.checkbox(**verbose_kwargs)  # type: ignore[arg-type]
+        
         st.markdown("---")
         st.markdown("**Reset:**")
         if st.button("Reset to defaults", use_container_width=True, help="Reset all settings to default values"):

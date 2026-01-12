@@ -208,6 +208,7 @@ __marimo__/
 
 # Project Specific
 .claude/
+tmpclaude*
 llama.cpp/
 bin/
 !bin/BINARY_VERSION

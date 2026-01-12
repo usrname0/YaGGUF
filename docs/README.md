@@ -3,6 +3,9 @@
 ## Convert & Quantize
 ![Convert and Quantize](convert_and_quantize.png)
 
+## Quantize Existing Intermediates
+![Quantize Existing Intermediates](quantize_existing_intermediate.png)
+
 ## Imatrix Settings
 ![Imatrix Settings](imatrix_settings.png)
 
