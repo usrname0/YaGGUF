@@ -34,7 +34,7 @@ class LlamaCppManager:
     Manages llama.cpp resources including binaries and conversion scripts
     """
 
-    LLAMA_CPP_VERSION = "b7709"
+    LLAMA_CPP_VERSION = "b7710"
     RELEASE_URL_TEMPLATE = "https://github.com/ggml-org/llama.cpp/releases/download/{tag}/{filename}"
 
     def __init__(self, bin_dir: Optional[Path] = None, custom_binaries_folder: Optional[str] = None):
