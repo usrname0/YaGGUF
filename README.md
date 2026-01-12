@@ -3,8 +3,6 @@
 There are simultaneously too many and not enough GGUF converters in the world.
 
  ![convert and quantize](./docs/convert_and_quantize.png)
- ![downloader](./docs/huggingface_downloader.png)
-
 [More screenshots](./docs/)
 
 ## Features
@@ -141,7 +139,7 @@ This is normal for large models. The process is CPU-intensive.
 
 ### Other Errors
 
-- **Enforce imatrix** - Some IQ quantization types are disabled without an importance matrix for best results and to avoid errors. This can be unchecked in the Convert tab if needed (advanced users only).
+- **Enforce imatrix** - Some IQ quantization types are disabled when there's no importance matrix selected to avoid errors or poor results. This can be unchecked in the Convert tab if needed.
 - Use "Reset to defaults" in the settings to restore default configuration.
 - If issues persist, you can delete the installation folder and re-install.
   
