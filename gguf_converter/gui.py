@@ -189,13 +189,14 @@ def main() -> None:
 
             # Launch the script in a new terminal window
             system = platform.system()
+
+            # Get project root directory (needed for all platforms)
+            project_root = Path(__file__).parent.parent
+
             if system == "Windows":
                 # Windows: Create a bat file to avoid quoting issues
                 import tempfile
                 import os
-
-                # Get project root directory
-                project_root = Path(__file__).parent.parent
 
                 # Create a temporary batch file
                 with tempfile.NamedTemporaryFile(mode='w', suffix='.bat', delete=False) as bat_file:
@@ -218,24 +219,26 @@ def main() -> None:
                 cmd_str = " ".join(f'"{arg}"' for arg in cmd_args)
                 subprocess.Popen([
                     "osascript", "-e",
-                    f'tell app "Terminal" to do script "cd {Path.cwd()} && {cmd_str}"'
+                    f'tell app "Terminal" to do script "cd {project_root} && {cmd_str}"'
                 ])
             else:
                 # Linux: try various terminal emulators
                 # x-terminal-emulator is Debian/Ubuntu's default terminal symlink
+                # For multi-arg commands, wrap in sh -c
+                cmd_str = " ".join(f'"{arg}"' if " " in arg else arg for arg in cmd_args)
                 terminals = [
-                    ("x-terminal-emulator", ["-e"]),
-                    ("gnome-terminal", ["--"]),
-                    ("konsole", ["-e"]),
-                    ("xfce4-terminal", ["-e"]),
-                    ("mate-terminal", ["-e"]),
-                    ("xterm", ["-e"]),
+                    ("x-terminal-emulator", ["-e", "sh", "-c", f"cd {project_root} && {cmd_str}; read -p 'Press Enter to close...'"]),
+                    ("gnome-terminal", ["--", "sh", "-c", f"cd {project_root} && {cmd_str}; read -p 'Press Enter to close...'"]),
+                    ("konsole", ["-e", "sh", "-c", f"cd {project_root} && {cmd_str}; read -p 'Press Enter to close...'"]),
+                    ("xfce4-terminal", ["-e", "sh", "-c", f"cd {project_root} && {cmd_str}; read -p 'Press Enter to close...'"]),
+                    ("mate-terminal", ["-e", "sh", "-c", f"cd {project_root} && {cmd_str}; read -p 'Press Enter to close...'"]),
+                    ("xterm", ["-e", "sh", "-c", f"cd {project_root} && {cmd_str}; read -p 'Press Enter to close...'"]),
                 ]
                 launched = False
                 for term, term_args in terminals:
                     if shutil.which(term):
                         try:
-                            subprocess.Popen([term] + term_args + cmd_args)
+                            subprocess.Popen([term] + term_args)
                             launched = True
                             break
                         except Exception as e:
@@ -288,19 +291,21 @@ def main() -> None:
             else:
                 # Linux: try various terminal emulators
                 # x-terminal-emulator is Debian/Ubuntu's default terminal symlink
+                # For multi-arg commands, wrap in sh -c
+                cmd_str = " ".join(f'"{arg}"' if " " in arg else arg for arg in cmd_args)
                 terminals = [
-                    ("x-terminal-emulator", ["-e"]),
-                    ("gnome-terminal", ["--"]),
-                    ("konsole", ["-e"]),
-                    ("xfce4-terminal", ["-e"]),
-                    ("mate-terminal", ["-e"]),
-                    ("xterm", ["-e"]),
+                    ("x-terminal-emulator", ["-e", "sh", "-c", f"cd {project_root} && {cmd_str}; read -p 'Press Enter to close...'"]),
+                    ("gnome-terminal", ["--", "sh", "-c", f"cd {project_root} && {cmd_str}; read -p 'Press Enter to close...'"]),
+                    ("konsole", ["-e", "sh", "-c", f"cd {project_root} && {cmd_str}; read -p 'Press Enter to close...'"]),
+                    ("xfce4-terminal", ["-e", "sh", "-c", f"cd {project_root} && {cmd_str}; read -p 'Press Enter to close...'"]),
+                    ("mate-terminal", ["-e", "sh", "-c", f"cd {project_root} && {cmd_str}; read -p 'Press Enter to close...'"]),
+                    ("xterm", ["-e", "sh", "-c", f"cd {project_root} && {cmd_str}; read -p 'Press Enter to close...'"]),
                 ]
                 launched = False
                 for term, term_args in terminals:
                     if shutil.which(term):
                         try:
-                            subprocess.Popen([term] + term_args + cmd_args)
+                            subprocess.Popen([term] + term_args)
                             launched = True
                             break
                         except Exception as e:
