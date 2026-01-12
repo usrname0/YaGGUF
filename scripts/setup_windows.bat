@@ -59,6 +59,8 @@ if not exist "%USERPROFILE%\.streamlit" mkdir "%USERPROFILE%\.streamlit"
 (
     echo [general]
     echo email = ""
+) > "%USERPROFILE%\.streamlit\credentials.toml"
+(
     echo [browser]
     echo gatherUsageStats = false
 ) > "%USERPROFILE%\.streamlit\config.toml"

@@ -73,9 +73,11 @@ fi
 # Create Streamlit config to disable telemetry and onboarding prompt
 echo "Configuring Streamlit..."
 mkdir -p ~/.streamlit
-cat > ~/.streamlit/config.toml << 'EOF'
+cat > ~/.streamlit/credentials.toml << 'EOF'
 [general]
 email = ""
+EOF
+cat > ~/.streamlit/config.toml << 'EOF'
 [browser]
 gatherUsageStats = false
 EOF
