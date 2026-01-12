@@ -222,14 +222,28 @@ def main() -> None:
                 ])
             else:
                 # Linux: try various terminal emulators
-                terminals = ["gnome-terminal", "konsole", "xterm"]
-                for term in terminals:
+                # x-terminal-emulator is Debian/Ubuntu's default terminal symlink
+                terminals = [
+                    ("x-terminal-emulator", ["-e"]),
+                    ("gnome-terminal", ["--"]),
+                    ("konsole", ["-e"]),
+                    ("xfce4-terminal", ["-e"]),
+                    ("mate-terminal", ["-e"]),
+                    ("xterm", ["-e"]),
+                ]
+                launched = False
+                for term, term_args in terminals:
                     if shutil.which(term):
-                        if term == "gnome-terminal":
-                            subprocess.Popen([term, "--"] + cmd_args)
-                        else:
-                            subprocess.Popen([term, "-e", " ".join(cmd_args)])
-                        break
+                        try:
+                            subprocess.Popen([term] + term_args + cmd_args)
+                            launched = True
+                            break
+                        except Exception as e:
+                            continue
+
+                if not launched:
+                    st.error("No compatible terminal emulator found. Please install gnome-terminal, xterm, or another terminal.")
+                    return
 
             st.toast(toast_msg)
 
@@ -273,14 +287,28 @@ def main() -> None:
                 ])
             else:
                 # Linux: try various terminal emulators
-                terminals = ["gnome-terminal", "konsole", "xterm"]
-                for term in terminals:
+                # x-terminal-emulator is Debian/Ubuntu's default terminal symlink
+                terminals = [
+                    ("x-terminal-emulator", ["-e"]),
+                    ("gnome-terminal", ["--"]),
+                    ("konsole", ["-e"]),
+                    ("xfce4-terminal", ["-e"]),
+                    ("mate-terminal", ["-e"]),
+                    ("xterm", ["-e"]),
+                ]
+                launched = False
+                for term, term_args in terminals:
                     if shutil.which(term):
-                        if term == "gnome-terminal":
-                            subprocess.Popen([term, "--"] + cmd_args)
-                        else:
-                            subprocess.Popen([term, "-e", " ".join(cmd_args)])
-                        break
+                        try:
+                            subprocess.Popen([term] + term_args + cmd_args)
+                            launched = True
+                            break
+                        except Exception as e:
+                            continue
+
+                if not launched:
+                    st.error("No compatible terminal emulator found. Please install gnome-terminal, xterm, or another terminal.")
+                    return
 
             st.toast("Running dev tests...")
 
