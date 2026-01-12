@@ -229,8 +229,8 @@ def main() -> None:
                 terminals = [
                     ("x-terminal-emulator", ["-e", "sh", "-c", f"cd {project_root} && {cmd_str}; read -p 'Press Enter to close...'"]),
                     ("gnome-terminal", ["--", "sh", "-c", f"cd {project_root} && {cmd_str}; read -p 'Press Enter to close...'"]),
-                    ("konsole", ["-e", "sh", "-c", f"cd {project_root} && {cmd_str}; read -p 'Press Enter to close...'"]),
-                    ("xfce4-terminal", ["-e", "sh", "-c", f"cd {project_root} && {cmd_str}; read -p 'Press Enter to close...'"]),
+                    ("konsole", ["--", "sh", "-c", f"cd {project_root} && {cmd_str}; read -p 'Press Enter to close...'"]),
+                    ("xfce4-terminal", ["-x", "sh", "-c", f"cd {project_root} && {cmd_str}; read -p 'Press Enter to close...'"]),
                     ("mate-terminal", ["-e", "sh", "-c", f"cd {project_root} && {cmd_str}; read -p 'Press Enter to close...'"]),
                     ("xterm", ["-e", "sh", "-c", f"cd {project_root} && {cmd_str}; read -p 'Press Enter to close...'"]),
                 ]
@@ -377,8 +377,8 @@ exec bash'''
                     terminals = [
                         ("x-terminal-emulator", ["-e", "bash", "-c", script]),
                         ("gnome-terminal", ["--", "bash", "-c", script]),
-                        ("konsole", ["-e", "bash", "-c", script]),
-                        ("xfce4-terminal", ["-e", "bash", "-c", script]),
+                        ("konsole", ["--", "bash", "-c", script]),
+                        ("xfce4-terminal", ["-x", "bash", "-c", script]),
                         ("mate-terminal", ["-e", "bash", "-c", script]),
                         ("xterm", ["-e", "bash", "-c", script]),
                     ]
