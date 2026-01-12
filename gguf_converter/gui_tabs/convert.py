@@ -1202,16 +1202,6 @@ def render_convert_tab(
         elif not selected_quants:
             st.error("Please select at least one quantization type")
         else:
-            # Create output directory if it doesn't exist
-            output_path = Path(output_dir_clean)
-            if not output_path.exists():
-                try:
-                    output_path.mkdir(parents=True, exist_ok=True)
-                    print(f"{theme['info']}Created output directory: {output_dir_clean}{Style.RESET_ALL}")
-                except Exception as e:
-                    st.error(f"Failed to create output directory: {e}")
-                    return
-
             # Update config with current values
             config["verbose"] = verbose
             config["num_threads"] = num_threads

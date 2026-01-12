@@ -427,7 +427,7 @@ class GGUFConverter:
             if verbose and mmproj_result.stdout:
                 print(mmproj_result.stdout)
 
-            print(f"{theme['success']}Vision projector exported: {mmproj_output}{Style.RESET_ALL}")
+            print(f"{theme['success']}\nVision projector exported: {mmproj_output}{Style.RESET_ALL}")
             print(f"{theme['info']}Use both files together: {actual_output_path.name} + {mmproj_output.name}{Style.RESET_ALL}\n")
 
         return actual_output_path
@@ -924,6 +924,9 @@ class GGUFConverter:
         model_path_str = str(model_path)
         model_path = Path(model_path)
         output_dir = Path(output_dir)
+
+        # Track if we created the output directory
+        created_output_dir = not output_dir.exists()
         output_dir.mkdir(parents=True, exist_ok=True)
 
         # Print banner
@@ -1021,7 +1024,13 @@ class GGUFConverter:
             scripts_location = 'error'
 
         print(f"{theme['info']}Binaries: {binary_version} ({imatrix_bin.parent}){Style.RESET_ALL}")
-        print(f"{theme['info']}llama.cpp repo: {scripts_version} ({scripts_location}){Style.RESET_ALL}\n")
+        print(f"{theme['info']}llama.cpp repo: {scripts_version} ({scripts_location}){Style.RESET_ALL}")
+
+        # Print output directory creation message if we created it
+        if created_output_dir:
+            print(f"{theme['info']}\nCreated output directory: {output_dir}{Style.RESET_ALL}")
+
+        print()  # Empty line after version/directory info
 
         # Check if it's a HuggingFace repo ID (before Path conversion changes the separators)
         if not model_path.exists() and "/" in model_path_str:
@@ -1080,6 +1089,7 @@ class GGUFConverter:
         # Step 1: Convert to GGUF or use custom intermediate
         if using_custom_intermediate:
             # Use provided custom intermediate file
+            assert custom_intermediate_path is not None, "custom_intermediate_path must be set when using_custom_intermediate is True"
             intermediate_file = Path(custom_intermediate_path)
 
             # Validate file exists

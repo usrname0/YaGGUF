@@ -525,14 +525,13 @@ def render_split_merge_tab(converter, config: Dict[str, Any]):
 
                     output_dir_path = Path(strip_quotes(output_dir))
 
-                    # Create output directory if it doesn't exist
-                    if not output_dir_path.exists():
-                        try:
-                            output_dir_path.mkdir(parents=True, exist_ok=True)
-                            print(f"{THEME['info']}Created output directory: {output_dir}{Style.RESET_ALL}")
-                        except Exception as e:
-                            st.error(f"Failed to create output directory: {e}")
-                            return
+                    # Track if we created the output directory
+                    created_output_dir = not output_dir_path.exists()
+                    try:
+                        output_dir_path.mkdir(parents=True, exist_ok=True)
+                    except Exception as e:
+                        st.error(f"Failed to create output directory: {e}")
+                        return
 
                     # Determine output filename (remove shard pattern)
                     base_name = selected_file_info['primary_file'].stem
@@ -541,10 +540,8 @@ def render_split_merge_tab(converter, config: Dict[str, Any]):
                     output_filename = f"{base_name}.{selected_file_info['extension']}"
                     output_path = output_dir_path / output_filename
 
-                    # Delete existing output file if it exists
-                    if output_path.exists():
-                        print(f"{THEME['warning']}Deleting existing file: {output_path.name}{Style.RESET_ALL}")
-                        output_path.unlink()
+                    # Check if output file exists (will delete after header)
+                    overwriting_file = output_path.exists()
 
                     # Print header banner
                     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -552,7 +549,18 @@ def render_split_merge_tab(converter, config: Dict[str, Any]):
                     print(f"\n{THEME['info']}{banner_line}{Style.RESET_ALL}")
                     print(f"{THEME['info']}{'MERGE SHARDS'.center(80)}{Style.RESET_ALL}")
                     print(f"{THEME['info']}{timestamp.center(80)}{Style.RESET_ALL}")
-                    print(f"{THEME['info']}{banner_line}{Style.RESET_ALL}\n")
+                    print(f"{THEME['info']}{banner_line}{Style.RESET_ALL}")
+
+                    # Print output directory creation message if we created it
+                    if created_output_dir:
+                        print(f"{THEME['info']}\nCreated output directory: {output_dir}{Style.RESET_ALL}")
+
+                    # Print deletion message and delete if overwriting
+                    if overwriting_file:
+                        print(f"{THEME['warning']}\nDeleting existing file: {output_path.name}{Style.RESET_ALL}")
+                        output_path.unlink()
+
+                    print()  # Empty line after header
 
                     try:
                         with st.spinner(f"Merging {selected_file_info['extension'].upper()} shards..."):
@@ -600,26 +608,20 @@ def render_split_merge_tab(converter, config: Dict[str, Any]):
 
                     output_dir_path = Path(strip_quotes(output_dir))
 
-                    # Create output directory if it doesn't exist
-                    if not output_dir_path.exists():
-                        try:
-                            output_dir_path.mkdir(parents=True, exist_ok=True)
-                            print(f"{THEME['info']}Created output directory: {output_dir}{Style.RESET_ALL}")
-                        except Exception as e:
-                            st.error(f"Failed to create output directory: {e}")
-                            return
+                    # Track if we created the output directory
+                    created_output_dir = not output_dir_path.exists()
+                    try:
+                        output_dir_path.mkdir(parents=True, exist_ok=True)
+                    except Exception as e:
+                        st.error(f"Failed to create output directory: {e}")
+                        return
 
                     input_file = selected_file_info['primary_file']
                     base_name = input_file.stem
 
-                    # Delete existing shards with same base name
+                    # Check for existing shards with same base name (will delete after header)
                     pattern = f"{base_name}-*-of-*.{selected_file_info['extension']}"
                     existing_shards = list(output_dir_path.glob(pattern))
-                    if existing_shards:
-                        print(f"{THEME['warning']}Deleting {len(existing_shards)} existing shard(s):{Style.RESET_ALL}")
-                        for shard in existing_shards:
-                            print(f"{THEME['warning']}  - {shard.name}{Style.RESET_ALL}")
-                            shard.unlink()
 
                     # Convert GB to MB (same as convert tab)
                     split_size_mb = f"{round(max_shard_size_gb * 1000)}M"
@@ -630,7 +632,20 @@ def render_split_merge_tab(converter, config: Dict[str, Any]):
                     print(f"\n{THEME['info']}{banner_line}{Style.RESET_ALL}")
                     print(f"{THEME['info']}{'SPLIT FILE'.center(80)}{Style.RESET_ALL}")
                     print(f"{THEME['info']}{timestamp.center(80)}{Style.RESET_ALL}")
-                    print(f"{THEME['info']}{banner_line}{Style.RESET_ALL}\n")
+                    print(f"{THEME['info']}{banner_line}{Style.RESET_ALL}")
+
+                    # Print output directory creation message if we created it
+                    if created_output_dir:
+                        print(f"{THEME['info']}\nCreated output directory: {output_dir}{Style.RESET_ALL}")
+
+                    # Print deletion messages and delete existing shards
+                    if existing_shards:
+                        print(f"{THEME['warning']}\nDeleting {len(existing_shards)} existing shard(s):{Style.RESET_ALL}")
+                        for shard in existing_shards:
+                            print(f"{THEME['warning']}  - {shard.name}{Style.RESET_ALL}")
+                            shard.unlink()
+
+                    print()  # Empty line after header
 
                     try:
                         with st.spinner(f"Splitting {selected_file_info['extension'].upper()} file..."):
@@ -679,14 +694,13 @@ def render_split_merge_tab(converter, config: Dict[str, Any]):
 
                     output_dir_path = Path(strip_quotes(output_dir))
 
-                    # Create output directory if it doesn't exist
-                    if not output_dir_path.exists():
-                        try:
-                            output_dir_path.mkdir(parents=True, exist_ok=True)
-                            print(f"{THEME['info']}Created output directory: {output_dir}{Style.RESET_ALL}")
-                        except Exception as e:
-                            st.error(f"Failed to create output directory: {e}")
-                            return
+                    # Track if we created the output directory
+                    created_output_dir = not output_dir_path.exists()
+                    try:
+                        output_dir_path.mkdir(parents=True, exist_ok=True)
+                    except Exception as e:
+                        st.error(f"Failed to create output directory: {e}")
+                        return
 
                     # Convert GB to MB (same as convert tab)
                     split_size_mb = f"{round(max_shard_size_gb * 1000)}M"
@@ -697,7 +711,13 @@ def render_split_merge_tab(converter, config: Dict[str, Any]):
                     print(f"\n{THEME['info']}{banner_line}{Style.RESET_ALL}")
                     print(f"{THEME['info']}{'RESPLIT SHARDS'.center(80)}{Style.RESET_ALL}")
                     print(f"{THEME['info']}{timestamp.center(80)}{Style.RESET_ALL}")
-                    print(f"{THEME['info']}{banner_line}{Style.RESET_ALL}\n")
+                    print(f"{THEME['info']}{banner_line}{Style.RESET_ALL}")
+
+                    # Print output directory creation message if we created it
+                    if created_output_dir:
+                        print(f"{THEME['info']}\nCreated output directory: {output_dir}{Style.RESET_ALL}")
+
+                    print()  # Empty line after header
 
                     try:
                         with st.spinner(f"Resplitting {selected_file_info['extension'].upper()} shards..."):
@@ -782,7 +802,10 @@ def copy_auxiliary_files(input_dir: Path, output_dir: Path) -> List[Path]:
             # Copy files with auxiliary extensions
             if suffix_lower in auxiliary_extensions:
                 dest_path = output_dir / file_path.name
-                print(f"{THEME['info']}Copying {file_path.name}...{Style.RESET_ALL}")
+                if dest_path.exists():
+                    print(f"{THEME['warning']}Overwriting existing file: {file_path.name}{Style.RESET_ALL}")
+                else:
+                    print(f"{THEME['info']}Copying {file_path.name}...{Style.RESET_ALL}")
                 shutil.copy2(file_path, dest_path)
                 copied_files.append(dest_path)
 
@@ -790,12 +813,18 @@ def copy_auxiliary_files(input_dir: Path, output_dir: Path) -> List[Path]:
             # These are .gguf files but should be copied as auxiliary files
             elif suffix_lower == '.gguf' and 'mmproj' in file_path.name.lower():
                 dest_path = output_dir / file_path.name
-                print(f"{THEME['info']}Copying {file_path.name} (vision projector)...{Style.RESET_ALL}")
+                if dest_path.exists():
+                    print(f"{THEME['warning']}Overwriting existing file: {file_path.name} (vision projector){Style.RESET_ALL}")
+                else:
+                    print(f"{THEME['info']}Copying {file_path.name} (vision projector)...{Style.RESET_ALL}")
                 shutil.copy2(file_path, dest_path)
                 copied_files.append(dest_path)
 
     if copied_files:
-        print(f"{THEME['success']}Copied {len(copied_files)} auxiliary file(s){Style.RESET_ALL}\n")
+        print(f"{THEME['success']}Copied {len(copied_files)} auxiliary file(s){Style.RESET_ALL}")
+        for copied_file in copied_files:
+            print(f"{THEME['info']}  - {copied_file.name}{Style.RESET_ALL}")
+        print()  # Empty line after list
     else:
         print(f"{THEME['info']}No auxiliary files found to copy{Style.RESET_ALL}\n")
 
