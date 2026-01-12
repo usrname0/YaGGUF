@@ -345,19 +345,24 @@ echo "Checking for pytest..."
 if ! "{python_exe}" -m pytest --version >/dev/null 2>&1; then
     echo "pytest is not installed."
     echo ""
-    read -p "Install test dependencies? (y/n): " install
+    echo -n "Install test dependencies? (y/n): "
+    read install
     if [ "$install" = "y" ] || [ "$install" = "Y" ]; then
         "{python_exe}" -m pip install -r tests/requirements-dev.txt
         if [ $? -ne 0 ]; then
             echo ""
             echo "Installation failed!"
-            read -p "Press Enter to close..."
+            echo ""
+            echo "Press Enter to close..."
+            read dummy
             exit 1
         fi
     else
         echo ""
         echo "Cancelled."
-        read -p "Press Enter to close..."
+        echo ""
+        echo "Press Enter to close..."
+        read dummy
         exit 0
     fi
 fi
@@ -366,14 +371,16 @@ echo "Running tests..."
 echo ""
 "{python_exe}" -m pytest
 echo ""
-read -p "Press Enter to close..."'''
+echo "Press Enter to close..."
+read dummy
+exec bash'''
                     terminals = [
-                        ("x-terminal-emulator", ["-e", "sh", "-c", script]),
-                        ("gnome-terminal", ["--", "sh", "-c", script]),
-                        ("konsole", ["-e", "sh", "-c", script]),
-                        ("xfce4-terminal", ["-e", "sh", "-c", script]),
-                        ("mate-terminal", ["-e", "sh", "-c", script]),
-                        ("xterm", ["-e", "sh", "-c", script]),
+                        ("x-terminal-emulator", ["-e", "bash", "-c", script]),
+                        ("gnome-terminal", ["--", "bash", "-c", script]),
+                        ("konsole", ["-e", "bash", "-c", script]),
+                        ("xfce4-terminal", ["-e", "bash", "-c", script]),
+                        ("mate-terminal", ["-e", "bash", "-c", script]),
+                        ("xterm", ["-e", "bash", "-c", script]),
                     ]
                     launched = False
                     for term, term_args in terminals:
