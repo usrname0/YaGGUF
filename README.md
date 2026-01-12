@@ -27,7 +27,8 @@ There are simultaneously too many and not enough GGUF converters in the world.
 - **Model quirks detection** - Handles Mistral format, pre-quantized models, and architecture-specific flags
 - **Vision/Multimodal models** - Automatic detection and two-step conversion (text model + `mmproj-*.gguf`)
 - **Sentence-transformers** - Auto-detect and include dense modules for embedding models
-
+- **Test Models** - Opens a new terminal window to interactively test all GGUF models in your output directory using llama-server
+  
 ## Quantization Types
 
 All quantization types from llama.cpp are supported. Choose based on your size/quality tradeoff:
@@ -111,14 +112,6 @@ All quantization types from llama.cpp are supported. Choose based on your size/q
 - Use terminal `./run_gui.sh`
 
 The GUI will automatically open in your browser on a free port like: `http://localhost:8501`
-
-### Testing
-
-The GUI sidebar includes a convenient testing option:
-
-- **Test Models** - Opens a new terminal window to interactively test all GGUF models in your output directory using llama-server
-
-For developers: See `tests/README.md` for information about the test suite and enabling the "Dev Tests" button.
 
 ## Troubleshooting
 
