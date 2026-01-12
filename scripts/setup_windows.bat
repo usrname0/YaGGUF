@@ -53,6 +53,14 @@ if errorlevel 1 (
 
 )
 
-
+REM Create Streamlit config to disable telemetry and onboarding prompt
+echo Configuring Streamlit...
+if not exist "%USERPROFILE%\.streamlit" mkdir "%USERPROFILE%\.streamlit"
+(
+    echo [general]
+    echo email = ""
+    echo [browser]
+    echo gatherUsageStats = false
+) > "%USERPROFILE%\.streamlit\config.toml"
 
 exit /b 0

@@ -483,7 +483,7 @@ def render_convert_tab(
                     st.info('Using existing intermediate. Some options disabled.\n\nTo change splits go to the "Split/Merge Shards" tab.')
                 # Show info when in split files mode without custom intermediate
                 elif file_mode == "Split files":
-                    st.info("Intermediate will be split into shards before quantization.\n\nQuantized outputs will then be split accordingly.")
+                    st.info("Intermediate will be generated as sharded files.\n\nQuantized outputs will maintain the same shard structure.")
                 elif file_mode == "Single files":
                     st.info("Intermediate will be a single file.\n\nQuantized outputs will then be a single file.")
 

@@ -70,4 +70,14 @@ if [ $? -ne 0 ]; then
     exit 1
 fi
 
+# Create Streamlit config to disable telemetry and onboarding prompt
+echo "Configuring Streamlit..."
+mkdir -p ~/.streamlit
+cat > ~/.streamlit/config.toml << 'EOF'
+[general]
+email = ""
+[browser]
+gatherUsageStats = false
+EOF
+
 exit 0
