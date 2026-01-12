@@ -17,7 +17,7 @@ pip install pytest pytest-mock safetensors
 ## GUI Integration
 
 To enable the "Dev Tests" button in the GUI sidebar:
-1. Open your config file: `~/.gguf_converter_config.json`
+1. Open your config file: `~/.yagguf_config.json`
 2. Set `"dev_mode": true` near the top
 3. Restart the GUI
 

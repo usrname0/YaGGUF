@@ -28,7 +28,7 @@ __all__ = ['TKINTER_AVAILABLE', 'browse_folder', 'open_folder', 'strip_quotes',
 
 
 # Config file location
-CONFIG_FILE = Path.home() / ".gguf_converter_config.json"
+CONFIG_FILE = Path.home() / ".yagguf_config.json"
 
 # HuggingFace token location (managed by huggingface_hub)
 try:
