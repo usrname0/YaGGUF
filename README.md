@@ -4,7 +4,9 @@ There are simultaneously too many and not enough GGUF converters in the world.
 
  ![convert and quantize](./docs/convert_and_quantize.png)
  ![downloader](./docs/huggingface_downloader.png)
-  
+
+[More screenshots](./docs/)
+
 ## Features
 
 - **[llama.cpp](https://github.com/ggerganov/llama.cpp) under the hood** - so that part works

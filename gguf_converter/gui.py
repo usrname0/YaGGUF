@@ -260,32 +260,41 @@ def main() -> None:
                 # Get correct Python executable (venv if available)
                 python_exe = get_python_executable()
 
-                # Check if pytest is installed
-                try:
-                    result = subprocess.run(
-                        [python_exe, "-m", "pytest", "--version"],
-                        capture_output=True,
-                        check=True
-                    )
-                except subprocess.CalledProcessError:
-                    st.error("pytest is not installed. Install test dependencies with: pip install -r tests/requirements-dev.txt")
-                    return
-
-                # Build command - run pytest directly without exclusions
-                cmd_args = [python_exe, "-m", "pytest"]
-
                 # Launch in a new terminal window
                 system = platform.system()
                 project_root = Path(__file__).parent.parent
 
                 if system == "Windows":
-                    # Create a simple batch file
+                    # Create a batch file that checks for pytest and installs if needed
                     with tempfile.NamedTemporaryFile(mode='w', suffix='.bat', delete=False) as bat_file:
                         bat_path = bat_file.name
                         bat_file.write('@echo off\n')
                         bat_file.write(f'cd /d "{project_root}"\n')
-                        cmd_line = ' '.join(f'"{arg}"' for arg in cmd_args)
-                        bat_file.write(f'{cmd_line}\n')
+                        bat_file.write('echo Checking for pytest...\n')
+                        bat_file.write(f'"{python_exe}" -m pytest --version >nul 2>&1\n')
+                        bat_file.write('if errorlevel 1 (\n')
+                        bat_file.write('    echo pytest is not installed.\n')
+                        bat_file.write('    echo.\n')
+                        bat_file.write('    set /p "install=Install test dependencies? (y/n): "\n')
+                        bat_file.write('    if /i "%install%"=="y" (\n')
+                        bat_file.write(f'        "{python_exe}" -m pip install -r tests\\requirements-dev.txt\n')
+                        bat_file.write('        if errorlevel 1 (\n')
+                        bat_file.write('            echo.\n')
+                        bat_file.write('            echo Installation failed!\n')
+                        bat_file.write('            pause\n')
+                        bat_file.write('            exit /b 1\n')
+                        bat_file.write('        )\n')
+                        bat_file.write('    ) else (\n')
+                        bat_file.write('        echo.\n')
+                        bat_file.write('        echo Cancelled.\n')
+                        bat_file.write('        pause\n')
+                        bat_file.write('        exit /b 0\n')
+                        bat_file.write('    )\n')
+                        bat_file.write(')\n')
+                        bat_file.write('echo.\n')
+                        bat_file.write('echo Running tests...\n')
+                        bat_file.write('echo.\n')
+                        bat_file.write(f'"{python_exe}" -m pytest\n')
                         bat_file.write('echo.\n')
                         bat_file.write('echo Press any key to continue or just close this terminal...\n')
                         bat_file.write('pause > nul\n')
@@ -296,23 +305,75 @@ def main() -> None:
                     )
                 elif system == "Darwin":
                     # macOS: use osascript to open new Terminal window
-                    cmd_str = " ".join(f'"{arg}"' for arg in cmd_args)
+                    script = f'''cd {project_root}
+echo "Checking for pytest..."
+if ! "{python_exe}" -m pytest --version >/dev/null 2>&1; then
+    echo "pytest is not installed."
+    echo ""
+    read -p "Install test dependencies? (y/n): " install
+    if [ "$install" = "y" ] || [ "$install" = "Y" ]; then
+        "{python_exe}" -m pip install -r tests/requirements-dev.txt
+        if [ $? -ne 0 ]; then
+            echo ""
+            echo "Installation failed!"
+            read -p "Press Enter to close..."
+            exit 1
+        fi
+    else
+        echo ""
+        echo "Cancelled."
+        read -p "Press Enter to close..."
+        exit 0
+    fi
+fi
+echo ""
+echo "Running tests..."
+echo ""
+"{python_exe}" -m pytest
+echo ""
+read -p "Press Enter to close..."'''
                     subprocess.Popen([
                         "osascript", "-e",
-                        f'tell app "Terminal" to do script "cd {project_root} && {cmd_str}"'
+                        f'tell app "Terminal" to do script "{script}"'
                     ])
                 else:
                     # Linux: try various terminal emulators
                     # x-terminal-emulator is Debian/Ubuntu's default terminal symlink
-                    # For multi-arg commands, wrap in sh -c
-                    cmd_str = " ".join(f'"{arg}"' if " " in arg else arg for arg in cmd_args)
+                    # Build script that checks for pytest and installs if needed
+                    script = f'''cd {project_root}
+echo "Checking for pytest..."
+if ! "{python_exe}" -m pytest --version >/dev/null 2>&1; then
+    echo "pytest is not installed."
+    echo ""
+    read -p "Install test dependencies? (y/n): " install
+    if [ "$install" = "y" ] || [ "$install" = "Y" ]; then
+        "{python_exe}" -m pip install -r tests/requirements-dev.txt
+        if [ $? -ne 0 ]; then
+            echo ""
+            echo "Installation failed!"
+            read -p "Press Enter to close..."
+            exit 1
+        fi
+    else
+        echo ""
+        echo "Cancelled."
+        read -p "Press Enter to close..."
+        exit 0
+    fi
+fi
+echo ""
+echo "Running tests..."
+echo ""
+"{python_exe}" -m pytest
+echo ""
+read -p "Press Enter to close..."'''
                     terminals = [
-                        ("x-terminal-emulator", ["-e", "sh", "-c", f"cd {project_root} && {cmd_str}; read -p 'Press Enter to close...'"]),
-                        ("gnome-terminal", ["--", "sh", "-c", f"cd {project_root} && {cmd_str}; read -p 'Press Enter to close...'"]),
-                        ("konsole", ["-e", "sh", "-c", f"cd {project_root} && {cmd_str}; read -p 'Press Enter to close...'"]),
-                        ("xfce4-terminal", ["-e", "sh", "-c", f"cd {project_root} && {cmd_str}; read -p 'Press Enter to close...'"]),
-                        ("mate-terminal", ["-e", "sh", "-c", f"cd {project_root} && {cmd_str}; read -p 'Press Enter to close...'"]),
-                        ("xterm", ["-e", "sh", "-c", f"cd {project_root} && {cmd_str}; read -p 'Press Enter to close...'"]),
+                        ("x-terminal-emulator", ["-e", "sh", "-c", script]),
+                        ("gnome-terminal", ["--", "sh", "-c", script]),
+                        ("konsole", ["-e", "sh", "-c", script]),
+                        ("xfce4-terminal", ["-e", "sh", "-c", script]),
+                        ("mate-terminal", ["-e", "sh", "-c", script]),
+                        ("xterm", ["-e", "sh", "-c", script]),
                     ]
                     launched = False
                     for term, term_args in terminals:
@@ -328,7 +389,7 @@ def main() -> None:
                         st.error("No compatible terminal emulator found. Please install gnome-terminal, xterm, or another terminal.")
                         return
 
-                st.toast("Running dev tests...")
+                st.toast("Opening dev tests terminal...")
 
         st.markdown("---")
         st.markdown("**Reset:**")
