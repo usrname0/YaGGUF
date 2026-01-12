@@ -6,6 +6,7 @@ GGUF and safetensors files.
 """
 
 import pytest
+import sys
 from pathlib import Path
 from unittest.mock import Mock, patch, MagicMock
 from gguf_converter.gui_tabs.split_merge import (
@@ -308,7 +309,8 @@ class TestMergeGGUFShards:
         # Create a fake binary that exists
         bin_dir = tmp_path / "bin"
         bin_dir.mkdir()
-        fake_binary = bin_dir / "llama-gguf-split.exe"
+        exe_ext = '.exe' if sys.platform == 'win32' else ''
+        fake_binary = bin_dir / f"llama-gguf-split{exe_ext}"
         fake_binary.touch()
 
         # Patch the __file__ location to make the binary discoverable
@@ -345,7 +347,8 @@ class TestMergeGGUFShards:
         # Create a fake binary that exists
         bin_dir = tmp_path / "bin"
         bin_dir.mkdir()
-        fake_binary = bin_dir / "llama-gguf-split.exe"
+        exe_ext = '.exe' if sys.platform == 'win32' else ''
+        fake_binary = bin_dir / f"llama-gguf-split{exe_ext}"
         fake_binary.touch()
 
         # Patch the __file__ location to make the binary discoverable
@@ -404,7 +407,8 @@ class TestMergeGGUFShards:
         # Create a fake binary that exists
         bin_dir = tmp_path / "bin"
         bin_dir.mkdir()
-        fake_binary = bin_dir / "llama-gguf-split.exe"
+        exe_ext = '.exe' if sys.platform == 'win32' else ''
+        fake_binary = bin_dir / f"llama-gguf-split{exe_ext}"
         fake_binary.touch()
 
         # Patch the __file__ location to make the binary discoverable
@@ -587,7 +591,8 @@ class TestSplitGGUFFile:
 
         bin_dir = tmp_path / "bin"
         bin_dir.mkdir()
-        fake_binary = bin_dir / "llama-gguf-split.exe"
+        exe_ext = '.exe' if sys.platform == 'win32' else ''
+        fake_binary = bin_dir / f"llama-gguf-split{exe_ext}"
         fake_binary.touch()
 
         with patch('gguf_converter.gui_tabs.split_merge.__file__', str(tmp_path / "gguf_converter" / "gui_tabs" / "split_merge.py")):
@@ -688,7 +693,8 @@ class TestResplitGGUFShards:
 
         bin_dir = tmp_path / "bin"
         bin_dir.mkdir()
-        fake_binary = bin_dir / "llama-gguf-split.exe"
+        exe_ext = '.exe' if sys.platform == 'win32' else ''
+        fake_binary = bin_dir / f"llama-gguf-split{exe_ext}"
         fake_binary.touch()
 
         with patch('gguf_converter.gui_tabs.split_merge.__file__', str(tmp_path / "gguf_converter" / "gui_tabs" / "split_merge.py")):

@@ -268,14 +268,16 @@ def test_binaries_exist_check(mock_llama_cpp_manager):
     """
     Test _binaries_exist method
     """
+    import sys
     manager, bin_dir = mock_llama_cpp_manager
 
     # Initially should not exist (no binaries in temp dir)
     assert not manager._binaries_exist()
 
-    # Create fake binaries
-    (bin_dir / 'llama-quantize.exe').touch()
-    (bin_dir / 'llama-imatrix.exe').touch()
+    # Create fake binaries with platform-specific names
+    exe_ext = '.exe' if sys.platform == 'win32' else ''
+    (bin_dir / f'llama-quantize{exe_ext}').touch()
+    (bin_dir / f'llama-imatrix{exe_ext}').touch()
 
     # Now should exist (at least some files in bin_dir)
     assert manager._binaries_exist()

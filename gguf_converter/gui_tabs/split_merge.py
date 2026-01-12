@@ -93,12 +93,15 @@ def analyze_shards(directory: Path, extension: str) -> Dict[str, ShardInfo]:
             info['complete'] = expected_shards == found_shards
             info['missing_shards'] = sorted(list(expected_shards - found_shards))
 
+            # Sort shards_found list for consistent ordering across platforms
+            info['shards_found'] = sorted(info['shards_found'])
+
             # Sort files by shard number for proper merging
             # We know pattern matches because these files were added based on the match
             def get_shard_num(p: Path) -> int:
                 m = pattern.match(p.name)
                 return int(m.group(2)) if m else 0
-                
+
             info['files'] = sorted(info['files'], key=get_shard_num)
 
     return models
