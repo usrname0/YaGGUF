@@ -114,10 +114,11 @@ The GUI will automatically open in your browser on a free port like: `http://loc
 
 ### Testing
 
-The GUI sidebar includes convenient testing options:
+The GUI sidebar includes a convenient testing option:
 
 - **Test Models** - Opens a new terminal window to interactively test all GGUF models in your output directory using llama-server
-- **Dev Tests** - Runs the full pytest suite (downloads a small test model and validates all functionality)
+
+For developers: See `tests/README.md` for information about the test suite and enabling the "Dev Tests" button.
 
 ## Troubleshooting
 

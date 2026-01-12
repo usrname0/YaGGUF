@@ -2,6 +2,27 @@
 
 Test suite for Yet Another GGUF Converter.
 
+## Installation
+
+Install test dependencies:
+```bash
+pip install -r tests/requirements-dev.txt
+```
+
+Or manually:
+```bash
+pip install pytest pytest-mock safetensors
+```
+
+## GUI Integration
+
+To enable the "Dev Tests" button in the GUI sidebar:
+1. Open your config file: `~/.gguf_converter_config.json`
+2. Set `"dev_mode": true` near the top
+3. Restart the GUI
+
+The button will launch the full test suite in a new terminal window.
+
 ## Quick Start
 
 ```bash
@@ -114,18 +135,18 @@ pytest tests/test_llama_cpp_smoke.py -v
 ```
 
 ### Integration Tests (13 tests, 10-15 minutes)
-End-to-end workflow with real model (Qwen2.5-0.5B-Instruct):
+End-to-end workflow with real model (SmolLM2-135M-Instruct):
 - Model download from HuggingFace
 - GGUF conversion (F16, BF16, F32)
 - Quantization (Q4_K_M, Q5_K_M, Q8_0, IQ3_XXS)
 - Overwrite vs reuse behavior
 - Multiple quantizations in one run
 - Imatrix generation and usage
-- Functional correctness checksum validation 
+- Functional correctness checksum validation
 
 ### Note about test_q4_k_m_checksum
-- Delete tests/golden_outputs/qwen2.5_0.5b_q4_k_m_checksum.txt to reset
-- Note: first run will generate checksum / fail to compare
+- Delete tests/golden_outputs/smollm2_135m_q4_k_m_checksum.txt to reset
+- Note: first run will skip (generate baseline checksum)
 
 Requirements:
 - 2-3GB disk space
@@ -220,7 +241,7 @@ pytest tests/test_integration.py::TestFunctionalCorrectness::test_q4_k_m_checksu
 **Reset baseline (after llama.cpp update):**
 ```bash
 # Delete old checksum to regenerate
-rm tests/golden_outputs/qwen2.5_0.5b_q4_k_m_checksum.txt
+rm tests/golden_outputs/smollm2_135m_q4_k_m_checksum.txt
 
 # Run test to create new baseline
 pytest tests/test_integration.py::TestFunctionalCorrectness::test_q4_k_m_checksum -v -s

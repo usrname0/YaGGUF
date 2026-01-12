@@ -250,72 +250,85 @@ def main() -> None:
 
             st.toast(toast_msg)
 
-        if st.button("Dev Tests", use_container_width=True, help="Run the full test suite (pytest) in a new terminal window"):
-            import subprocess
-            import platform
-            import tempfile
+        # Dev Tests button (only shown when dev_mode is enabled)
+        if config.get("dev_mode", False):
+            if st.button("Dev Tests", use_container_width=True, help="Run the full test suite (pytest) in a new terminal window"):
+                import subprocess
+                import platform
+                import tempfile
 
-            # Get correct Python executable (venv if available)
-            python_exe = get_python_executable()
+                # Get correct Python executable (venv if available)
+                python_exe = get_python_executable()
 
-            # Build command - run pytest directly without exclusions
-            cmd_args = [python_exe, "-m", "pytest"]
-
-            # Launch in a new terminal window
-            system = platform.system()
-            project_root = Path(__file__).parent.parent
-
-            if system == "Windows":
-                # Create a simple batch file
-                with tempfile.NamedTemporaryFile(mode='w', suffix='.bat', delete=False) as bat_file:
-                    bat_path = bat_file.name
-                    bat_file.write('@echo off\n')
-                    bat_file.write(f'cd /d "{project_root}"\n')
-                    cmd_line = ' '.join(f'"{arg}"' for arg in cmd_args)
-                    bat_file.write(f'{cmd_line}\n')
-                    bat_file.write('echo.\n')
-                    bat_file.write('echo Press any key to continue or just close this terminal...\n')
-                    bat_file.write('pause > nul\n')
-
-                subprocess.Popen(
-                    ['cmd', '/c', 'start', 'Dev Tests', bat_path],
-                    creationflags=subprocess.CREATE_NEW_CONSOLE
-                )
-            elif system == "Darwin":
-                # macOS: use osascript to open new Terminal window
-                cmd_str = " ".join(f'"{arg}"' for arg in cmd_args)
-                subprocess.Popen([
-                    "osascript", "-e",
-                    f'tell app "Terminal" to do script "cd {project_root} && {cmd_str}"'
-                ])
-            else:
-                # Linux: try various terminal emulators
-                # x-terminal-emulator is Debian/Ubuntu's default terminal symlink
-                # For multi-arg commands, wrap in sh -c
-                cmd_str = " ".join(f'"{arg}"' if " " in arg else arg for arg in cmd_args)
-                terminals = [
-                    ("x-terminal-emulator", ["-e", "sh", "-c", f"cd {project_root} && {cmd_str}; read -p 'Press Enter to close...'"]),
-                    ("gnome-terminal", ["--", "sh", "-c", f"cd {project_root} && {cmd_str}; read -p 'Press Enter to close...'"]),
-                    ("konsole", ["-e", "sh", "-c", f"cd {project_root} && {cmd_str}; read -p 'Press Enter to close...'"]),
-                    ("xfce4-terminal", ["-e", "sh", "-c", f"cd {project_root} && {cmd_str}; read -p 'Press Enter to close...'"]),
-                    ("mate-terminal", ["-e", "sh", "-c", f"cd {project_root} && {cmd_str}; read -p 'Press Enter to close...'"]),
-                    ("xterm", ["-e", "sh", "-c", f"cd {project_root} && {cmd_str}; read -p 'Press Enter to close...'"]),
-                ]
-                launched = False
-                for term, term_args in terminals:
-                    if shutil.which(term):
-                        try:
-                            subprocess.Popen([term] + term_args)
-                            launched = True
-                            break
-                        except Exception as e:
-                            continue
-
-                if not launched:
-                    st.error("No compatible terminal emulator found. Please install gnome-terminal, xterm, or another terminal.")
+                # Check if pytest is installed
+                try:
+                    result = subprocess.run(
+                        [python_exe, "-m", "pytest", "--version"],
+                        capture_output=True,
+                        check=True
+                    )
+                except subprocess.CalledProcessError:
+                    st.error("pytest is not installed. Install test dependencies with: pip install -r tests/requirements-dev.txt")
                     return
 
-            st.toast("Running dev tests...")
+                # Build command - run pytest directly without exclusions
+                cmd_args = [python_exe, "-m", "pytest"]
+
+                # Launch in a new terminal window
+                system = platform.system()
+                project_root = Path(__file__).parent.parent
+
+                if system == "Windows":
+                    # Create a simple batch file
+                    with tempfile.NamedTemporaryFile(mode='w', suffix='.bat', delete=False) as bat_file:
+                        bat_path = bat_file.name
+                        bat_file.write('@echo off\n')
+                        bat_file.write(f'cd /d "{project_root}"\n')
+                        cmd_line = ' '.join(f'"{arg}"' for arg in cmd_args)
+                        bat_file.write(f'{cmd_line}\n')
+                        bat_file.write('echo.\n')
+                        bat_file.write('echo Press any key to continue or just close this terminal...\n')
+                        bat_file.write('pause > nul\n')
+
+                    subprocess.Popen(
+                        ['cmd', '/c', 'start', 'Dev Tests', bat_path],
+                        creationflags=subprocess.CREATE_NEW_CONSOLE
+                    )
+                elif system == "Darwin":
+                    # macOS: use osascript to open new Terminal window
+                    cmd_str = " ".join(f'"{arg}"' for arg in cmd_args)
+                    subprocess.Popen([
+                        "osascript", "-e",
+                        f'tell app "Terminal" to do script "cd {project_root} && {cmd_str}"'
+                    ])
+                else:
+                    # Linux: try various terminal emulators
+                    # x-terminal-emulator is Debian/Ubuntu's default terminal symlink
+                    # For multi-arg commands, wrap in sh -c
+                    cmd_str = " ".join(f'"{arg}"' if " " in arg else arg for arg in cmd_args)
+                    terminals = [
+                        ("x-terminal-emulator", ["-e", "sh", "-c", f"cd {project_root} && {cmd_str}; read -p 'Press Enter to close...'"]),
+                        ("gnome-terminal", ["--", "sh", "-c", f"cd {project_root} && {cmd_str}; read -p 'Press Enter to close...'"]),
+                        ("konsole", ["-e", "sh", "-c", f"cd {project_root} && {cmd_str}; read -p 'Press Enter to close...'"]),
+                        ("xfce4-terminal", ["-e", "sh", "-c", f"cd {project_root} && {cmd_str}; read -p 'Press Enter to close...'"]),
+                        ("mate-terminal", ["-e", "sh", "-c", f"cd {project_root} && {cmd_str}; read -p 'Press Enter to close...'"]),
+                        ("xterm", ["-e", "sh", "-c", f"cd {project_root} && {cmd_str}; read -p 'Press Enter to close...'"]),
+                    ]
+                    launched = False
+                    for term, term_args in terminals:
+                        if shutil.which(term):
+                            try:
+                                subprocess.Popen([term] + term_args)
+                                launched = True
+                                break
+                            except Exception as e:
+                                continue
+
+                    if not launched:
+                        st.error("No compatible terminal emulator found. Please install gnome-terminal, xterm, or another terminal.")
+                        return
+
+                st.toast("Running dev tests...")
 
         st.markdown("---")
         st.markdown("**Reset:**")

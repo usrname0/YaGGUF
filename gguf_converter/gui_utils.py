@@ -42,6 +42,7 @@ def get_default_config() -> Dict[str, Any]:
     """Get default configuration"""
     return {
         # Sidebar settings
+        "dev_mode": False,  # Show developer tools (Dev Tests button)
         "verbose": True,
         "use_imatrix": True,
         "num_threads": None,  # None = auto-detect
