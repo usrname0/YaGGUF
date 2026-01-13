@@ -32,7 +32,7 @@ echo ""
 python scripts/check_and_download_binaries.py
 echo ""
 
-echo "Starting GGUF Converter GUI..."
+echo "Starting YaGGUF GUI..."
 echo ""
 echo "Streamlit will open in your browser automatically."
 echo "The URL will be displayed below."

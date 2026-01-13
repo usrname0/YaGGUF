@@ -63,7 +63,7 @@ def render_info_tab(converter: "GGUFConverter", config: Dict[str, Any]) -> None:
     | Type | Size | Quality | Category | Notes |
     |------|------|---------|----------|-------|
     | **F32** | Largest | Original | Unquantized | Full 32-bit precision |
-    | **F16** | Large | Near-original | Unquantized | Half precision (default intermediate) |
+    | **F16** | Large | Near-original | Unquantized | Half precision |
     | **BF16** | Large | Near-original | Unquantized | Brain float 16-bit |
     | **Q8_0** | Very Large | Excellent | Legacy | Near-original quality |
     | Q5_1, Q5_0 | Medium | Good | Legacy | Legacy 5-bit |
@@ -71,7 +71,7 @@ def render_info_tab(converter: "GGUFConverter", config: Dict[str, Any]) -> None:
     | **Q6_K** | Large | Very High | K-Quant | Near-F16 quality |
     | **Q5_K_M** | Medium | Better | K-Quant | Higher quality |
     | Q5_K_S | Medium | Better | K-Quant | 5-bit K small |
-    | **Q4_K_M** | Small | Good | K-Quant | **Recommended** - best balance |
+    | **Q4_K_M** | Small | Good | K-Quant | 4-bit K medium |
     | Q4_K_S | Small | Good | K-Quant | 4-bit K small |
     | Q3_K_L | Very Small | Fair | K-Quant | 3-bit K large |
     | Q3_K_M | Very Small | Fair | K-Quant | 3-bit K medium |
@@ -95,7 +95,7 @@ def render_info_tab(converter: "GGUFConverter", config: Dict[str, Any]) -> None:
     - Bigger is better (more precision)
     - For best quality use **F16** or **Q8_0**
     - For decent quality use **Q6_K** or **Q5_K_M**
-    - Medium quality? Use **Q4_K_M**
+    - Medium quality... Use **Q4_K_M**
     - For smallest size use IQ3_M or IQ2_M with importance matrix
     
     Quantization is done by [llama.cpp](https://github.com/ggml-org/llama.cpp).

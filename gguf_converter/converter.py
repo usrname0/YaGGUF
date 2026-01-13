@@ -117,7 +117,7 @@ class GGUFConverter:
             if not self.llama_cpp_manager.ensure_binaries():
                 raise RuntimeError(
                     "Failed to get llama.cpp binaries.\n"
-                    "Please check your internet connection or install llama.cpp manually."
+                    "Please check your internet connection or provide a path to a custom llama.cpp installation in the Settings tab."
                 )
         if custom_llama_cpp_repo is None:
             self._ensure_llama_cpp_repo()
@@ -467,16 +467,6 @@ class GGUFConverter:
 
         if convert_script.exists():
             return convert_script
-
-        # Fallback: check for system-wide installations
-        fallback_locations = [
-            Path.home() / "llama.cpp" / "convert_hf_to_gguf.py",
-            Path.cwd() / "llama.cpp" / "convert_hf_to_gguf.py",
-        ]
-
-        for location in fallback_locations:
-            if location.exists():
-                return location
 
         return None
 

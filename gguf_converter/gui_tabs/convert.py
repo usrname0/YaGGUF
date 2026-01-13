@@ -1086,12 +1086,12 @@ def render_convert_tab(
                     save_config(config)
             return save_to_config
 
-        st.markdown("**K Quants (Recommended):**")
+        st.markdown("**K Quants:**")
         k_quants = {
             "Q6_K": "6-bit K (very high quality)",
             "Q5_K_M": "5-bit K medium",
             "Q5_K_S": "5-bit K small",
-            "Q4_K_M": "4-bit K medium (best balance)",
+            "Q4_K_M": "4-bit K medium",
             "Q4_K_S": "4-bit K small",
             "Q3_K_L": "3-bit K large",
             "Q3_K_M": "3-bit K medium",
@@ -1115,7 +1115,7 @@ def render_convert_tab(
                 )
 
         # I Quants
-        st.markdown("**I Quants (Importance Matrix Recommended):**")
+        st.markdown("**I Quants (with Importance Matrix):**")
         i_quants = {
             "IQ4_NL": "4-bit IQ non-linear",
             "IQ4_XS": "4-bit IQ extra-small",

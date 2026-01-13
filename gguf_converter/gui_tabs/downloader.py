@@ -290,39 +290,46 @@ def render_downloader_tab(converter: "GGUFConverter", config: Dict[str, Any]) ->
                             f"The model **{gated_repo}** requires authorization.\n\n"
                             f"1. Visit [{gated_repo}]({repo_url}) and click **'Agree and access repository'**\n"
                             f"2. Get a token from [HuggingFace Settings](https://huggingface.co/settings/tokens) (type: **Read**)\n"
-                            f"3. Paste your token below and click Login"
+                            f"3. Paste your token below (saves automatically when you press Enter)"
                         )
                     else:
                         st.info(
                             "Login to access gated models (like Llama, Gemma, etc.)\n\n"
-                            "Get a token from [HuggingFace Settings](https://huggingface.co/settings/tokens) (type: **Read**)"
+                            "Get a token from [HuggingFace Settings](https://huggingface.co/settings/tokens) (type: **Read**)\n\n"
                         )
+
+                def save_hf_token():
+                    """Callback to save HuggingFace token when input changes"""
+                    token = st.session_state.get("hf_token_input", "").strip()
+                    if token:
+                        try:
+                            hf_login(token=token)
+                            st.session_state.show_hf_login = True
+                            st.session_state.gated_repo_id = None
+                            st.session_state.hf_auth_message = None
+                            st.session_state.hf_just_logged_in = True
+                            print(f"{theme['success']}HuggingFace token saved{Style.RESET_ALL}")
+                        except Exception as e:
+                            st.session_state.hf_auth_message = ("error", f"Failed to save token: {e}")
+                            print(f"{theme['error']}HuggingFace token save failed: {e}{Style.RESET_ALL}")
 
                 col_token, col_buttons = st.columns([5, 1])
                 with col_token:
                     hf_token = st.text_input(
                         "HuggingFace Token",
                         key="hf_token_input",
+                        type="password",
+                        autocomplete="off",
                         placeholder="hf_...",
-                        help="Paste your token here (plain text field)"
+                        help="Token will be saved automatically",
+                        on_change=save_hf_token
                     )
 
                 with col_buttons:
                     st.markdown("<br>", unsafe_allow_html=True)  # Spacer to align with input
-                    if st.button("Login", key="hf_login_btn", use_container_width=True, disabled=not hf_token):
-                        try:
-                            with st.spinner("Logging in to HuggingFace..."):
-                                hf_login(token=hf_token)
-                            # Keep expander open to show "token already saved" state
-                            st.session_state.show_hf_login = True
-                            st.session_state.gated_repo_id = None
-                            st.session_state.hf_auth_message = None
-                            st.session_state.hf_just_logged_in = True
-                            print(f"{theme['success']}Logged in to HuggingFace{Style.RESET_ALL}")
-                            st.rerun()
-                        except Exception as e:
-                            st.session_state.hf_auth_message = ("error", f"Login failed: {e}")
-                            print(f"{theme['error']}HuggingFace login failed: {e}{Style.RESET_ALL}")
+                    if st.button("Save Token", key="hf_login_btn", use_container_width=True):
+                        save_hf_token()
+                        st.rerun()
 
             # Display error messages only
             if st.session_state.hf_auth_message:

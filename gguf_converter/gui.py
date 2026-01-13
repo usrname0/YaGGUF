@@ -7,6 +7,7 @@ import sys
 from pathlib import Path
 import multiprocessing
 import shutil
+import logging
 
 
 def get_python_executable():
@@ -71,7 +72,7 @@ except ImportError:
 def main() -> None:
     """Main Streamlit app"""
     st.set_page_config(
-        page_title="GGUF Converter",
+        page_title="YaGGUF",
         layout="wide",
         initial_sidebar_state="collapsed"
     )
@@ -145,99 +146,103 @@ def main() -> None:
         )
 
         st.markdown("---")
-        st.markdown("**Testing:**")
+        st.markdown("**Debug:**")
         if st.button("Reload UI", use_container_width=True, help="Reload the user interface via st.rerun()"):
             st.rerun()
 
-        if st.button("Test Models", use_container_width=True, help="Test all GGUF variants in the output directory interactively with llama-server"):
-            import subprocess
-            import platform
-            script_path = Path(__file__).parent.parent / "tests" / "manual_variant_testing.py"
+        # Test Models button (only shown when dev_mode is enabled)
+        if config.get("dev_mode", False):
+            if st.button("Test Models", use_container_width=True, help="Test all GGUF variants in the output directory interactively with llama-server"):
+                import subprocess
+                import platform
+                script_path = Path(__file__).parent.parent / "tests" / "manual_variant_testing.py"
 
-            # Get output directory from config
-            output_dir = config.get("output_dir", "")
+                # Get output directory from config
+                output_dir = config.get("output_dir", "")
 
-            # Get correct Python executable (venv if available)
-            python_exe = get_python_executable()
+                # Get correct Python executable (venv if available)
+                python_exe = get_python_executable()
 
-            # Build command arguments
-            if output_dir and Path(output_dir).exists():
-                # Run with output directory
-                cmd_args = [python_exe, str(script_path), str(output_dir)]
-                toast_msg = f"Testing variants in: {output_dir}"
-            elif output_dir:
-                # Output dir set but doesn't exist
-                st.toast(f"Output directory not found: {output_dir}")
-                cmd_args = [python_exe, str(script_path), "--help"]
-                toast_msg = "Showing help (invalid output directory)"
-            else:
-                # No output dir set, show help
-                st.toast("No output directory set. Showing help.")
-                cmd_args = [python_exe, str(script_path), "--help"]
-                toast_msg = "Showing help (no output directory)"
+                # Build command arguments
+                if output_dir and Path(output_dir).exists():
+                    # Run with output directory
+                    cmd_args = [python_exe, str(script_path), str(output_dir)]
+                    toast_msg = f"Testing variants in: {output_dir}"
+                elif output_dir:
+                    # Output dir set but doesn't exist
+                    st.toast(f"Output directory not found: {output_dir}")
+                    cmd_args = [python_exe, str(script_path), "--help"]
+                    toast_msg = "Showing help (invalid output directory)"
+                else:
+                    # No output dir set, show help
+                    st.toast("No output directory set. Showing help.")
+                    cmd_args = [python_exe, str(script_path), "--help"]
+                    toast_msg = "Showing help (no output directory)"
 
-            # Launch the script in a new terminal window
-            system = platform.system()
+                # Launch the script in a new terminal window
+                system = platform.system()
 
-            # Get project root directory (needed for all platforms)
-            project_root = Path(__file__).parent.parent
+                # Get project root directory (needed for all platforms)
+                project_root = Path(__file__).parent.parent
 
-            if system == "Windows":
-                # Windows: Create a bat file to avoid quoting issues
-                import tempfile
-                import os
+                if system == "Windows":
+                    # Windows: Create a bat file to avoid quoting issues
+                    import tempfile
+                    import os
 
-                # Create a temporary batch file
-                with tempfile.NamedTemporaryFile(mode='w', suffix='.bat', delete=False) as bat_file:
-                    bat_path = bat_file.name
-                    # Write commands to batch file
-                    bat_file.write('@echo off\n')
-                    bat_file.write(f'cd /d "{project_root}"\n')  # Change to project directory
-                    # Quote each argument that might have spaces
-                    cmd_line = ' '.join(f'"{arg}"' for arg in cmd_args)
-                    bat_file.write(f'{cmd_line}\n')
-                    bat_file.write('pause\n')
+                    # Create a temporary batch file that self-deletes after execution
+                    with tempfile.NamedTemporaryFile(mode='w', suffix='.bat', delete=False) as bat_file:
+                        bat_path = bat_file.name
+                        # Write commands to batch file
+                        bat_file.write('@echo off\n')
+                        bat_file.write(f'cd /d "{project_root}"\n')  # Change to project directory
+                        # Quote each argument that might have spaces
+                        cmd_line = ' '.join(f'"{arg}"' for arg in cmd_args)
+                        bat_file.write(f'{cmd_line}\n')
+                        bat_file.write('pause\n')
+                        bat_file.write('del "%~f0"\n')  # Self-delete the temp batch file
 
-                # Launch the batch file in a new window
-                subprocess.Popen(
-                    ['cmd', '/c', 'start', 'Test Model Variants', bat_path],
-                    creationflags=subprocess.CREATE_NEW_CONSOLE
-                )
-            elif system == "Darwin":
-                # macOS: use osascript to open new Terminal window
-                cmd_str = " ".join(f'"{arg}"' for arg in cmd_args)
-                subprocess.Popen([
-                    "osascript", "-e",
-                    f'tell app "Terminal" to do script "cd {project_root} && {cmd_str}"'
-                ])
-            else:
-                # Linux: try various terminal emulators
-                # x-terminal-emulator is Debian/Ubuntu's default terminal symlink
-                # For multi-arg commands, wrap in sh -c
-                cmd_str = " ".join(f'"{arg}"' if " " in arg else arg for arg in cmd_args)
-                terminals = [
-                    ("x-terminal-emulator", ["-e", "sh", "-c", f"cd {project_root} && {cmd_str}; read -p 'Press Enter to close...'"]),
-                    ("gnome-terminal", ["--", "sh", "-c", f"cd {project_root} && {cmd_str}; read -p 'Press Enter to close...'"]),
-                    ("konsole", ["--", "sh", "-c", f"cd {project_root} && {cmd_str}; read -p 'Press Enter to close...'"]),
-                    ("xfce4-terminal", ["-x", "sh", "-c", f"cd {project_root} && {cmd_str}; read -p 'Press Enter to close...'"]),
-                    ("mate-terminal", ["-e", "sh", "-c", f"cd {project_root} && {cmd_str}; read -p 'Press Enter to close...'"]),
-                    ("xterm", ["-e", "sh", "-c", f"cd {project_root} && {cmd_str}; read -p 'Press Enter to close...'"]),
-                ]
-                launched = False
-                for term, term_args in terminals:
-                    if shutil.which(term):
-                        try:
-                            subprocess.Popen([term] + term_args)
-                            launched = True
-                            break
-                        except Exception as e:
-                            continue
+                    # Launch the batch file in a new window
+                    subprocess.Popen(
+                        ['cmd', '/c', 'start', 'Test Model Variants', bat_path],
+                        creationflags=subprocess.CREATE_NEW_CONSOLE
+                    )
+                elif system == "Darwin":
+                    # macOS: use osascript to open new Terminal window
+                    cmd_str = " ".join(f'"{arg}"' for arg in cmd_args)
+                    subprocess.Popen([
+                        "osascript", "-e",
+                        f'tell app "Terminal" to do script "cd {project_root} && {cmd_str}"'
+                    ])
+                else:
+                    # Linux: try various terminal emulators
+                    # x-terminal-emulator is Debian/Ubuntu's default terminal symlink
+                    # For multi-arg commands, wrap in sh -c
+                    cmd_str = " ".join(f'"{arg}"' if " " in arg else arg for arg in cmd_args)
+                    terminals = [
+                        ("x-terminal-emulator", ["-e", "sh", "-c", f"cd {project_root} && {cmd_str}; read -p 'Press Enter to close...'"]),
+                        ("gnome-terminal", ["--", "sh", "-c", f"cd {project_root} && {cmd_str}; read -p 'Press Enter to close...'"]),
+                        ("konsole", ["--", "sh", "-c", f"cd {project_root} && {cmd_str}; read -p 'Press Enter to close...'"]),
+                        ("xfce4-terminal", ["-x", "sh", "-c", f"cd {project_root} && {cmd_str}; read -p 'Press Enter to close...'"]),
+                        ("mate-terminal", ["-e", "sh", "-c", f"cd {project_root} && {cmd_str}; read -p 'Press Enter to close...'"]),
+                        ("xterm", ["-e", "sh", "-c", f"cd {project_root} && {cmd_str}; read -p 'Press Enter to close...'"]),
+                    ]
+                    launched = False
+                    for term, term_args in terminals:
+                        if shutil.which(term):
+                            try:
+                                subprocess.Popen([term] + term_args)
+                                launched = True
+                                break
+                            except Exception as e:
+                                logging.debug(f"Failed to launch terminal {term}: {e}")
+                                continue
 
-                if not launched:
-                    st.error("No compatible terminal emulator found. Please install gnome-terminal, xterm, or another terminal.")
-                    return
+                    if not launched:
+                        st.error("No compatible terminal emulator found. Please install gnome-terminal, xterm, or another terminal.")
+                        return
 
-            st.toast(toast_msg)
+                st.toast(toast_msg)
 
         # Dev Tests button (only shown when dev_mode is enabled)
         if config.get("dev_mode", False):
@@ -278,7 +283,8 @@ def main() -> None:
                                 subprocess.Popen([term] + term_args)
                                 launched = True
                                 break
-                            except Exception:
+                            except Exception as e:
+                                logging.debug(f"Failed to launch terminal {term}: {e}")
                                 continue
 
                     if not launched:

@@ -14,7 +14,7 @@ There are simultaneously too many and not enough GGUF converters in the world.
 - **Cross-platform** - works on Windows and Linux (and probably Mac but untested)
 - **Easy** - auto-installs an environment + llama.cpp + CPU binaries for quantizing
 - **Flexible** - can use any local llama.cpp repo or binary installation for quantizing
-- **Minimal mess** - virtual envirnoment prevents conflicts with your python setup
+- **Minimal mess** - virtual environment prevents conflicts with your python setup
 
 ### Advanced Features
 
@@ -27,8 +27,7 @@ There are simultaneously too many and not enough GGUF converters in the world.
 - **Model quirks detection** - Handles Mistral format, pre-quantized models, and architecture-specific flags
 - **Vision/Multimodal models** - Automatic detection and two-step conversion (text model + `mmproj-*.gguf`)
 - **Sentence-transformers** - Auto-detect and include dense modules for embedding models
-- **Test Models** - Opens a new terminal window to interactively test all GGUF models in your output directory using llama-server
-  
+
 ## Quantization Types
 
 All quantization types from llama.cpp are supported. Choose based on your size/quality tradeoff:
@@ -36,7 +35,7 @@ All quantization types from llama.cpp are supported. Choose based on your size/q
 | Type | Size | Quality | Category | Notes |
 |------|------|---------|----------|-------|
 | **F32** | Largest | Original | Unquantized | Full 32-bit precision |
-| **F16** | Large | Near-original | Unquantized | Half precision (default intermediate) |
+| **F16** | Large | Near-original | Unquantized | Half precision |
 | **BF16** | Large | Near-original | Unquantized | Brain float 16-bit |
 | **Q8_0** | Very Large | Excellent | Legacy | Near-original quality |
 | Q5_1, Q5_0 | Medium | Good | Legacy | Legacy 5-bit |
@@ -44,7 +43,7 @@ All quantization types from llama.cpp are supported. Choose based on your size/q
 | **Q6_K** | Large | Very High | K-Quant | Near-F16 quality |
 | **Q5_K_M** | Medium | Better | K-Quant | Higher quality |
 | Q5_K_S | Medium | Better | K-Quant | 5-bit K small |
-| **Q4_K_M** | Small | Good | K-Quant | **Recommended** - best balance |
+| **Q4_K_M** | Small | Good | K-Quant | 4-bit K medium |
 | Q4_K_S | Small | Good | K-Quant | 4-bit K small |
 | Q3_K_L | Very Small | Fair | K-Quant | 3-bit K large |
 | Q3_K_M | Very Small | Fair | K-Quant | 3-bit K medium |
@@ -69,7 +68,7 @@ All quantization types from llama.cpp are supported. Choose based on your size/q
 - Bigger is better (more precision)
 - For best quality use **F16** or **Q8_0**
 - For decent quality use **Q6_K** or **Q5_K_M**
-- Medium quality? Use **Q4_K_M**
+- Medium quality... Use **Q4_K_M**
 - For smallest size use IQ3_M or IQ2_M with importance matrix
 
 ## Requirements
@@ -113,29 +112,6 @@ All quantization types from llama.cpp are supported. Choose based on your size/q
 
 The GUI will automatically open in your browser on a free port like: `http://localhost:8501`
 
-## Troubleshooting
-
-### Out of Memory
-
-For large models, ensure you have enough RAM. You can also:
-- Use swap space (if you like pain)
-- Close other applications
-- Try a smaller model
-- Spend a fortune on better hardware
-
-### Conversion is slow
-
-This is normal for large models. The process is CPU-intensive.
-- Enable "Verbose output" in settings to see progress
-- Adjust "Thread count" in settings (sets the number of CPU cores for the task)
-- Be patient - it will finish!
-
-### Other Errors
-
-- **Enforce imatrix** - Some IQ quantization types are disabled when there's no importance matrix selected to avoid errors or poor results. This can be unchecked in the Convert tab if needed.
-- Use "Reset to defaults" in the settings to restore default configuration.
-- If issues persist, you can delete the installation folder and re-install.
-  
 ## License
 
 MIT License - see LICENSE file for details

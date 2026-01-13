@@ -32,7 +32,7 @@ def main() -> int:
     args = parser.parse_args()
 
     print(f"{theme['highlight']}{'=' * 50}{Style.RESET_ALL}")
-    print(f"{theme['highlight']}GGUF Converter - Binary Download{Style.RESET_ALL}")
+    print(f"{theme['highlight']}YaGGUF - Binary Download{Style.RESET_ALL}")
     print(f"{theme['highlight']}{'=' * 50}{Style.RESET_ALL}")
     print()
 
