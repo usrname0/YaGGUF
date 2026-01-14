@@ -2,7 +2,7 @@
 Yet Another GGUF Converter - GGUF conversion leveraging llama.cpp
 """
 
-__version__ = "1.0.44"
+__version__ = "1.0.45"
 
 from .converter import GGUFConverter
 
