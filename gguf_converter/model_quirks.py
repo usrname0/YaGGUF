@@ -242,16 +242,16 @@ class ModelQuirks:
         if ModelQuirks.uses_mistral_format(model_path):
             # Be more specific if we can identify ministral3 architecture
             if ModelQuirks.uses_ministral3_architecture(model_path):
-                print(f"{theme['info']}Detected ministral3 architecture (Mistral format), using --mistral-format flag{Style.RESET_ALL}")
+                print(f"{theme['info']}\nDetected ministral3 architecture (Mistral format), using --mistral-format flag{Style.RESET_ALL}")
             else:
                 print(f"{theme['info']}Detected Mistral-format model, using --mistral-format flag{Style.RESET_ALL}")
 
         if ModelQuirks.is_vision_model(model_path):
-            print(f"{theme['success']}Detected vision/multimodal model{Style.RESET_ALL}")
-            print(f"{theme['info']}Will perform two-step conversion:{Style.RESET_ALL}")
+            print(f"{theme['info']}\nDetected vision/multimodal model{Style.RESET_ALL}")
+            print(f"{theme['info']}Requires two components:{Style.RESET_ALL}")
             print(f"{theme['info']}  1. Text model (for imatrix/quantization){Style.RESET_ALL}")
             print(f"{theme['info']}  2. Vision projector (mmproj-*.gguf){Style.RESET_ALL}")
 
         if ModelQuirks.is_sentence_transformers_model(model_path):
-            print(f"{theme['info']}Detected sentence-transformers model with dense modules{Style.RESET_ALL}")
+            print(f"{theme['info']}\nDetected sentence-transformers model with dense modules{Style.RESET_ALL}")
             print(f"{theme['info']}Using --sentence-transformers-dense-modules to include transformation layers{Style.RESET_ALL}")

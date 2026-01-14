@@ -293,8 +293,8 @@ class GGUFConverter:
         vocab_only: bool = False,
         verbose: bool = False,
         split_max_size: Optional[str] = None,
-        split_max_tensors: Optional[int] = None,
-        mmproj_precision: str = "F16"
+        mmproj_precision: str = "F16",
+        overwrite_mmproj: bool = True
     ) -> Path:
         """
         Convert a model to GGUF format
@@ -306,8 +306,8 @@ class GGUFConverter:
             vocab_only: Only extract vocabulary
             verbose: Enable verbose logging
             split_max_size: Maximum size per split (e.g., "2G")
-            split_max_tensors: Maximum tensors per split
             mmproj_precision: Precision for mmproj (vision projector) file (F16, F32, BF16, Q8_0). Default: F16 for compatibility.
+            overwrite_mmproj: Whether to regenerate mmproj file if it already exists. Default: True.
 
         Returns:
             Path to the created GGUF file (or first shard if split)
@@ -346,8 +346,6 @@ class GGUFConverter:
             cmd.append("--verbose")
         if split_max_size:
             cmd.extend(["--split-max-size", split_max_size])
-        if split_max_tensors:
-            cmd.extend(["--split-max-tensors", str(split_max_tensors)])
 
         # Add model-specific flags and print detection info
         ModelQuirks.print_model_detection(model_path)
@@ -355,7 +353,7 @@ class GGUFConverter:
         cmd.extend(model_flags)
 
         print(f"{theme['info']}Converting {model_path.name} to GGUF format...{Style.RESET_ALL}")
-        print(f"{theme['highlight']}Running: {' '.join(cmd)}{Style.RESET_ALL}\n")
+        print(f"{theme['highlight']}\nRunning: {' '.join(cmd)}{Style.RESET_ALL}\n")
 
         result = subprocess.run(cmd, capture_output=not verbose, text=True, encoding='utf-8', errors='replace')
 
@@ -371,7 +369,7 @@ class GGUFConverter:
 
         # Check if shards were created when splitting was requested
         actual_output_path = output_path
-        if (split_max_size or split_max_tensors) and not output_path.exists():
+        if split_max_size and not output_path.exists():
             # Look for sharded output files
             output_dir = output_path.parent
             output_stem = output_path.stem
@@ -389,46 +387,51 @@ class GGUFConverter:
 
         # For vision models, generate the vision projector (mmproj) file separately
         if ModelQuirks.is_vision_model(model_path):
-            print(f"\n{theme['info']}Generating vision projector (mmproj) file...{Style.RESET_ALL}")
-
             # Build mmproj output path using model name and mmproj precision
             mmproj_output = output_path.parent / f"mmproj-{model_path.name}-{mmproj_precision.upper()}.gguf"
 
             # Check if mmproj file already exists
-            if mmproj_output.exists():
-                print(f"{theme['warning']}Overwriting existing mmproj file: {mmproj_output.name}{Style.RESET_ALL}")
+            if mmproj_output.exists() and not overwrite_mmproj:
+                print(f"\n{theme['info']}overwrite_mmproj=False{Style.RESET_ALL}")
+                print(f"{theme['success']}Skipping mmproj generation: {mmproj_output.name} already exists{Style.RESET_ALL}")
+                print(f"{theme['info']}Use both files together: {actual_output_path.name} + {mmproj_output.name}{Style.RESET_ALL}\n")
+            else:
+                print(f"\n{theme['info']}Generating vision projector (mmproj) file...{Style.RESET_ALL}")
 
-            # Build mmproj conversion command
-            mmproj_cmd = [
-                sys.executable,
-                str(convert_script),
-                str(model_path),
-                "--outfile", str(mmproj_output),
-                "--outtype", mmproj_precision.lower(),
-            ]
+                if mmproj_output.exists():
+                    print(f"{theme['warning']}Overwriting existing mmproj file: {mmproj_output.name}{Style.RESET_ALL}")
 
-            # Add model-specific flags WITH mmproj
-            mmproj_flags = ModelQuirks.get_conversion_flags(model_path, include_mmproj=True)
-            mmproj_cmd.extend(mmproj_flags)
+                # Build mmproj conversion command
+                mmproj_cmd = [
+                    sys.executable,
+                    str(convert_script),
+                    str(model_path),
+                    "--outfile", str(mmproj_output),
+                    "--outtype", mmproj_precision.lower(),
+                ]
 
-            if verbose:
-                mmproj_cmd.append("--verbose")
+                # Add model-specific flags WITH mmproj
+                mmproj_flags = ModelQuirks.get_conversion_flags(model_path, include_mmproj=True)
+                mmproj_cmd.extend(mmproj_flags)
 
-            print(f"{theme['highlight']}Running: {' '.join(mmproj_cmd)}{Style.RESET_ALL}\n")
+                if verbose:
+                    mmproj_cmd.append("--verbose")
 
-            mmproj_result = subprocess.run(mmproj_cmd, capture_output=not verbose, text=True, encoding='utf-8', errors='replace')
+                print(f"{theme['highlight']}\nRunning: {' '.join(mmproj_cmd)}{Style.RESET_ALL}\n")
 
-            if mmproj_result.returncode != 0:
-                error_output = (mmproj_result.stderr or '') + (mmproj_result.stdout or '')
-                raw_error = error_output.strip() if error_output.strip() else 'Unknown error'
-                error_msg = self._clean_llama_error(raw_error)
-                raise RuntimeError(f"Vision projector export failed:\n\n{error_msg}")
+                mmproj_result = subprocess.run(mmproj_cmd, capture_output=not verbose, text=True, encoding='utf-8', errors='replace')
 
-            if verbose and mmproj_result.stdout:
-                print(mmproj_result.stdout)
+                if mmproj_result.returncode != 0:
+                    error_output = (mmproj_result.stderr or '') + (mmproj_result.stdout or '')
+                    raw_error = error_output.strip() if error_output.strip() else 'Unknown error'
+                    error_msg = self._clean_llama_error(raw_error)
+                    raise RuntimeError(f"Vision projector export failed:\n\n{error_msg}")
 
-            print(f"{theme['success']}\nVision projector exported: {mmproj_output}{Style.RESET_ALL}")
-            print(f"{theme['info']}Use both files together: {actual_output_path.name} + {mmproj_output.name}{Style.RESET_ALL}\n")
+                if verbose and mmproj_result.stdout:
+                    print(mmproj_result.stdout)
+
+                print(f"{theme['success']}\nVision projector exported: {mmproj_output}{Style.RESET_ALL}")
+                print(f"{theme['info']}Use both files together: {actual_output_path.name} + {mmproj_output.name}{Style.RESET_ALL}\n")
 
         return actual_output_path
 
@@ -479,9 +482,6 @@ class GGUFConverter:
         imatrix_path: Optional[Union[str, Path]] = None,
         num_threads: Optional[int] = None,
         verbose: bool = True,
-        parallel: bool = True,
-        num_workers: Optional[int] = None,
-        scalar_optimization: bool = False,
         leave_output_tensor: bool = False,
         pure_quantization: bool = False,
         keep_split: bool = False,
@@ -498,9 +498,6 @@ class GGUFConverter:
             imatrix_path: Optional importance matrix file for better quality
             num_threads: Number of threads to use (passed to llama-quantize)
             verbose: Enable verbose output
-            parallel: Ignored (kept for API compatibility)
-            num_workers: Ignored (kept for API compatibility)
-            scalar_optimization: Ignored (kept for API compatibility)
             leave_output_tensor: Keep output.weight unquantized for better quality (increases model size)
             pure_quantization: Disable k-quant mixtures, quantize all tensors uniformly
             keep_split: Keep model in same shards as input (for multi-file models)
@@ -564,7 +561,7 @@ class GGUFConverter:
         if num_threads:
             cmd.append(str(num_threads))
 
-        print(f"{theme['highlight']}Running: {' '.join(cmd)}{Style.RESET_ALL}\n")
+        print(f"{theme['highlight']}\nRunning: {' '.join(cmd)}{Style.RESET_ALL}\n")
         print()
 
         # Run llama-quantize
@@ -752,7 +749,7 @@ class GGUFConverter:
         # Newer llama-quantize versions expect GGUF format, not DAT
         cmd.extend(["--output-format", "gguf"])
 
-        print(f"{theme['highlight']}Running: {' '.join(cmd)}{Style.RESET_ALL}")
+        print(f"{theme['highlight']}\nRunning: {' '.join(cmd)}{Style.RESET_ALL}")
         print()
 
         # Run llama-imatrix
@@ -852,12 +849,9 @@ class GGUFConverter:
         custom_intermediate_path: Optional[Union[str, Path]] = None,
         custom_intermediate_format: Optional[str] = None,
         verbose: bool = False,
-        parallel: bool = True,
-        num_workers: Optional[int] = None,
-        scalar_optimization: bool = False,
-        imatrix_path: Optional[Union[str, Path]] = None,
         num_threads: Optional[int] = None,
         generate_imatrix: bool = False,
+        imatrix_path: Optional[Union[str, Path]] = None,
         imatrix_ctx_size: int = 512,
         imatrix_chunks: Optional[int] = None,
         imatrix_collect_output: bool = False,
@@ -873,7 +867,8 @@ class GGUFConverter:
         overwrite_intermediates: bool = False,
         overwrite_quants: bool = True,
         split_max_size: Optional[str] = None,
-        mmproj_precision: str = "F16"
+        mmproj_precision: str = "F16",
+        overwrite_mmproj: bool = True
     ) -> List[Path]:
         """
         Convert to GGUF and quantize in one go
@@ -886,16 +881,15 @@ class GGUFConverter:
             custom_intermediate_path: Path to existing intermediate GGUF file to use instead of generating
             custom_intermediate_format: Format of custom intermediate file (F16/F32/BF16)
             verbose: Enable verbose logging
-            parallel: Ignored (kept for API compatibility)
-            num_workers: Ignored (kept for API compatibility)
-            scalar_optimization: Ignored (kept for API compatibility)
-            imatrix_path: Optional importance matrix file for low-bit quants (deprecated, use generate_imatrix)
             num_threads: Number of threads for llama.cpp (None = auto)
             generate_imatrix: Auto-generate importance matrix in output directory
+            imatrix_path: Path to existing importance matrix file to use (None = generate or skip)
             imatrix_ctx_size: Context window size for imatrix generation (default: 512)
             imatrix_chunks: Number of chunks to process for imatrix (None = all)
             imatrix_collect_output: Collect output.weight tensor in imatrix (required for IQ quantizations)
             imatrix_calibration_file: Path to calibration file for imatrix generation (None = use default)
+            imatrix_output_name: Custom filename for generated imatrix file (None = use default)
+            imatrix_num_gpu_layers: Number of GPU layers to use for imatrix generation (None = CPU only)
             ignore_imatrix_warnings: Allow IQ quants without imatrix (may cause degraded quality or failure)
             leave_output_tensor: Keep output.weight unquantized for better quality (increases model size)
             pure_quantization: Disable k-quant mixtures, quantize all tensors uniformly
@@ -906,6 +900,7 @@ class GGUFConverter:
             overwrite_quants: Regenerate quantized formats even if they exist
             split_max_size: Maximum size per shard when splitting (e.g., "5G" or "2.5G"). If None, no splitting.
             mmproj_precision: Precision for mmproj (vision projector) file (F16, F32, BF16, Q8_0). Default: F16 for compatibility.
+            overwrite_mmproj: Whether to regenerate mmproj file if it already exists. Default: True.
 
         Returns:
             List of paths to created quantized files
@@ -1063,7 +1058,6 @@ class GGUFConverter:
         model_name = model_path.name
 
         # Use split settings if user requested splitting
-        split_max_tensors = None
         if split_max_size:
             print(f"{theme['info']}Splitting files with max size per shard: {split_max_size}{Style.RESET_ALL}")
 
@@ -1074,7 +1068,7 @@ class GGUFConverter:
                 total_size = sum(f.stat().st_size for f in safetensors_files) / (1024**3)
                 print(f"{theme['success']}\nUsing safetensors files from: {model_path.name}{Style.RESET_ALL}")
                 print(f"{theme['info']}File count: {len(safetensors_files)}{Style.RESET_ALL}")
-                print(f"{theme['info']}Total size: {total_size:.2f} GB{Style.RESET_ALL}\n")
+                print(f"{theme['info']}Total size: {total_size:.2f} GB{Style.RESET_ALL}")
 
         # Step 1: Convert to GGUF or use custom intermediate
         if using_custom_intermediate:
@@ -1099,42 +1093,31 @@ class GGUFConverter:
             intermediate_file = output_dir / f"{model_name}_{intermediate_type.upper()}.gguf"
 
             # Check for existing intermediate files based on keep_split mode
-            if split_max_size or split_max_tensors:
-                # Keep split mode: check for split intermediate files, ignore single file
+            if split_max_size:
+                # Split mode: always delete any existing shards and regenerate
+                # (Hard to disambiguate what shards belong to what set)
                 intermediate_shards = sorted(output_dir.glob(f"{intermediate_file.stem}-*-of-*.gguf"))
 
                 if intermediate_shards:
-                    # Split files always regenerate - delete old shards
                     existing_shard_count = self._get_shard_count(intermediate_shards)
                     print(f"{theme['warning']}\nExisting {existing_shard_count}-shard intermediate set found{Style.RESET_ALL}")
                     print(f"{theme['warning']}Deleting and regenerating (split mode always overwrites)...{Style.RESET_ALL}")
                     for shard in intermediate_shards:
                         print(f"{theme['warning']}  Deleting: {shard.name}{Style.RESET_ALL}")
                         shard.unlink()
-
-                    # Don't reassign intermediate_file - keep it as base path for split mode
-                    self.convert_to_gguf(
-                        model_path=model_path,
-                        output_path=intermediate_file,
-                        output_type=intermediate_type,
-                        verbose=verbose,
-                        split_max_size=split_max_size,
-                        split_max_tensors=split_max_tensors,
-                        mmproj_precision=mmproj_precision
-                    )
                 else:
-                    # No split files exist, create them
                     print(f"{theme['info']}Converting {model_name} to GGUF (with splitting)...{Style.RESET_ALL}")
-                    # Don't reassign intermediate_file - keep it as base path for split mode
-                    self.convert_to_gguf(
-                        model_path=model_path,
-                        output_path=intermediate_file,
-                        output_type=intermediate_type,
-                        verbose=verbose,
-                        split_max_size=split_max_size,
-                        split_max_tensors=split_max_tensors,
-                        mmproj_precision=mmproj_precision
-                    )
+
+                # Generate split intermediates
+                self.convert_to_gguf(
+                    model_path=model_path,
+                    output_path=intermediate_file,
+                    output_type=intermediate_type,
+                    verbose=verbose,
+                    split_max_size=split_max_size,
+                    mmproj_precision=mmproj_precision,
+                    overwrite_mmproj=overwrite_mmproj
+                )
             else:
                 # Normal mode: check for single intermediate file, ignore split files
                 if intermediate_file.exists():
@@ -1160,7 +1143,8 @@ class GGUFConverter:
                         output_path=intermediate_file,
                         output_type=intermediate_type,
                         verbose=verbose,
-                        mmproj_precision=mmproj_precision
+                        mmproj_precision=mmproj_precision,
+                        overwrite_mmproj=overwrite_mmproj
                     )
 
         # Step 1.5: Generate importance matrix if requested
@@ -1198,7 +1182,7 @@ class GGUFConverter:
 
             # For imatrix generation, use first shard if in split mode
             imatrix_input_file = intermediate_file
-            if split_max_size or split_max_tensors:
+            if split_max_size:
                 intermediate_shards = sorted(output_dir.glob(f"{intermediate_file.stem}-*-of-*.gguf"))
                 if intermediate_shards:
                     imatrix_input_file = intermediate_shards[0]
@@ -1225,7 +1209,7 @@ class GGUFConverter:
         # Determine the actual intermediate file to use for quantization
         # In split mode, use the first shard; otherwise use the base path
         actual_intermediate_file = intermediate_file
-        if split_max_size or split_max_tensors:
+        if split_max_size:
             intermediate_shards = sorted(output_dir.glob(f"{intermediate_file.stem}-*-of-*.gguf"))
             if intermediate_shards:
                 actual_intermediate_file = intermediate_shards[0]
@@ -1241,7 +1225,7 @@ class GGUFConverter:
                 if quant_type.upper() == intermediate_type.upper():
                     print(f"{theme['info']}{quant_type} is the intermediate format{Style.RESET_ALL}")
                     # If intermediate is sharded, add all shards
-                    if split_max_size or split_max_tensors:
+                    if split_max_size:
                         intermediate_stem_base = output_dir / f"{model_name}_{intermediate_type.upper()}"
                         sharded_files = sorted(output_dir.glob(f"{intermediate_stem_base.name}-*-of-*.gguf"))
                         if sharded_files:
@@ -1252,46 +1236,33 @@ class GGUFConverter:
                         quantized_files.append(intermediate_file)
                 else:
                     # Not the intermediate format, check for existing files
-                    if split_max_size or split_max_tensors:
-                        # Keep split mode: check for split files, ignore single
+                    if split_max_size:
+                        # Split mode: always delete any existing shards and regenerate
                         output_shards = sorted(output_dir.glob(f"{output_file.stem}-*-of-*.gguf"))
 
                         if output_shards:
-                            # Split files always regenerate - delete old shards
                             existing_shard_count = self._get_shard_count(output_shards)
-                            print(f"{theme['warning']}{quant_type} existing {existing_shard_count}-shard set found{Style.RESET_ALL}")
+                            print(f"{theme['warning']}\n{quant_type} existing {existing_shard_count}-shard set found{Style.RESET_ALL}")
                             print(f"{theme['warning']}Deleting and regenerating (split mode always overwrites)...{Style.RESET_ALL}")
                             for shard in output_shards:
                                 print(f"{theme['warning']}  Deleting: {shard.name}{Style.RESET_ALL}")
                                 shard.unlink()
-
-                            actual_output = self.convert_to_gguf(
-                                model_path=model_path,
-                                output_path=output_file,
-                                output_type=quant_type.lower(),
-                                verbose=verbose,
-                                split_max_size=split_max_size,
-                                split_max_tensors=split_max_tensors,
-                                mmproj_precision=mmproj_precision
-                            )
-                            # Get all new shards
-                            new_shards = sorted(output_dir.glob(f"{output_file.stem}-*-of-*.gguf"))
-                            quantized_files.extend(new_shards if new_shards else [actual_output])
                         else:
-                            # No split files exist, create them
                             print(f"{theme['info']}Converting {model_name} to {quant_type} from source (with splitting)...{Style.RESET_ALL}")
-                            actual_output = self.convert_to_gguf(
-                                model_path=model_path,
-                                output_path=output_file,
-                                output_type=quant_type.lower(),
-                                verbose=verbose,
-                                split_max_size=split_max_size,
-                                split_max_tensors=split_max_tensors,
-                                mmproj_precision=mmproj_precision
-                            )
-                            # Get all shards
-                            new_shards = sorted(output_dir.glob(f"{output_file.stem}-*-of-*.gguf"))
-                            quantized_files.extend(new_shards if new_shards else [actual_output])
+
+                        # Generate split outputs
+                        actual_output = self.convert_to_gguf(
+                            model_path=model_path,
+                            output_path=output_file,
+                            output_type=quant_type.lower(),
+                            verbose=verbose,
+                            split_max_size=split_max_size,
+                            mmproj_precision=mmproj_precision,
+                            overwrite_mmproj=overwrite_mmproj
+                        )
+                        # Get all shards
+                        new_shards = sorted(output_dir.glob(f"{output_file.stem}-*-of-*.gguf"))
+                        quantized_files.extend(new_shards if new_shards else [actual_output])
                     else:
                         # Normal mode: check for single file, ignore split files
                         if output_file.exists():
@@ -1325,37 +1296,19 @@ class GGUFConverter:
             else:
                 # Regular quantization types (Q4_K_M, etc.)
                 if keep_split:
-                    # Keep split mode: check for split files, ignore single
+                    # Split mode: always delete any existing shards and regenerate
+                    # (Hard to disambiguate what shards belong to what set)
                     output_shards = sorted(output_dir.glob(f"{output_file.stem}-*-of-*.gguf"))
 
                     if output_shards:
-                        # Check if we should reuse existing shards
-                        is_complete = self._validate_shard_set(output_shards)
                         existing_shard_count = self._get_shard_count(output_shards)
-
-                        if is_complete and not overwrite_quants:
-                            print(f"{theme['warning']}{quant_type} existing {existing_shard_count}-shard set found{Style.RESET_ALL}")
-                            print(f"{theme['warning']}Note: New max_shard_size setting may produce a different shard count{Style.RESET_ALL}")
-                            print(f"{theme['info']}Reusing existing files...{Style.RESET_ALL}")
-                            for shard in output_shards:
-                                print(f"{theme['metadata']}  - {shard.name}{Style.RESET_ALL}")
-                            quantized_files.extend(output_shards)
-                            continue  # Skip to next quant type
-
-                        # Need to regenerate - delete old shards
-                        if not is_complete:
-                            print(f"{theme['warning']}{quant_type} incomplete shard set found ({len(output_shards)} file(s)){Style.RESET_ALL}")
-                        else:
-                            print(f"{theme['info']}{quant_type} existing {existing_shard_count}-shard set found{Style.RESET_ALL}")
-                            print(f"{theme['info']}Overwriting (overwrite_quants=True)...{Style.RESET_ALL}")
-
-                        print(f"{theme['warning']}Deleting old shards...{Style.RESET_ALL}")
+                        print(f"{theme['warning']}\n{quant_type} existing {existing_shard_count}-shard set found{Style.RESET_ALL}")
+                        print(f"{theme['warning']}Deleting and regenerating (split mode always overwrites)...{Style.RESET_ALL}")
                         for shard in output_shards:
                             print(f"{theme['warning']}  Deleting: {shard.name}{Style.RESET_ALL}")
                             shard.unlink()
 
-                    # Need to quantize (either no files, incomplete set, or overwrite_quants=True)
-                    # Use actual_intermediate_file which is already set to first shard in split mode
+                    # Quantize using first shard of intermediate
                     quantize_input = actual_intermediate_file
 
                     actual_output_path = self.quantize(

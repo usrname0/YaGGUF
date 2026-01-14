@@ -41,6 +41,19 @@ class TestDetectSourceDtype:
 
         assert result == "F32"
 
+    def test_detects_fp8(self, tmp_path):
+        """Test detecting FP8 from config.json"""
+        # Test float8_e4m3fn
+        config = {"torch_dtype": "float8_e4m3fn"}
+        config_file = tmp_path / "config.json"
+        config_file.write_text(json.dumps(config))
+        assert detect_source_dtype(tmp_path) == "FP8"
+
+        # Test float8_e5m2
+        config = {"torch_dtype": "float8_e5m2"}
+        config_file.write_text(json.dumps(config))
+        assert detect_source_dtype(tmp_path) == "FP8"
+
     def test_detects_dtype_field(self, tmp_path):
         """Test detecting dtype from 'dtype' field instead of 'torch_dtype'"""
         config = {"dtype": "bfloat16"}

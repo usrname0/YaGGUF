@@ -153,6 +153,8 @@ def detect_source_dtype(model_path: Path) -> Optional[str]:
                     "float16": "F16",
                     "float32": "F32",
                     "float64": "F64",
+                    "float8_e4m3fn": "FP8",
+                    "float8_e5m2": "FP8",
                 }
 
                 if dtype_value in dtype_map:

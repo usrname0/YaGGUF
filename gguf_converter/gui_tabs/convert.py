@@ -307,9 +307,10 @@ def render_convert_tab(
             # Restore the intermediate type (button selection)
             if "custom_intermediate_saved_intermediate_type" in config:
                 saved_intermediate_type = config["custom_intermediate_saved_intermediate_type"]
-                config["intermediate_type"] = saved_intermediate_type
-                intermediate_type = saved_intermediate_type.upper()
-                st.session_state.previous_intermediate = intermediate_type
+                if saved_intermediate_type:
+                    config["intermediate_type"] = saved_intermediate_type
+                    intermediate_type = saved_intermediate_type.upper()
+                    st.session_state.previous_intermediate = intermediate_type
 
             # Clear the saved intermediate type
             config["custom_intermediate_saved_intermediate_type"] = None
@@ -554,22 +555,38 @@ def render_convert_tab(
 
             mmproj_precision_options = ["F16 (recommended)", "F32", "BF16", "Q8_0"]
 
-            def save_mmproj_precision():
-                config["mmproj_precision"] = st.session_state.mmproj_precision_radio
-                save_config(config)
+            mmproj_col1, mmproj_col2 = st.columns(2)
 
-            # Default to F16 for compatibility
-            saved_mmproj_precision = config.get("mmproj_precision", "F16 (recommended)")
+            with mmproj_col1:
+                def save_mmproj_precision():
+                    config["mmproj_precision"] = st.session_state.mmproj_precision_radio
+                    save_config(config)
 
-            mmproj_precision = st.radio(
-                "Vision Model Settings: mmproj precision",
-                options=mmproj_precision_options,
-                index=mmproj_precision_options.index(saved_mmproj_precision) if saved_mmproj_precision in mmproj_precision_options else 0,
-                horizontal=True,
-                help="Precision for vision projector file. F16 recommended for best compatibility (BF16 has known CUDA issues). Only applies to vision/multimodal models.",
-                key="mmproj_precision_radio",
-                on_change=save_mmproj_precision
-            )
+                # Default to F16 for compatibility
+                saved_mmproj_precision = config.get("mmproj_precision", "F16 (recommended)")
+
+                mmproj_precision = st.radio(
+                    "Vision Model Settings: mmproj precision",
+                    options=mmproj_precision_options,
+                    index=mmproj_precision_options.index(saved_mmproj_precision) if saved_mmproj_precision in mmproj_precision_options else 0,
+                    horizontal=True,
+                    help="Precision for vision projector file. F16 recommended for best compatibility (BF16 has known CUDA issues). Only applies to vision/multimodal models.",
+                    key="mmproj_precision_radio",
+                    on_change=save_mmproj_precision
+                )
+
+            with mmproj_col2:
+                def save_overwrite_mmproj():
+                    config["overwrite_mmproj"] = st.session_state.overwrite_mmproj_checkbox
+                    save_config(config)
+
+                overwrite_mmproj = st.checkbox(
+                    "Overwrite mmproj",
+                    value=config.get("overwrite_mmproj", True),
+                    help="Regenerate the mmproj file even if it already exists. Uncheck to skip mmproj generation if the file is already present.",
+                    key="overwrite_mmproj_checkbox",
+                    on_change=save_overwrite_mmproj
+                )
 
         # Track intermediate format changes to restore checkbox states
         if 'previous_intermediate' not in st.session_state:
@@ -1355,7 +1372,8 @@ def render_convert_tab(
                         overwrite_intermediates=config.get("overwrite_intermediates", False),
                         overwrite_quants=config.get("overwrite_quants", True),
                         split_max_size=split_size_override,
-                        mmproj_precision=mmproj_precision_clean
+                        mmproj_precision=mmproj_precision_clean,
+                        overwrite_mmproj=overwrite_mmproj
                     )
 
                 st.success(f"Successfully processed {len(output_files)} files!")
