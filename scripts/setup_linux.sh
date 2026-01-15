@@ -25,7 +25,9 @@ echo "Checking for tkinter..."
 python3 -c "import tkinter" 2>/dev/null
 if [ $? -ne 0 ]; then
     echo ""
-    echo "WARNING: tkinter is not installed. The optional folder browser will be hidden."
+    echo "WARNING: tkinter is not installed."
+    echo "The folder browser button will be hidden."
+    echo ""
     echo "To install tkinter:"
     echo "  - Ubuntu/Debian: sudo apt install python3-tk"
     echo "  - Fedora/RHEL:   sudo dnf install python3-tkinter"
