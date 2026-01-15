@@ -83,7 +83,7 @@ All quantization types from llama.cpp are supported. Choose based on your size/q
     git clone https://github.com/usrname0/YaGGUF.git
     cd YaGGUF
 # Run the launcher script for Windows (runs a setup script if no venv detected):
-    run_gui.bat
+    .\run_gui.bat
 ```
 
 ## Installation - Linux

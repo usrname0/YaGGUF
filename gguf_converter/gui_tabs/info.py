@@ -120,7 +120,7 @@ def render_info_tab(converter: "GGUFConverter", config: Dict[str, Any]) -> None:
                 - Launches a new terminal window, hit enter in the terminal to load the next model
                 - Custom binary with gpu enabled is recommended but not required
             - **Dev Tests** - Run the full test suite (pytest) in a new terminal window
-                - First run of checksum test will "SKIP" because there's no checksum to compare against yet
+                - First checksum test run will be "SKIPPED" because there's no checksum to compare against yet
             ---
             **Information:**
             - Settings stored in: `{CONFIG_FILE}`
