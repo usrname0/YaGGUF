@@ -112,7 +112,7 @@ class TestBasicConversion:
 
         output_file = output_dir / f"{TEST_MODEL_NAME}_F16.gguf"
 
-        result = converter.convert_to_gguf(
+        result, _ = converter.convert_to_gguf(
             model_path=downloaded_model,
             output_path=output_file,
             output_type="f16",
