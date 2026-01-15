@@ -336,6 +336,19 @@ def render_split_merge_tab(converter, config: Dict[str, Any]):
 
             st.info("\n\n".join(info_lines))
 
+            # Warn about index files when working with safetensors
+            if selected_file_info['extension'] == 'safetensors':
+                input_path = Path(input_dir_clean)
+                index_files = list(input_path.glob("*.safetensors.index.json"))
+                if index_files:
+                    index_names = ", ".join(f"`{f.name}`" for f in index_files)
+                    st.warning(
+                        f"**Index file detected:** {index_names}\n\n"
+                        "If you modify safetensors files you may need to delete "
+                        "or update the index file as well. Conversion tools use this "
+                        "file to locate model weights."
+                    )
+
     with col2:
         st.subheader("Options")
 

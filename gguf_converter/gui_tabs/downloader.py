@@ -142,9 +142,11 @@ def render_downloader_tab(converter: "GGUFConverter", config: Dict[str, Any]) ->
             if current_path:
                 current_path_name = Path(current_path.strip().strip('"').strip("'")).name
                 if current_path_name != model_name:
-                    download_dir_label = f"Download directory (/{model_name}/ subfolder will be created)"
+                    subfolder_hint = get_platform_path(f"\\{model_name}\\", f"/{model_name}/")
+                    download_dir_label = f"Download directory ({subfolder_hint} subfolder will be created)"
             else:
-                download_dir_label = f"Download directory (/{model_name}/ subfolder will be created)"
+                subfolder_hint = get_platform_path(f"\\{model_name}\\", f"/{model_name}/")
+                download_dir_label = f"Download directory ({subfolder_hint} subfolder will be created)"
 
         download_dir = st.text_input(
             download_dir_label,

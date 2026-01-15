@@ -12,7 +12,7 @@ from ..theme import THEME as theme
 from ..gui_utils import (
     strip_quotes, open_folder, browse_folder,
     save_config, make_config_saver, path_input_columns,
-    get_platform_path
+    get_platform_path, detect_all_model_files
 )
 
 from .convert_helpers import (
@@ -112,6 +112,7 @@ def render_convert_tab(
         intermediate_info_map = {}  # Maps option string to file info
         source_dtype = None
         config_missing = False
+        has_safetensors_conflict = False
 
         model_path_valid = bool(model_path_clean and Path(model_path_clean).exists())
 
@@ -124,9 +125,13 @@ def render_convert_tab(
         else:
             model_path_obj = Path(model_path_clean)
 
-            # Detect safetensors files
-            safetensors_files = list(model_path_obj.glob("*.safetensors"))
-            has_safetensors = len(safetensors_files) > 0
+            # Detect all model files (safetensors and GGUF) with proper shard grouping
+            all_detected = detect_all_model_files(model_path_obj)
+
+            # Filter for safetensors entries
+            safetensors_detected = {k: v for k, v in all_detected.items()
+                                    if v['extension'] == 'safetensors'}
+            has_safetensors = len(safetensors_detected) > 0
 
             # Detect source dtype if we have safetensors
             if has_safetensors:
@@ -141,26 +146,36 @@ def render_convert_tab(
             # Build options
             intermediate_options = []
 
-            # Add safetensors option if found
+            # Add safetensors options if found (properly separated by single vs shards)
             if has_safetensors:
-                # Check if they're split (look for index files or numbered files)
-                split_pattern = re.compile(r'-\d+of\d+\.safetensors$|\.safetensors\.\d+$')
-                split_files = [f for f in safetensors_files if split_pattern.search(f.name)]
-
                 # Build dtype part of label
                 dtype_part = f", {source_dtype}" if source_dtype else ""
 
-                if split_files:
-                    total_size = sum(f.stat().st_size for f in safetensors_files) / (1024**3)
-                    option_text = f"safetensors ({len(safetensors_files)} files{dtype_part}, {total_size:.2f} GB)"
-                else:
-                    total_size = sum(f.stat().st_size for f in safetensors_files) / (1024**3)
-                    if len(safetensors_files) == 1:
-                        option_text = f"safetensors (single file{dtype_part}, {total_size:.2f} GB)"
+                # Check if we have both single and split with same base name (potential conflict)
+                base_names_single = set()
+                base_names_split = set()
+                for key, info in safetensors_detected.items():
+                    # Extract base name from the key (format: basename_safetensors_single/split)
+                    base = key.rsplit('_safetensors_', 1)[0]
+                    if info['type'] == 'single':
+                        base_names_single.add(base)
                     else:
-                        option_text = f"safetensors ({len(safetensors_files)} files{dtype_part}, {total_size:.2f} GB)"
+                        base_names_split.add(base)
 
-                intermediate_options.append(option_text)
+                # Flag if there's overlap (same base name has both single and split)
+                has_safetensors_conflict = bool(base_names_single & base_names_split)
+
+                # Add each safetensors model as a separate option
+                for key in sorted(safetensors_detected.keys()):
+                    info = safetensors_detected[key]
+                    if info['type'] == 'single':
+                        option_text = f"{info['primary_file'].name} (single file{dtype_part}, {info['total_size_gb']:.2f} GB)"
+                    else:
+                        # Extract base name for display, add extension for clarity
+                        base_name = key.rsplit('_safetensors_', 1)[0]
+                        option_text = f"{base_name}.safetensors ({info['shard_count']} shards{dtype_part}, {info['total_size_gb']:.2f} GB)"
+
+                    intermediate_options.append(option_text)
                 # Don't add to intermediate_info_map - safetensors needs conversion, not direct use
 
             # Add intermediate GGUF files
@@ -264,6 +279,17 @@ def render_convert_tab(
         if "model_files_refresh_toast" in st.session_state:
             st.toast(st.session_state.model_files_refresh_toast)
             del st.session_state.model_files_refresh_toast
+
+        # Show warning if both single and sharded safetensors with same base name exist
+        if has_safetensors_conflict:
+            warn_cols, _ = path_input_columns()
+            with warn_cols[0]:
+                st.warning(
+                    "**Duplicate safetensors detected:** This folder contains both a merged file and "
+                    "shards with the same base name. The conversion script will use ALL safetensors "
+                    "files, which may cause issues. Consider removing either the merged file or the "
+                    "shards before converting."
+                )
 
         # Determine if using custom intermediate
         # Check config directly rather than string matching, which is more reliable
