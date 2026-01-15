@@ -31,7 +31,7 @@
 ![Updater](updater.png)
 
 ## Terminal Example 1
-![Terminal 1](terminal.png)
+![Terminal 1](terminal1.png)
 
 ## Terminal Example 2
-![Terminal 2](termina2.png)
+![Terminal 2](terminal2.png)
