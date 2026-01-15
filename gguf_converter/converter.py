@@ -295,7 +295,7 @@ class GGUFConverter:
         split_max_size: Optional[str] = None,
         mmproj_precision: str = "F16",
         overwrite_mmproj: bool = True
-    ) -> Path:
+    ) -> tuple[Path, Optional[Path]]:
         """
         Convert a model to GGUF format
 
@@ -310,7 +310,7 @@ class GGUFConverter:
             overwrite_mmproj: Whether to regenerate mmproj file if it already exists. Default: True.
 
         Returns:
-            Path to the created GGUF file (or first shard if split)
+            Tuple of (output_path, mmproj_path). mmproj_path is None if not a vision model or if generation was skipped.
         """
         model_path = Path(model_path)
         output_path = Path(output_path)
@@ -386,6 +386,7 @@ class GGUFConverter:
             print(f"\n{theme['success']}Conversion complete: {output_path}{Style.RESET_ALL}")
 
         # For vision models, generate the vision projector (mmproj) file separately
+        mmproj_path = None
         if ModelQuirks.is_vision_model(model_path):
             # Build mmproj output path using model name and mmproj precision
             mmproj_output = output_path.parent / f"mmproj-{model_path.name}-{mmproj_precision.upper()}.gguf"
@@ -395,6 +396,7 @@ class GGUFConverter:
                 print(f"\n{theme['info']}overwrite_mmproj=False{Style.RESET_ALL}")
                 print(f"{theme['success']}Skipping mmproj generation: {mmproj_output.name} already exists{Style.RESET_ALL}")
                 print(f"{theme['info']}Use both files together: {actual_output_path.name} + {mmproj_output.name}{Style.RESET_ALL}\n")
+                mmproj_path = mmproj_output
             else:
                 print(f"\n{theme['info']}Generating vision projector (mmproj) file...{Style.RESET_ALL}")
 
@@ -432,8 +434,9 @@ class GGUFConverter:
 
                 print(f"{theme['success']}\nVision projector exported: {mmproj_output}{Style.RESET_ALL}")
                 print(f"{theme['info']}Use both files together: {actual_output_path.name} + {mmproj_output.name}{Style.RESET_ALL}\n")
+                mmproj_path = mmproj_output
 
-        return actual_output_path
+        return actual_output_path, mmproj_path
 
     def _ensure_llama_cpp_repo(self):
         """
@@ -624,9 +627,31 @@ class GGUFConverter:
 
         # Print summary
         if actual_output_path.exists():
-            input_size = input_path.stat().st_size / (1024**3)
+            # Check if input is sharded by detecting shard pattern in filename
+            input_dir = input_path.parent
+            import re
+            shard_pattern = re.compile(r'-\d+-of-\d+$')
 
-            # If sharded, sum all shard sizes
+            # Check if input filename matches shard pattern
+            input_stem_no_ext = input_path.stem
+            match = shard_pattern.search(input_stem_no_ext)
+
+            if match:
+                # Input is a shard file, extract base name and find all shards
+                base_stem = input_stem_no_ext[:match.start()]
+                input_shards = list(input_dir.glob(f"{base_stem}-*-of-*.gguf"))
+                if input_shards:
+                    # Sum all shard sizes
+                    total_input_size = sum(f.stat().st_size for f in input_shards)
+                    input_size = total_input_size / (1024**3)
+                else:
+                    # Fallback to single file
+                    input_size = input_path.stat().st_size / (1024**3)
+            else:
+                # Single input file
+                input_size = input_path.stat().st_size / (1024**3)
+
+            # If output is sharded, sum all shard sizes
             if sharded_files:
                 total_output_size = sum(f.stat().st_size for f in sharded_files)
                 output_size = total_output_size / (1024**3)
@@ -1056,6 +1081,7 @@ class GGUFConverter:
 
         is_already_gguf = False
         model_name = model_path.name
+        mmproj_path = None  # Track mmproj file for vision/multimodal models
 
         # Use split settings if user requested splitting
         if split_max_size:
@@ -1084,10 +1110,37 @@ class GGUFConverter:
             if custom_intermediate_format:
                 intermediate_type = custom_intermediate_format.upper()
 
+            # Calculate total size (handle sharded files)
+            shard_pattern = re.compile(r'-\d+-of-\d+$')
+            intermediate_stem = intermediate_file.stem
+            match = shard_pattern.search(intermediate_stem)
+
+            if match:
+                # Custom intermediate is sharded, find and sum all shards
+                base_stem = intermediate_stem[:match.start()]
+                intermediate_shards = list(intermediate_file.parent.glob(f"{base_stem}-*-of-*.gguf"))
+                if intermediate_shards:
+                    total_size = sum(f.stat().st_size for f in intermediate_shards)
+                    intermediate_size_gb = total_size / (1024**3)
+                    shard_info = f" ({len(intermediate_shards)} shards)"
+                else:
+                    intermediate_size_gb = intermediate_file.stat().st_size / (1024**3)
+                    shard_info = ""
+            else:
+                # Single file
+                intermediate_size_gb = intermediate_file.stat().st_size / (1024**3)
+                shard_info = ""
+
             print(f"{theme['success']}\nUsing custom intermediate file: {intermediate_file.name}{Style.RESET_ALL}")
             print(f"{theme['info']}Format: {intermediate_type}{Style.RESET_ALL}")
-            print(f"{theme['info']}Size: {intermediate_file.stat().st_size / (1024**3):.2f} GB{Style.RESET_ALL}")
+            print(f"{theme['info']}Size: {intermediate_size_gb:.2f} GB{shard_info}{Style.RESET_ALL}")
             print(f"{theme['info']}Skipping conversion step...{Style.RESET_ALL}\n")
+
+            # Check if mmproj exists for vision/multimodal models
+            if ModelQuirks.is_vision_model(model_path):
+                potential_mmproj = output_dir / f"mmproj-{model_name}-{mmproj_precision.upper()}.gguf"
+                if potential_mmproj.exists():
+                    mmproj_path = potential_mmproj
         else:
             # Normal conversion workflow
             intermediate_file = output_dir / f"{model_name}_{intermediate_type.upper()}.gguf"
@@ -1109,7 +1162,7 @@ class GGUFConverter:
                     print(f"{theme['info']}Converting {model_name} to GGUF (with splitting)...{Style.RESET_ALL}")
 
                 # Generate split intermediates
-                self.convert_to_gguf(
+                _, returned_mmproj = self.convert_to_gguf(
                     model_path=model_path,
                     output_path=intermediate_file,
                     output_type=intermediate_type,
@@ -1118,6 +1171,8 @@ class GGUFConverter:
                     mmproj_precision=mmproj_precision,
                     overwrite_mmproj=overwrite_mmproj
                 )
+                if returned_mmproj:
+                    mmproj_path = returned_mmproj
             else:
                 # Normal mode: check for single intermediate file, ignore split files
                 if intermediate_file.exists():
@@ -1125,20 +1180,22 @@ class GGUFConverter:
                         print(f"{theme['info']}Intermediate file exists: {intermediate_file.name}{Style.RESET_ALL}")
                         print(f"{theme['info']}Overwriting (overwrite_intermediates=True)...{Style.RESET_ALL}")
                         print(f"{theme['warning']}Overwriting: {intermediate_file}{Style.RESET_ALL}")
-                        intermediate_file = self.convert_to_gguf(
+                        intermediate_file, returned_mmproj = self.convert_to_gguf(
                             model_path=model_path,
                             output_path=intermediate_file,
                             output_type=intermediate_type,
                             verbose=verbose,
                             mmproj_precision=mmproj_precision
                         )
+                        if returned_mmproj:
+                            mmproj_path = returned_mmproj
                     else:
                         print(f"{theme['success']}Intermediate file already exists: {intermediate_file}{Style.RESET_ALL}")
                         print(f"{theme['info']}Skipping conversion, using existing file...{Style.RESET_ALL}")
                 else:
                     # No single file exists, create it
                     print(f"{theme['info']}Converting {model_name} to GGUF...{Style.RESET_ALL}")
-                    intermediate_file = self.convert_to_gguf(
+                    intermediate_file, returned_mmproj = self.convert_to_gguf(
                         model_path=model_path,
                         output_path=intermediate_file,
                         output_type=intermediate_type,
@@ -1146,6 +1203,8 @@ class GGUFConverter:
                         mmproj_precision=mmproj_precision,
                         overwrite_mmproj=overwrite_mmproj
                     )
+                    if returned_mmproj:
+                        mmproj_path = returned_mmproj
 
         # Step 1.5: Generate importance matrix if requested
         if generate_imatrix:
@@ -1223,7 +1282,7 @@ class GGUFConverter:
             if quant_type.upper() in ["F16", "F32", "BF16"]:
                 # Check if this is the intermediate format
                 if quant_type.upper() == intermediate_type.upper():
-                    print(f"{theme['info']}{quant_type} is the intermediate format{Style.RESET_ALL}")
+                    print(f"{theme['info']}\n{quant_type} is the intermediate format{Style.RESET_ALL}")
                     # If intermediate is sharded, add all shards
                     if split_max_size:
                         intermediate_stem_base = output_dir / f"{model_name}_{intermediate_type.upper()}"
@@ -1251,7 +1310,7 @@ class GGUFConverter:
                             print(f"{theme['info']}Converting {model_name} to {quant_type} from source (with splitting)...{Style.RESET_ALL}")
 
                         # Generate split outputs
-                        actual_output = self.convert_to_gguf(
+                        actual_output, returned_mmproj = self.convert_to_gguf(
                             model_path=model_path,
                             output_path=output_file,
                             output_type=quant_type.lower(),
@@ -1260,6 +1319,8 @@ class GGUFConverter:
                             mmproj_precision=mmproj_precision,
                             overwrite_mmproj=overwrite_mmproj
                         )
+                        if returned_mmproj and not mmproj_path:
+                            mmproj_path = returned_mmproj
                         # Get all shards
                         new_shards = sorted(output_dir.glob(f"{output_file.stem}-*-of-*.gguf"))
                         quantized_files.extend(new_shards if new_shards else [actual_output])
@@ -1270,13 +1331,15 @@ class GGUFConverter:
                                 print(f"{theme['info']}{quant_type} file exists: {output_file.name}{Style.RESET_ALL}")
                                 print(f"{theme['info']}Overwriting (overwrite_intermediates=True)...{Style.RESET_ALL}")
                                 print(f"{theme['warning']}Overwriting: {output_file}{Style.RESET_ALL}")
-                                actual_output = self.convert_to_gguf(
+                                actual_output, returned_mmproj = self.convert_to_gguf(
                                     model_path=model_path,
                                     output_path=output_file,
                                     output_type=quant_type.lower(),
                                     verbose=verbose,
                                     mmproj_precision=mmproj_precision
                                 )
+                                if returned_mmproj and not mmproj_path:
+                                    mmproj_path = returned_mmproj
                                 quantized_files.append(actual_output)
                             else:
                                 print(f"{theme['success']}{quant_type} file already exists: {output_file}{Style.RESET_ALL}")
@@ -1285,13 +1348,15 @@ class GGUFConverter:
                         else:
                             # No single file exists, create it
                             print(f"{theme['info']}Converting {model_name} to {quant_type} from source...{Style.RESET_ALL}")
-                            actual_output = self.convert_to_gguf(
+                            actual_output, returned_mmproj = self.convert_to_gguf(
                                 model_path=model_path,
                                 output_path=output_file,
                                 output_type=quant_type.lower(),
                                 verbose=verbose,
                                 mmproj_precision=mmproj_precision
                             )
+                            if returned_mmproj and not mmproj_path:
+                                mmproj_path = returned_mmproj
                             quantized_files.append(actual_output)
             else:
                 # Regular quantization types (Q4_K_M, etc.)
@@ -1360,5 +1425,9 @@ class GGUFConverter:
                         )
 
                         quantized_files.append(actual_output_path)
+
+        # Add mmproj file to output list if it was generated (for vision/multimodal models)
+        if mmproj_path:
+            quantized_files.append(mmproj_path)
 
         return quantized_files
