@@ -120,3 +120,4 @@ MIT License - see LICENSE file for details
 
 - [llama.cpp](https://github.com/ggerganov/llama.cpp) - GGUF format and conversion/quantization tools
 - [HuggingFace](https://huggingface.co/) - Model hosting and transformers library
+- [Streamlit](https://github.com/streamlit/streamlit) - Pythonic data apps
