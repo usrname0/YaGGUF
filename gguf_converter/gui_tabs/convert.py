@@ -420,7 +420,7 @@ def render_convert_tab(
 
             with options_col:
                 if file_mode == "Split files":
-                    st.markdown("**Split file options:**")
+                    st.markdown("Split file options:")
 
                     st.markdown("- Split files will always overwrite existing split intermediates and quants.")
 
@@ -452,7 +452,7 @@ def render_convert_tab(
                     overwrite_intermediates = True  # Always overwrite in split mode
                     overwrite_quants = True  # Always overwrite in split mode
                 else:
-                    st.markdown("**Single file options:**")
+                    st.markdown("Single file options:")
 
                     # Single file options - show overwrite checkboxes
                     max_shard_size_gb = 0  # Not used in single file mode
@@ -487,6 +487,47 @@ def render_convert_tab(
                     st.info("Intermediate will be generated as sharded files.\n\nQuantized outputs will maintain the same shard structure.")
                 elif file_mode == "Single files":
                     st.info("Intermediate will be a single file.\n\nQuantized outputs will then be a single file.")
+
+        # Vision / Multimodal settings
+        with st.expander("Vision / Multimodal Settings"):
+
+            mmproj_precision_options = ["F16 (recommended)", "F32", "BF16", "Q8_0"]
+
+            mmproj_col1, mmproj_col2 = st.columns(2)
+
+            with mmproj_col1:
+                def save_mmproj_precision():
+                    config["mmproj_precision"] = st.session_state.mmproj_precision_radio
+                    save_config(config)
+
+                # Default to F16 for compatibility
+                saved_mmproj_precision = config.get("mmproj_precision", "F16 (recommended)")
+
+                mmproj_precision = st.radio(
+                    "mmproj precision",
+                    options=mmproj_precision_options,
+                    index=mmproj_precision_options.index(saved_mmproj_precision) if saved_mmproj_precision in mmproj_precision_options else 0,
+                    horizontal=True,
+                    help="Precision for vision projector file. F16 recommended for best compatibility (BF16 has known CUDA issues). Only applies to vision/multimodal models.",
+                    key="mmproj_precision_radio",
+                    on_change=save_mmproj_precision
+                )
+
+            with mmproj_col2:
+                def save_overwrite_mmproj():
+                    config["overwrite_mmproj"] = st.session_state.overwrite_mmproj_checkbox
+                    save_config(config)
+
+                # Add spacing to align with radio buttons
+                st.markdown("File saving options:", unsafe_allow_html=True)
+
+                overwrite_mmproj = st.checkbox(
+                    "Overwrite mmproj",
+                    value=config.get("overwrite_mmproj", True),
+                    help="Regenerate the mmproj file even if it already exists. Uncheck to skip mmproj generation if the file is already present.",
+                    key="overwrite_mmproj_checkbox",
+                    on_change=save_overwrite_mmproj
+                )
 
         # Advanced quantization options
         with st.expander("Advanced Quantization Options"):
@@ -550,43 +591,6 @@ def render_convert_tab(
                 key="pure_quantization_checkbox",
                 on_change=make_config_saver(config, "pure_quantization", "pure_quantization_checkbox")
             )
-
-            st.markdown("---")
-
-            mmproj_precision_options = ["F16 (recommended)", "F32", "BF16", "Q8_0"]
-
-            mmproj_col1, mmproj_col2 = st.columns(2)
-
-            with mmproj_col1:
-                def save_mmproj_precision():
-                    config["mmproj_precision"] = st.session_state.mmproj_precision_radio
-                    save_config(config)
-
-                # Default to F16 for compatibility
-                saved_mmproj_precision = config.get("mmproj_precision", "F16 (recommended)")
-
-                mmproj_precision = st.radio(
-                    "Vision Model Settings: mmproj precision",
-                    options=mmproj_precision_options,
-                    index=mmproj_precision_options.index(saved_mmproj_precision) if saved_mmproj_precision in mmproj_precision_options else 0,
-                    horizontal=True,
-                    help="Precision for vision projector file. F16 recommended for best compatibility (BF16 has known CUDA issues). Only applies to vision/multimodal models.",
-                    key="mmproj_precision_radio",
-                    on_change=save_mmproj_precision
-                )
-
-            with mmproj_col2:
-                def save_overwrite_mmproj():
-                    config["overwrite_mmproj"] = st.session_state.overwrite_mmproj_checkbox
-                    save_config(config)
-
-                overwrite_mmproj = st.checkbox(
-                    "Overwrite mmproj",
-                    value=config.get("overwrite_mmproj", True),
-                    help="Regenerate the mmproj file even if it already exists. Uncheck to skip mmproj generation if the file is already present.",
-                    key="overwrite_mmproj_checkbox",
-                    on_change=save_overwrite_mmproj
-                )
 
         # Track intermediate format changes to restore checkbox states
         if 'previous_intermediate' not in st.session_state:

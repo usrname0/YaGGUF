@@ -5,7 +5,7 @@ Info tab for GGUF Converter GUI
 import streamlit as st
 from typing import Dict, Any, TYPE_CHECKING
 
-from ..gui_utils import CONFIG_FILE, HF_TOKEN_PATH
+from ..gui_utils import CONFIG_FILE, HF_TOKEN_PATH, save_config
 
 if TYPE_CHECKING:
     from ..converter import GGUFConverter
@@ -14,7 +14,7 @@ if TYPE_CHECKING:
 def render_info_tab(converter: "GGUFConverter", config: Dict[str, Any]) -> None:
     """Render the Info tab"""
     st.header("About")
-    st.markdown(f"""
+    st.markdown("""
     ### YaGGUF - Yet Another GGUF Converter
 
     A user-friendly GGUF converter that sits on top of llama.cpp.  
@@ -50,9 +50,7 @@ def render_info_tab(converter: "GGUFConverter", config: Dict[str, Any]) -> None:
 
     **Settings:**
     - Your settings are automatically saved as you change them
-    - Settings are stored in: `{CONFIG_FILE}`
     - Use "Reset to defaults" in the sidebar to restore default settings
-    - HuggingFace token stored in: `{HF_TOKEN_PATH}` (managed by huggingface_hub)
     
     **Quantization Types (via llama.cpp):**
 
@@ -95,5 +93,37 @@ def render_info_tab(converter: "GGUFConverter", config: Dict[str, Any]) -> None:
     - For smallest size use IQ3_M or IQ2_M with importance matrix
     
     Quantization is done by [llama.cpp](https://github.com/ggml-org/llama.cpp).
-
+                
+    ---
     """)
+
+    # Dev Options expander (constrained width)
+    col1, col2 = st.columns([1, 1])
+    with col1:
+        with st.expander("Dev Options"):
+
+            def save_dev_mode():
+                config["dev_mode"] = st.session_state.dev_mode_checkbox
+                save_config(config)
+
+            dev_mode = st.checkbox(
+                "Enable developer mode",
+                value=config.get("dev_mode", False),
+                help="Show developer tools in the sidebar",
+                key="dev_mode_checkbox",
+                on_change=save_dev_mode
+            )
+
+            st.markdown(f"""
+            Enables extra tools that are unsupported but might be useful for advanced users:
+            - **Test Models** - Test all GGUF variants in the output directory interactively with llama-server
+                - Launches a new terminal window, hit enter in the terminal to load the next model
+                - Custom binary with gpu enabled is recommended but not required
+            - **Dev Tests** - Run the full test suite (pytest) in a new terminal window
+                - First run of checksum test will "SKIP" because there's no checksum to compare against yet
+            ---
+            **Information:**
+            - Settings stored in: `{CONFIG_FILE}`
+            - HuggingFace token stored in: `{HF_TOKEN_PATH}` (managed by huggingface_hub)
+            """)
+
