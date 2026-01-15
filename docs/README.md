@@ -30,5 +30,8 @@
 ## Update Tab
 ![Updater](updater.png)
 
-## Terminal Output
-![Terminal](terminal.png)
+## Terminal Example 1
+![Terminal 1](terminal.png)
+
+## Terminal Example 2
+![Terminal 2](termina2.png)
