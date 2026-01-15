@@ -105,7 +105,7 @@ All quantization types from llama.cpp are supported. Choose based on your size/q
 ## Usage
 
 **Windows:**
-- Double-click `run_gui.bat`
+- Double-click `.\run_gui.bat`
 
 **Linux:**
 - Use terminal `./run_gui.sh`
