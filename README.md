@@ -18,7 +18,7 @@ There are simultaneously too many and not enough GGUF converters in the world.
 
 ### Advanced Features
 
-- **Single or split files mode** - Generate single or split shards for intermediates and quants
+- **Single or split files mode** - Generate single or split files for intermediates and quants
 - **Split/Merge Shards** - Split, merge, or resplit GGUF and safetensors files with custom shard sizes
 - **Importance Matrix** - Generate or reuse imatrix files for better low-bit quantization (IQ2, IQ3)
 - **Imatrix Statistics** - Analyze importance matrix files to view statistics
