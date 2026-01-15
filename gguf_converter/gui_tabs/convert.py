@@ -534,9 +534,10 @@ def render_convert_tab(
                     options=mmproj_precision_options,
                     index=mmproj_precision_options.index(saved_mmproj_precision) if saved_mmproj_precision in mmproj_precision_options else 0,
                     horizontal=True,
-                    help="Precision for vision projector file. F16 recommended for best compatibility (BF16 has known CUDA issues). Only applies to vision/multimodal models.",
+                    help="Precision for vision projector file. F16 recommended for best compatibility (BF16 has known CUDA issues). Only applies to vision/multimodal models." if not using_custom_intermediate else "Disabled when using custom intermediate.",
                     key="mmproj_precision_radio",
-                    on_change=save_mmproj_precision
+                    on_change=save_mmproj_precision,
+                    disabled=using_custom_intermediate
                 )
 
             with mmproj_col2:
@@ -550,9 +551,10 @@ def render_convert_tab(
                 overwrite_mmproj = st.checkbox(
                     "Overwrite mmproj",
                     value=config.get("overwrite_mmproj", True),
-                    help="Regenerate the mmproj file even if it already exists. Uncheck to skip mmproj generation if the file is already present.",
+                    help="Regenerate the mmproj file even if it already exists. Uncheck to skip mmproj generation if the file is already present." if not using_custom_intermediate else "Disabled when using custom intermediate.",
                     key="overwrite_mmproj_checkbox",
-                    on_change=save_overwrite_mmproj
+                    on_change=save_overwrite_mmproj,
+                    disabled=using_custom_intermediate
                 )
 
         # Advanced quantization options
