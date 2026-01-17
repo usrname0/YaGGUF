@@ -1137,16 +1137,16 @@ def render_convert_tab(
 
         st.markdown("**K Quants:**")
         k_quants = {
-            "Q6_K": "6-bit K (very high quality)",
-            "Q5_K_M": "5-bit K medium",
-            "Q5_K_S": "5-bit K small",
-            "Q4_K_M": "4-bit K medium",
-            "Q4_K_S": "4-bit K small",
-            "Q3_K_L": "3-bit K large",
-            "Q3_K_M": "3-bit K medium",
-            "Q3_K_S": "3-bit K small",
-            "Q2_K_S": "2-bit K small",
-            "Q2_K": "2-bit K",
+            "Q6_K": "6-bit K (imatrix suggested)",
+            "Q5_K_M": "5-bit K medium (imatrix suggested)",
+            "Q5_K_S": "5-bit K small (imatrix suggested)",
+            "Q4_K_M": "4-bit K medium (imatrix suggested)",
+            "Q4_K_S": "4-bit K small (imatrix suggested)",
+            "Q3_K_L": "3-bit K large (imatrix recommended)",
+            "Q3_K_M": "3-bit K medium (imatrix recommended)",
+            "Q3_K_S": "3-bit K small (imatrix recommended)",
+            "Q2_K_S": "2-bit K small (imatrix recommended)",
+            "Q2_K": "2-bit K (imatrix recommended)",
         }
         k_checkboxes = {}
         k_cols = st.columns(3)
@@ -1166,18 +1166,18 @@ def render_convert_tab(
         # I Quants
         st.markdown("**I Quants (with Importance Matrix):**")
         i_quants = {
-            "IQ4_NL": "4-bit IQ non-linear",
-            "IQ4_XS": "4-bit IQ extra-small",
-            "IQ3_M": "3-bit IQ medium",
-            "IQ3_S": "3.4-bit IQ small",
-            "IQ3_XS": "3-bit IQ extra-small",
-            "IQ3_XXS": "3-bit IQ extra-extra-small",
-            "IQ2_M": "2-bit IQ medium",
-            "IQ2_S": "2-bit IQ small",
-            "IQ2_XS": "2-bit IQ extra-small",
-            "IQ2_XXS": "2-bit IQ extra-extra-small",
-            "IQ1_M": "1-bit IQ medium",
-            "IQ1_S": "1-bit IQ small",
+            "IQ4_NL": "4-bit IQ non-linear (imatrix recommended)",
+            "IQ4_XS": "4-bit IQ extra-small (imatrix recommended)",
+            "IQ3_M": "3-bit IQ medium (imatrix recommended)",
+            "IQ3_S": "3.4-bit IQ small (imatrix recommended)",
+            "IQ3_XS": "3-bit IQ extra-small (imatrix required)",
+            "IQ3_XXS": "3-bit IQ extra-extra-small (imatrix required)",
+            "IQ2_M": "2-bit IQ medium (imatrix required)",
+            "IQ2_S": "2-bit IQ small (imatrix required)",
+            "IQ2_XS": "2-bit IQ extra-small (imatrix required)",
+            "IQ2_XXS": "2-bit IQ extra-extra-small (imatrix required)",
+            "IQ1_M": "1-bit IQ medium (imatrix required)",
+            "IQ1_S": "1-bit IQ small (imatrix required)",
         }
 
         i_checkboxes = {}

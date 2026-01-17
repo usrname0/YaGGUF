@@ -203,7 +203,7 @@ class GGUFConverter:
             print(f"{theme['warning']}Warning: Could not check repository size: {e}{Style.RESET_ALL}")
             print(f"{theme['warning']}Proceeding with download anyway...{Style.RESET_ALL}")
 
-        print(f"{theme['success']}Downloading {repo_id} from HuggingFace...{Style.RESET_ALL}")
+        print(f"{theme['success']}Downloading {repo_id} from HuggingFace...{Style.RESET_ALL}\n")
         model_path = snapshot_download(
             repo_id=repo_id,
             local_dir=output_dir / Path(repo_id).name,
@@ -1044,7 +1044,7 @@ class GGUFConverter:
 
         # Check if it's a HuggingFace repo ID (before Path conversion changes the separators)
         if not model_path.exists() and "/" in model_path_str:
-            print(f"{theme['success']}Downloading from HuggingFace: {model_path_str}{Style.RESET_ALL}")
+            print(f"{theme['success']}Downloading from HuggingFace: {model_path_str}{Style.RESET_ALL}\n")
             model_path = self.download_model(model_path_str, output_dir / "downloads")
 
         # Validate model path - skip config.json check if using custom intermediate

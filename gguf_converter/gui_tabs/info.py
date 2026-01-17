@@ -54,36 +54,36 @@ def render_info_tab(converter: "GGUFConverter", config: Dict[str, Any]) -> None:
     
     **Quantization Types (via llama.cpp):**
 
-    | Type | Size | Quality | Category | Notes |
-    |------|------|---------|----------|-------|
-    | **F32** | Largest | Original | Unquantized | Full 32-bit precision |
-    | **F16** | Large | Near-original | Unquantized | Half precision |
-    | **BF16** | Large | Near-original | Unquantized | Brain float 16-bit |
-    | **Q8_0** | Very Large | Excellent | Legacy | Near-original quality |
-    | Q5_1, Q5_0 | Medium | Good | Legacy | Legacy 5-bit |
-    | Q4_1, Q4_0 | Small | Fair | Legacy | Legacy 4-bit |
-    | **Q6_K** | Large | Very High | K-Quant | Near-F16 quality |
-    | **Q5_K_M** | Medium | Better | K-Quant | Higher quality |
-    | Q5_K_S | Medium | Better | K-Quant | 5-bit K small |
-    | **Q4_K_M** | Small | Good | K-Quant | 4-bit K medium |
-    | Q4_K_S | Small | Good | K-Quant | 4-bit K small |
-    | Q3_K_L | Very Small | Fair | K-Quant | 3-bit K large |
-    | Q3_K_M | Very Small | Fair | K-Quant | 3-bit K medium |
-    | Q3_K_S | Very Small | Fair | K-Quant | 3-bit K small |
-    | Q2_K | Tiny | Minimal | K-Quant | 2-bit K |
-    | Q2_K_S | Tiny | Minimal | K-Quant | 2-bit K small |
-    | **IQ4_NL** | Small | Good | I-Quant | 4-bit non-linear (use imatrix) |
-    | IQ4_XS | Small | Good | I-Quant | 4-bit extra-small (use imatrix) |
-    | IQ3_M | Very Small | Fair | I-Quant | 3-bit medium (use imatrix) |
-    | IQ3_S | Very Small | Fair+ | I-Quant | 3.4-bit (use imatrix) |
-    | IQ3_XS | Very Small | Fair | I-Quant | 3-bit extra-small (use imatrix) |
-    | IQ3_XXS | Very Small | Fair | I-Quant | 3-bit extra-extra-small (use imatrix) |
-    | IQ2_M | Tiny | Minimal | I-Quant | 2-bit medium (use imatrix) |
-    | IQ2_S | Tiny | Minimal | I-Quant | 2-bit small (use imatrix) |
-    | IQ2_XS | Tiny | Minimal | I-Quant | 2-bit extra-small (use imatrix) |
-    | IQ2_XXS | Tiny | Minimal | I-Quant | 2-bit extra-extra-small (use imatrix) |
-    | IQ1_M | Extreme | Poor | I-Quant | 1-bit medium (use imatrix) |
-    | IQ1_S | Extreme | Poor | I-Quant | 1-bit small (use imatrix) |
+    | Type | Size | Quality | Category | Imatrix | Notes |
+    |------|------|---------|----------|---------|-------|
+    | **F32** | Largest | Original | Unquantized | - | Full 32-bit precision |
+    | **F16** | Large | Near-original | Unquantized | - | Half precision |
+    | **BF16** | Large | Near-original | Unquantized | - | Brain float 16-bit |
+    | **Q8_0** | Very Large | Excellent | Legacy | - | Near-original quality |
+    | Q5_1, Q5_0 | Medium | Good | Legacy | - | Legacy 5-bit |
+    | Q4_1, Q4_0 | Small | Fair | Legacy | - | Legacy 4-bit |
+    | **Q6_K** | Large | Very High | K-Quant | Suggested | Near-F16 quality |
+    | **Q5_K_M** | Medium | Better | K-Quant | Suggested | Higher quality |
+    | Q5_K_S | Medium | Better | K-Quant | Suggested | 5-bit K small |
+    | **Q4_K_M** | Small | Good | K-Quant | Suggested | 4-bit K medium |
+    | Q4_K_S | Small | Good | K-Quant | Suggested | 4-bit K small |
+    | Q3_K_L | Very Small | Fair | K-Quant | Recommended | 3-bit K large |
+    | Q3_K_M | Very Small | Fair | K-Quant | Recommended | 3-bit K medium |
+    | Q3_K_S | Very Small | Fair | K-Quant | Recommended | 3-bit K small |
+    | Q2_K | Tiny | Minimal | K-Quant | Recommended | 2-bit K |
+    | Q2_K_S | Tiny | Minimal | K-Quant | Recommended | 2-bit K small |
+    | **IQ4_NL** | Small | Good | I-Quant | Recommended | 4-bit non-linear |
+    | IQ4_XS | Small | Good | I-Quant | Recommended | 4-bit extra-small |
+    | IQ3_M | Very Small | Fair | I-Quant | Recommended | 3-bit medium |
+    | IQ3_S | Very Small | Fair+ | I-Quant | Recommended | 3.4-bit small |
+    | IQ3_XS | Very Small | Fair | I-Quant | Required | 3-bit extra-small |
+    | IQ3_XXS | Very Small | Fair | I-Quant | Required | 3-bit extra-extra-small |
+    | IQ2_M | Tiny | Minimal | I-Quant | Required | 2-bit medium |
+    | IQ2_S | Tiny | Minimal | I-Quant | Required | 2-bit small |
+    | IQ2_XS | Tiny | Minimal | I-Quant | Required | 2-bit extra-small |
+    | IQ2_XXS | Tiny | Minimal | I-Quant | Required | 2-bit extra-extra-small |
+    | IQ1_M | Extreme | Poor | I-Quant | Required | 1-bit medium |
+    | IQ1_S | Extreme | Poor | I-Quant | Required | 1-bit small |
 
     **Quick Guide:**
     - Bigger is better (more precision)
