@@ -5,7 +5,7 @@ Info tab for GGUF Converter GUI
 import streamlit as st
 from typing import Dict, Any, TYPE_CHECKING
 
-from ..gui_utils import CONFIG_FILE, HF_TOKEN_PATH, save_config
+from ..gui_utils import CONFIG_FILE, STREAMLIT_CONFIG_DIR, HF_CACHE_DIR, save_config
 
 if TYPE_CHECKING:
     from ..converter import GGUFConverter
@@ -122,8 +122,9 @@ def render_info_tab(converter: "GGUFConverter", config: Dict[str, Any]) -> None:
             - **Dev Tests** - Run the full test suite (pytest) in a new terminal window
                 - First checksum test run will be "SKIPPED" because there's no checksum to compare against yet
             ---
-            **Information:**
-            - Settings stored in: `{CONFIG_FILE}`
-            - HuggingFace token stored in: `{HF_TOKEN_PATH}` (managed by huggingface_hub)
+            **External files:**
+            - YaGUFF config: `{CONFIG_FILE}`
+            - Streamlit config: `{STREAMLIT_CONFIG_DIR}`
+            - HuggingFace data: `{HF_CACHE_DIR}`
             """)
 

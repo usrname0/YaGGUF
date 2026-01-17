@@ -888,17 +888,31 @@ def render_convert_tab(
                         config["imatrix_generate_name"] = st.session_state[key]
                         save_config(config)
 
-                col_imatrix_name, col_imatrix_default = st.columns([5, 1])
-                with col_imatrix_name:
+                # Use same column structure as other path inputs for consistent sizing
+                name_cols, name_has_browse = path_input_columns()
+                with name_cols[0]:
                     imatrix_generate_name = st.text_input(
                         "Custom imatrix filename",
                         value=config.get("imatrix_generate_name", ""),
                         placeholder="model.imatrix",
-                        help="Filename for the generated imatrix file (saved in output directory). Leave empty to use default naming (model_name.imatrix).",
+                        help="Filename for the generated imatrix file (saved in output directory). Leave empty to use 'model.imatrix'. Use default name mode for model-named files.",
                         key=f"imatrix_custom_name_{st.session_state.reset_count}",
                         on_change=save_custom_imatrix_name
                     )
 
+                # Place button in appropriate column based on tkinter availability
+                name_button_col = name_cols[1] if name_has_browse else name_cols[-1]
+                with name_button_col:
+                    st.markdown("<br>", unsafe_allow_html=True)  # Align with input
+                    if st.button("Set to default", key="set_default_imatrix_name", use_container_width=True):
+                        # Clear field to use default "model.imatrix"
+                        config["imatrix_generate_name"] = ""
+                        save_config(config)
+                        st.session_state.reset_count += 1
+                        st.rerun()
+
+                # Show info/warnings in the same column as the input for consistent width
+                with name_cols[0]:
                     # Auto-append .imatrix extension and sanitize
                     if imatrix_generate_name:
                         # Sanitize the filename
@@ -906,7 +920,7 @@ def render_convert_tab(
 
                         # Show if sanitization changed the name
                         if sanitized_name != imatrix_generate_name:
-                            st.warning(f"Filename cleaned: `{imatrix_generate_name}` → `{sanitized_name}`")
+                            st.warning(f"Filename cleaned: `{imatrix_generate_name}` -> `{sanitized_name}`")
 
                         # Add .imatrix extension if needed
                         if sanitized_name and not sanitized_name.endswith('.imatrix'):
@@ -917,11 +931,8 @@ def render_convert_tab(
                             st.info(f"Will be saved as: `{final_name}`")
                         else:
                             # Sanitization resulted in empty string - fall back to default
-                            if model_path_clean:
-                                final_name = f"{Path(model_path_clean).name}.imatrix"
-                                st.warning(f"Invalid filename - using default: `{final_name}`")
-                            else:
-                                final_name = None
+                            final_name = "model.imatrix"
+                            st.warning(f"Invalid filename - using default: `{final_name}`")
 
                         # Warn if file exists
                         if final_name and output_dir_clean:
@@ -929,28 +940,14 @@ def render_convert_tab(
                             if imatrix_file_path.exists():
                                 st.warning(f"WARNING: File already exists and will be overwritten: `{final_name}`")
                     else:
-                        # Show default name when field is blank
-                        if model_path_clean:
-                            default_name = f"{Path(model_path_clean).name}.imatrix"
-                            st.info(f"Will use default name: `{default_name}`")
+                        # When field is blank, use literal "model.imatrix" (matches placeholder)
+                        st.info("Will be saved as: `model.imatrix`")
 
-                            # Warn if default file exists
-                            if output_dir_clean:
-                                imatrix_file_path = Path(output_dir_clean) / default_name
-                                if imatrix_file_path.exists():
-                                    st.warning(f"WARNING: File already exists and will be overwritten: `{default_name}`")
-
-                with col_imatrix_default:
-                    st.markdown("<br>", unsafe_allow_html=True)  # Align with input
-                    if st.button("Set to default", key="set_default_imatrix_name", use_container_width=True):
-                        if model_path_clean:
-                            default_name = f"{Path(model_path_clean).name}.imatrix"
-                            config["imatrix_generate_name"] = default_name
-                        else:
-                            config["imatrix_generate_name"] = ""
-                        save_config(config)
-                        st.session_state.reset_count += 1
-                        st.rerun()
+                        # Warn if file exists
+                        if output_dir_clean:
+                            imatrix_file_path = Path(output_dir_clean) / "model.imatrix"
+                            if imatrix_file_path.exists():
+                                st.warning("WARNING: File already exists and will be overwritten: `model.imatrix`")
 
                 imatrix_reuse_path = None
                 imatrix_mode = "GENERATE (custom name)"
@@ -1336,10 +1333,11 @@ def render_convert_tab(
                                     imatrix_output_filename = sanitized_name
                                 config["imatrix_generate_name"] = imatrix_generate_name
                             else:
-                                # Sanitization resulted in empty string - use default
-                                imatrix_output_filename = None
+                                # Sanitization resulted in empty string - use literal default
+                                imatrix_output_filename = "model.imatrix"
                         else:
-                            imatrix_output_filename = None
+                            # Blank field uses literal "model.imatrix" (matches placeholder)
+                            imatrix_output_filename = "model.imatrix"
 
                         # Validate calibration file
                         calibration_file_path = validate_calibration_file(config)
@@ -1425,12 +1423,8 @@ def render_convert_tab(
                         model_name = Path(model_path_clean).name
                         actual_imatrix_path = Path(output_dir_clean) / f"{model_name}.imatrix"
                     elif imatrix_mode == "GENERATE (custom name)":
-                        # Generated with custom name
-                        if imatrix_output_filename:
-                            actual_imatrix_path = Path(output_dir_clean) / imatrix_output_filename
-                        else:
-                            model_name = Path(model_path_clean).name
-                            actual_imatrix_path = Path(output_dir_clean) / f"{model_name}.imatrix"
+                        # Generated with custom name (defaults to "model.imatrix" if blank)
+                        actual_imatrix_path = Path(output_dir_clean) / (imatrix_output_filename or "model.imatrix")
 
                     # Save paths for statistics tab
                     intermediate_path = Path(output_dir_clean) / f"{Path(model_path_clean).name}_{intermediate_type.upper()}.gguf"

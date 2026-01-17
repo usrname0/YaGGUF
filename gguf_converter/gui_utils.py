@@ -24,7 +24,8 @@ except ImportError:
 # Export TKINTER_AVAILABLE for use in other modules
 __all__ = ['TKINTER_AVAILABLE', 'browse_folder', 'open_folder', 'strip_quotes',
            'save_config', 'load_config', 'make_config_saver', 'path_input_columns',
-           'extract_repo_id_from_url', 'get_platform_path', 'CONFIG_FILE', 'HF_TOKEN_PATH']
+           'extract_repo_id_from_url', 'get_platform_path', 'CONFIG_FILE', 'HF_TOKEN_PATH',
+           'STREAMLIT_CONFIG_DIR', 'HF_CACHE_DIR']
 
 
 # Config file location
@@ -36,6 +37,12 @@ try:
 except ImportError:
     # Fallback for older versions or if constant is moved
     HF_TOKEN_PATH = Path.home() / ".cache" / "huggingface" / "token"
+
+# Streamlit config directory (contains config.toml, credentials.toml)
+STREAMLIT_CONFIG_DIR = Path.home() / ".streamlit"
+
+# HuggingFace cache directory (tokenizers, model metadata)
+HF_CACHE_DIR = Path.home() / ".cache" / "huggingface"
 
 
 def get_default_config() -> Dict[str, Any]:

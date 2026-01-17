@@ -794,7 +794,8 @@ class GGUFConverter:
         except subprocess.CalledProcessError as e:
             raw_error = e.stderr if e.stderr else str(e)
             error_msg = self._clean_llama_error(raw_error)
-            raise RuntimeError(f"Imatrix generation failed:\n\n{error_msg}")
+            hint = "\n\nNote: Some model architectures (e.g. BERT, embedding models) do not support imatrix generation."
+            raise RuntimeError(f"Imatrix generation failed:\n\n{error_msg}{hint}")
 
         elapsed = time.time() - start_time
 
