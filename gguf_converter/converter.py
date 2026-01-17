@@ -212,7 +212,6 @@ class GGUFConverter:
 
         # Brief pause to let progress bars finish flushing to terminal
         # (snapshot_download returns before all parallel progress bars complete)
-        import time
         time.sleep(0.5)
 
         return Path(model_path)
@@ -629,7 +628,6 @@ class GGUFConverter:
         if actual_output_path.exists():
             # Check if input is sharded by detecting shard pattern in filename
             input_dir = input_path.parent
-            import re
             shard_pattern = re.compile(r'-\d+-of-\d+$')
 
             # Check if input filename matches shard pattern
@@ -857,7 +855,6 @@ class GGUFConverter:
                 raise RuntimeError("Failed to compute statistics")
 
             # Strip ANSI color codes for GUI display
-            import re
             clean_output = re.sub(r'\x1b\[[0-9;]*m', '', output)
 
             return clean_output if clean_output.strip() else "No statistics output (file may be empty or incompatible)"
@@ -951,8 +948,6 @@ class GGUFConverter:
         print(f"{theme['info']}{banner_line}{Style.RESET_ALL}\n")
 
         # Print version information from actual binaries that will be used
-        import re
-
         # Helper function to get version from binary
         def get_binary_version_and_path(binary_path, binary_name=""):
             try:

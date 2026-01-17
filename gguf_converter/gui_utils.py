@@ -639,8 +639,6 @@ def extract_repo_id_from_url(url_or_repo_id: str) -> Optional[str]:
         >>> extract_repo_id_from_url("meta-llama/Llama-3.2-3B")
         'meta-llama/Llama-3.2-3B'
     """
-    import re
-
     if not url_or_repo_id:
         return None
 
@@ -738,7 +736,6 @@ def detect_all_model_files(model_path: Path) -> Dict[str, Dict[str, Any]]:
             ...
         }
     """
-    import re
     from collections import defaultdict
 
     if not model_path.exists() or not model_path.is_dir():
