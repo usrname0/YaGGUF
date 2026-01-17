@@ -5,6 +5,7 @@ Utility functions for GGUF Converter GUI
 import streamlit as st
 from pathlib import Path
 import json
+import re
 import subprocess
 import platform
 from typing import Dict, Optional, Tuple, Any, Callable, List
@@ -498,8 +499,24 @@ def display_binary_version_status(converter: Any) -> None:
         # Show version match status
         expected_numeric = expected_version.lstrip('b')
         if expected_numeric not in binary_info["version"]:
-            # Show mismatch warning
-            st.warning(f"Expected binary version: **{expected_version}**")
+            # Extract numeric version from installed version for comparison
+            installed_match = re.search(r'b?(\d{4,5})', binary_info["version"])
+            if installed_match:
+                installed_numeric = int(installed_match.group(1))
+                expected_num = int(expected_numeric)
+                if installed_numeric > expected_num:
+                    st.warning(
+                        f"Your version (**b{installed_numeric}**) is newer than "
+                        f"YaGGUF's tested version (**{expected_version}**)"
+                    )
+                else:
+                    st.warning(
+                        f"Your version (**b{installed_numeric}**) is older than "
+                        f"YaGGUF's tested version (**{expected_version}**)"
+                    )
+            else:
+                # Fallback if we can't parse the version
+                st.warning(f"Expected binary version: **{expected_version}**")
         else:
             # Show positive confirmation when versions match
             st.info("You are on the latest YaGGUF-tested llama.cpp binary")
@@ -578,7 +595,24 @@ def display_conversion_scripts_version_status(converter: Any) -> None:
         if expected_numeric in scripts_info["version"]:
             st.info("You are on the latest YaGGUF-tested conversion scripts")
         else:
-            st.warning(f"Expected conversion scripts version: **{expected_version}**")
+            # Extract numeric version from installed version for comparison
+            installed_match = re.search(r'b?(\d{4,5})', scripts_info["version"])
+            if installed_match:
+                installed_numeric = int(installed_match.group(1))
+                expected_num = int(expected_numeric)
+                if installed_numeric > expected_num:
+                    st.warning(
+                        f"Your version (**b{installed_numeric}**) is newer than "
+                        f"YaGGUF's tested version (**{expected_version}**)"
+                    )
+                else:
+                    st.warning(
+                        f"Your version (**b{installed_numeric}**) is older than "
+                        f"YaGGUF's tested version (**{expected_version}**)"
+                    )
+            else:
+                # Fallback if we can't parse the version
+                st.warning(f"Expected conversion scripts version: **{expected_version}**")
     elif scripts_info["status"] == "missing":
         st.info(f"Expected conversion scripts version: **{expected_version}**")
 

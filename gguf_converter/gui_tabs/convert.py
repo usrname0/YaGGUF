@@ -1169,7 +1169,7 @@ def render_convert_tab(
 
                 help_text = tooltip
                 if is_disabled:
-                    help_text += " (Requires importance matrix)"
+                    help_text += " (enable imatrix)"
 
                 i_checkboxes[qtype] = st.checkbox(
                     qtype,
