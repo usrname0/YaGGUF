@@ -24,7 +24,6 @@ from .model_quirks import ModelQuirks
 class GGUFConverter:
     """
     GGUF converter that wraps llama.cpp for conversion and quantization
-    No C++ compilation required - binaries are auto-downloaded
     """
 
     QUANTIZATION_TYPES = [
@@ -384,58 +383,107 @@ class GGUFConverter:
         else:
             print(f"\n{theme['success']}Conversion complete: {output_path}{Style.RESET_ALL}")
 
-        # For vision models, generate the vision projector (mmproj) file separately
-        mmproj_path = None
-        if ModelQuirks.is_vision_model(model_path):
-            # Build mmproj output path using model name and mmproj precision
-            mmproj_output = output_path.parent / f"mmproj-{model_path.name}-{mmproj_precision.upper()}.gguf"
+        # For vision models, generate the vision projector (mmproj) file
+        mmproj_path, mmproj_newly_generated = self._generate_mmproj(
+            model_path=model_path,
+            output_dir=output_path.parent,
+            mmproj_precision=mmproj_precision,
+            overwrite_mmproj=overwrite_mmproj,
+            verbose=verbose
+        )
 
-            # Check if mmproj file already exists
-            if mmproj_output.exists() and not overwrite_mmproj:
-                print(f"\n{theme['info']}overwrite_mmproj=False{Style.RESET_ALL}")
-                print(f"{theme['success']}Skipping mmproj generation: {mmproj_output.name} already exists{Style.RESET_ALL}")
-                print(f"{theme['info']}Use both files together: {actual_output_path.name} + {mmproj_output.name}{Style.RESET_ALL}\n")
-                mmproj_path = mmproj_output
-            else:
-                print(f"\n{theme['info']}Generating vision projector (mmproj) file...{Style.RESET_ALL}")
+        if mmproj_path:
+            print(f"{theme['info']}Use both files together: {actual_output_path.name} + {mmproj_path.name}{Style.RESET_ALL}\n")
 
-                if mmproj_output.exists():
-                    print(f"{theme['warning']}Overwriting existing mmproj file: {mmproj_output.name}{Style.RESET_ALL}")
+        # Return mmproj_path only if it was newly generated (for output file tracking)
+        return actual_output_path, mmproj_path if mmproj_newly_generated else None
 
-                # Build mmproj conversion command
-                mmproj_cmd = [
-                    sys.executable,
-                    str(convert_script),
-                    str(model_path),
-                    "--outfile", str(mmproj_output),
-                    "--outtype", mmproj_precision.lower(),
-                ]
+    def _generate_mmproj(
+        self,
+        model_path: Path,
+        output_dir: Path,
+        mmproj_precision: str = "F16",
+        overwrite_mmproj: bool = True,
+        verbose: bool = False
+    ) -> tuple[Optional[Path], bool]:
+        """
+        Generate mmproj (vision projector) file for vision/multimodal models.
 
-                # Add model-specific flags WITH mmproj
-                mmproj_flags = ModelQuirks.get_conversion_flags(model_path, include_mmproj=True)
-                mmproj_cmd.extend(mmproj_flags)
+        This method can be called independently when we want to generate mmproj
+        without re-running the main model conversion (e.g., when intermediate
+        file already exists but mmproj doesn't).
 
-                if verbose:
-                    mmproj_cmd.append("--verbose")
+        Args:
+            model_path: Path to the original model (safetensors/pytorch)
+            output_dir: Directory where mmproj file will be saved
+            mmproj_precision: Precision for mmproj file (F16, F32, BF16, Q8_0)
+            overwrite_mmproj: Whether to regenerate if file already exists
+            verbose: Enable verbose logging
 
-                print(f"{theme['highlight']}\nRunning: {' '.join(mmproj_cmd)}{Style.RESET_ALL}\n")
+        Returns:
+            Tuple of (mmproj_path, was_newly_generated):
+            - (path, True) if mmproj was newly generated
+            - (path, False) if mmproj already existed and generation was skipped
+            - (None, False) if not a vision model
+        """
+        # Only generate for vision models
+        if not ModelQuirks.is_vision_model(model_path):
+            return None, False
 
-                mmproj_result = subprocess.run(mmproj_cmd, capture_output=not verbose, text=True, encoding='utf-8', errors='replace')
+        # Build mmproj output path using model name and mmproj precision
+        mmproj_output = output_dir / f"mmproj-{model_path.name}-{mmproj_precision.upper()}.gguf"
 
-                if mmproj_result.returncode != 0:
-                    error_output = (mmproj_result.stderr or '') + (mmproj_result.stdout or '')
-                    raw_error = error_output.strip() if error_output.strip() else 'Unknown error'
-                    error_msg = self._clean_llama_error(raw_error)
-                    raise RuntimeError(f"Vision projector export failed:\n\n{error_msg}")
+        # Check if mmproj file already exists
+        if mmproj_output.exists() and not overwrite_mmproj:
+            print(f"\n{theme['info']}overwrite_mmproj=False{Style.RESET_ALL}")
+            print(f"{theme['success']}Skipping mmproj generation: {mmproj_output.name} already exists{Style.RESET_ALL}")
+            return mmproj_output, False
 
-                if verbose and mmproj_result.stdout:
-                    print(mmproj_result.stdout)
+        print(f"\n{theme['info']}Generating vision projector (mmproj) file...{Style.RESET_ALL}")
 
-                print(f"{theme['success']}\nVision projector exported: {mmproj_output}{Style.RESET_ALL}")
-                print(f"{theme['info']}Use both files together: {actual_output_path.name} + {mmproj_output.name}{Style.RESET_ALL}\n")
-                mmproj_path = mmproj_output
+        if mmproj_output.exists():
+            print(f"{theme['warning']}Overwriting existing mmproj file: {mmproj_output.name}{Style.RESET_ALL}")
 
-        return actual_output_path, mmproj_path
+        # Get conversion script
+        convert_script = self._find_convert_script()
+        if not convert_script:
+            raise RuntimeError(
+                "Could not find convert_hf_to_gguf.py script.\n"
+                "The llama.cpp repository should have been auto-cloned.\n"
+                "Please check your git installation or manually clone llama.cpp."
+            )
+
+        # Build mmproj conversion command
+        mmproj_cmd = [
+            sys.executable,
+            str(convert_script),
+            str(model_path),
+            "--outfile", str(mmproj_output),
+            "--outtype", mmproj_precision.lower(),
+        ]
+
+        # Add model-specific flags WITH mmproj
+        mmproj_flags = ModelQuirks.get_conversion_flags(model_path, include_mmproj=True)
+        mmproj_cmd.extend(mmproj_flags)
+
+        if verbose:
+            mmproj_cmd.append("--verbose")
+
+        print(f"{theme['highlight']}\nRunning: {' '.join(mmproj_cmd)}{Style.RESET_ALL}\n")
+
+        mmproj_result = subprocess.run(mmproj_cmd, capture_output=not verbose, text=True, encoding='utf-8', errors='replace')
+
+        if mmproj_result.returncode != 0:
+            error_output = (mmproj_result.stderr or '') + (mmproj_result.stdout or '')
+            raw_error = error_output.strip() if error_output.strip() else 'Unknown error'
+            error_msg = self._clean_llama_error(raw_error)
+            raise RuntimeError(f"Vision projector export failed:\n\n{error_msg}")
+
+        if verbose and mmproj_result.stdout:
+            print(mmproj_result.stdout)
+
+        print(f"{theme['success']}\nVision projector exported: {mmproj_output}{Style.RESET_ALL}")
+        return mmproj_output, True
 
     def _ensure_llama_cpp_repo(self):
         """
@@ -1181,13 +1229,24 @@ class GGUFConverter:
                             output_path=intermediate_file,
                             output_type=intermediate_type,
                             verbose=verbose,
-                            mmproj_precision=mmproj_precision
+                            mmproj_precision=mmproj_precision,
+                            overwrite_mmproj=overwrite_mmproj
                         )
                         if returned_mmproj:
                             mmproj_path = returned_mmproj
                     else:
                         print(f"{theme['success']}Intermediate file already exists: {intermediate_file}{Style.RESET_ALL}")
                         print(f"{theme['info']}Skipping conversion, using existing file...{Style.RESET_ALL}")
+                        # Still need to generate mmproj for vision models even when skipping main conversion
+                        returned_mmproj, mmproj_newly_generated = self._generate_mmproj(
+                            model_path=model_path,
+                            output_dir=output_dir,
+                            mmproj_precision=mmproj_precision,
+                            overwrite_mmproj=overwrite_mmproj,
+                            verbose=verbose
+                        )
+                        if returned_mmproj and mmproj_newly_generated:
+                            mmproj_path = returned_mmproj
                 else:
                     # No single file exists, create it
                     print(f"{theme['info']}Converting {model_name} to GGUF...{Style.RESET_ALL}")
@@ -1332,7 +1391,8 @@ class GGUFConverter:
                                     output_path=output_file,
                                     output_type=quant_type.lower(),
                                     verbose=verbose,
-                                    mmproj_precision=mmproj_precision
+                                    mmproj_precision=mmproj_precision,
+                                    overwrite_mmproj=overwrite_mmproj
                                 )
                                 if returned_mmproj and not mmproj_path:
                                     mmproj_path = returned_mmproj
@@ -1341,6 +1401,17 @@ class GGUFConverter:
                                 print(f"{theme['success']}{quant_type} file already exists: {output_file}{Style.RESET_ALL}")
                                 print(f"{theme['info']}Skipping conversion, using existing file...{Style.RESET_ALL}")
                                 quantized_files.append(output_file)
+                                # Still need to generate mmproj for vision models even when skipping main conversion
+                                if not mmproj_path:
+                                    returned_mmproj, mmproj_newly_generated = self._generate_mmproj(
+                                        model_path=model_path,
+                                        output_dir=output_dir,
+                                        mmproj_precision=mmproj_precision,
+                                        overwrite_mmproj=overwrite_mmproj,
+                                        verbose=verbose
+                                    )
+                                    if returned_mmproj and mmproj_newly_generated:
+                                        mmproj_path = returned_mmproj
                         else:
                             # No single file exists, create it
                             print(f"{theme['info']}Converting {model_name} to {quant_type} from source...{Style.RESET_ALL}")
@@ -1349,7 +1420,8 @@ class GGUFConverter:
                                 output_path=output_file,
                                 output_type=quant_type.lower(),
                                 verbose=verbose,
-                                mmproj_precision=mmproj_precision
+                                mmproj_precision=mmproj_precision,
+                                overwrite_mmproj=overwrite_mmproj
                             )
                             if returned_mmproj and not mmproj_path:
                                 mmproj_path = returned_mmproj
