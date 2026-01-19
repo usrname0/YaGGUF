@@ -11,7 +11,7 @@ import shutil
 import re
 from datetime import datetime
 from pathlib import Path
-from typing import Optional, Union, List
+from typing import Optional, Union, List, Tuple
 from huggingface_hub import snapshot_download, HfApi
 from colorama import Style
 from .llama_cpp_manager import LlamaCppManager
@@ -940,9 +940,9 @@ class GGUFConverter:
         split_max_size: Optional[str] = None,
         mmproj_precision: str = "F16",
         overwrite_mmproj: bool = True
-    ) -> List[Path]:
+    ) -> Tuple[List[Path], List[Path]]:
         """
-        Convert to GGUF and quantize in one go
+        Convert to GGUF and quantize in one go.
 
         Args:
             model_path: Path to input model or HuggingFace repo ID
@@ -974,7 +974,9 @@ class GGUFConverter:
             overwrite_mmproj: Whether to regenerate mmproj file if it already exists. Default: True.
 
         Returns:
-            List of paths to created quantized files
+            Tuple of (created_files, skipped_files):
+            - created_files: List of paths to newly created output files
+            - skipped_files: List of paths to files that already existed and were skipped
         """
         # Keep original string to check for HuggingFace repo ID format
         model_path_str = str(model_path)
@@ -1125,7 +1127,8 @@ class GGUFConverter:
 
         is_already_gguf = False
         model_name = model_path.name
-        mmproj_path = None  # Track mmproj file for vision/multimodal models
+        mmproj_path = None  # Track newly created mmproj file for vision/multimodal models
+        skipped_mmproj_path = None  # Track skipped mmproj file (already existed)
 
         # Use split settings if user requested splitting
         if split_max_size:
@@ -1180,14 +1183,15 @@ class GGUFConverter:
             print(f"{theme['info']}Size: {intermediate_size_gb:.2f} GB{shard_info}{Style.RESET_ALL}")
             print(f"{theme['info']}Skipping conversion step...{Style.RESET_ALL}\n")
 
-            # Check if mmproj exists for vision/multimodal models
-            if ModelQuirks.is_vision_model(model_path):
-                potential_mmproj = output_dir / f"mmproj-{model_name}-{mmproj_precision.upper()}.gguf"
-                if potential_mmproj.exists():
-                    mmproj_path = potential_mmproj
+            # Note: When using custom intermediate, mmproj generation is disabled in the GUI,
+            # so we don't check for or report existing mmproj files here.
+
+            # Custom intermediate is user-provided, not something we created
+            intermediate_was_created = False
         else:
             # Normal conversion workflow
             intermediate_file = output_dir / f"{model_name}_{intermediate_type.upper()}.gguf"
+            intermediate_was_created = True  # Default to created, set False if skipped
 
             # Check for existing intermediate files based on keep_split mode
             if split_max_size:
@@ -1237,6 +1241,7 @@ class GGUFConverter:
                     else:
                         print(f"{theme['success']}Intermediate file already exists: {intermediate_file}{Style.RESET_ALL}")
                         print(f"{theme['info']}Skipping conversion, using existing file...{Style.RESET_ALL}")
+                        intermediate_was_created = False  # Mark as skipped
                         # Still need to generate mmproj for vision models even when skipping main conversion
                         returned_mmproj, mmproj_newly_generated = self._generate_mmproj(
                             model_path=model_path,
@@ -1245,8 +1250,11 @@ class GGUFConverter:
                             overwrite_mmproj=overwrite_mmproj,
                             verbose=verbose
                         )
-                        if returned_mmproj and mmproj_newly_generated:
-                            mmproj_path = returned_mmproj
+                        if returned_mmproj:
+                            if mmproj_newly_generated:
+                                mmproj_path = returned_mmproj
+                            else:
+                                skipped_mmproj_path = returned_mmproj
                 else:
                     # No single file exists, create it
                     print(f"{theme['info']}Converting {model_name} to GGUF...{Style.RESET_ALL}")
@@ -1329,7 +1337,8 @@ class GGUFConverter:
                 actual_intermediate_file = intermediate_shards[0]
 
         # Step 2: Quantize to requested types
-        quantized_files = []
+        created_files = []
+        skipped_files = []
         for quant_type in quantization_types:
             output_file = output_dir / f"{model_name}_{quant_type}.gguf"
 
@@ -1337,17 +1346,24 @@ class GGUFConverter:
             if quant_type.upper() in ["F16", "F32", "BF16"]:
                 # Check if this is the intermediate format
                 if quant_type.upper() == intermediate_type.upper():
+                    # When using custom intermediate, don't list the intermediate file in outputs
+                    # (it's a user-provided input, not an output we created or skipped)
+                    if using_custom_intermediate:
+                        print(f"{theme['info']}\n{quant_type} is from custom intermediate (user-provided){Style.RESET_ALL}")
+                        continue
+
                     print(f"{theme['info']}\n{quant_type} is the intermediate format{Style.RESET_ALL}")
                     # If intermediate is sharded, add all shards
+                    target_list = created_files if intermediate_was_created else skipped_files
                     if split_max_size:
                         intermediate_stem_base = output_dir / f"{model_name}_{intermediate_type.upper()}"
                         sharded_files = sorted(output_dir.glob(f"{intermediate_stem_base.name}-*-of-*.gguf"))
                         if sharded_files:
-                            quantized_files.extend(sharded_files)
+                            target_list.extend(sharded_files)
                         else:
-                            quantized_files.append(intermediate_file)
+                            target_list.append(intermediate_file)
                     else:
-                        quantized_files.append(intermediate_file)
+                        target_list.append(intermediate_file)
                 else:
                     # Not the intermediate format, check for existing files
                     if split_max_size:
@@ -1378,7 +1394,7 @@ class GGUFConverter:
                             mmproj_path = returned_mmproj
                         # Get all shards
                         new_shards = sorted(output_dir.glob(f"{output_file.stem}-*-of-*.gguf"))
-                        quantized_files.extend(new_shards if new_shards else [actual_output])
+                        created_files.extend(new_shards if new_shards else [actual_output])
                     else:
                         # Normal mode: check for single file, ignore split files
                         if output_file.exists():
@@ -1396,13 +1412,13 @@ class GGUFConverter:
                                 )
                                 if returned_mmproj and not mmproj_path:
                                     mmproj_path = returned_mmproj
-                                quantized_files.append(actual_output)
+                                created_files.append(actual_output)
                             else:
                                 print(f"{theme['success']}{quant_type} file already exists: {output_file}{Style.RESET_ALL}")
                                 print(f"{theme['info']}Skipping conversion, using existing file...{Style.RESET_ALL}")
-                                quantized_files.append(output_file)
+                                skipped_files.append(output_file)
                                 # Still need to generate mmproj for vision models even when skipping main conversion
-                                if not mmproj_path:
+                                if not mmproj_path and not skipped_mmproj_path:
                                     returned_mmproj, mmproj_newly_generated = self._generate_mmproj(
                                         model_path=model_path,
                                         output_dir=output_dir,
@@ -1410,8 +1426,11 @@ class GGUFConverter:
                                         overwrite_mmproj=overwrite_mmproj,
                                         verbose=verbose
                                     )
-                                    if returned_mmproj and mmproj_newly_generated:
-                                        mmproj_path = returned_mmproj
+                                    if returned_mmproj:
+                                        if mmproj_newly_generated:
+                                            mmproj_path = returned_mmproj
+                                        else:
+                                            skipped_mmproj_path = returned_mmproj
                         else:
                             # No single file exists, create it
                             print(f"{theme['info']}Converting {model_name} to {quant_type} from source...{Style.RESET_ALL}")
@@ -1425,7 +1444,7 @@ class GGUFConverter:
                             )
                             if returned_mmproj and not mmproj_path:
                                 mmproj_path = returned_mmproj
-                            quantized_files.append(actual_output)
+                            created_files.append(actual_output)
             else:
                 # Regular quantization types (Q4_K_M, etc.)
                 if keep_split:
@@ -1461,16 +1480,16 @@ class GGUFConverter:
                     # Get all output shards
                     new_shards = sorted(output_dir.glob(f"{output_file.stem}-*-of-*.gguf"))
                     if new_shards:
-                        quantized_files.extend(new_shards)
+                        created_files.extend(new_shards)
                     else:
                         # Fallback if no shards found (shouldn't happen in keep_split mode)
-                        quantized_files.append(actual_output_path)
+                        created_files.append(actual_output_path)
                 else:
                     # Normal mode: check for single file, ignore split files
                     if output_file.exists() and not overwrite_quants:
                         print(f"{theme['success']}{quant_type} file already exists: {output_file}{Style.RESET_ALL}")
                         print(f"{theme['info']}Skipping quantization, using existing file...{Style.RESET_ALL}")
-                        quantized_files.append(output_file)
+                        skipped_files.append(output_file)
                     else:
                         # Need to quantize
                         if output_file.exists():
@@ -1492,10 +1511,12 @@ class GGUFConverter:
                             token_embedding_type=token_embedding_type
                         )
 
-                        quantized_files.append(actual_output_path)
+                        created_files.append(actual_output_path)
 
-        # Add mmproj file to output list if it was generated (for vision/multimodal models)
+        # Add mmproj file to output lists (for vision/multimodal models)
         if mmproj_path:
-            quantized_files.append(mmproj_path)
+            created_files.append(mmproj_path)
+        if skipped_mmproj_path:
+            skipped_files.append(skipped_mmproj_path)
 
-        return quantized_files
+        return created_files, skipped_files

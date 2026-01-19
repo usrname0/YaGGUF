@@ -343,7 +343,7 @@ class TestMultipleQuantizations:
 
         quant_types = ["Q4_K_M", "Q5_K_M", "Q8_0"]
 
-        results = converter.convert_and_quantize(
+        created_files, skipped_files = converter.convert_and_quantize(
             model_path=downloaded_model,
             output_dir=output_dir,
             quantization_types=quant_types,
@@ -352,16 +352,17 @@ class TestMultipleQuantizations:
         )
 
         # Verify all quantizations were created
-        assert len(results) == len(quant_types)
+        assert len(created_files) == len(quant_types)
+        assert len(skipped_files) == 0  # Nothing should be skipped on fresh run
 
-        for result in results:
+        for result in created_files:
             assert result.exists()
             assert result.stat().st_size > 0
 
         # Verify files are in size order (Q8_0 > Q5_K_M > Q4_K_M)
         sizes = {
             result.name: result.stat().st_size
-            for result in results
+            for result in created_files
         }
 
         q4_size = sizes[f"{TEST_MODEL_NAME}_Q4_K_M.gguf"]
@@ -441,7 +442,7 @@ class TestImatrixGeneration:
             pytest.skip("No calibration file found - skipping imatrix quantization test")
 
         # Use convert_and_quantize with imatrix generation
-        results = converter.convert_and_quantize(
+        created_files, skipped_files = converter.convert_and_quantize(
             model_path=downloaded_model,
             output_dir=output_dir,
             quantization_types=["IQ3_XXS"],  # Requires imatrix
@@ -453,9 +454,10 @@ class TestImatrixGeneration:
         )
 
         # Verify quantization succeeded
-        assert len(results) == 1
-        assert results[0].exists()
-        assert results[0].stat().st_size > 0
+        assert len(created_files) == 1
+        assert len(skipped_files) == 0
+        assert created_files[0].exists()
+        assert created_files[0].stat().st_size > 0
 
 
 @pytest.fixture(scope="module")
@@ -495,14 +497,14 @@ class TestFunctionalCorrectness:
 
         if not quantized_file.exists():
             print(f"\n[CHECKSUM] Quantizing to Q4_K_M for correctness test...")
-            results = converter.convert_and_quantize(
+            created_files, skipped_files = converter.convert_and_quantize(
                 model_path=downloaded_model,
                 output_dir=output_dir,
                 quantization_types=["Q4_K_M"],
                 intermediate_type="f16",
                 verbose=False,
             )
-            assert results, f"Failed to create Q4_K_M model"
+            assert created_files, f"Failed to create Q4_K_M model"
             assert quantized_file.exists()
 
         # --- 3. Generate Text ---
@@ -611,7 +613,7 @@ class TestEdgeCases:
         output_dir = test_output_dir / "bf16_test"
         output_dir.mkdir(exist_ok=True)
 
-        results = converter.convert_and_quantize(
+        created_files, skipped_files = converter.convert_and_quantize(
             model_path=downloaded_model,
             output_dir=output_dir,
             quantization_types=["Q4_K_M"],
@@ -620,8 +622,9 @@ class TestEdgeCases:
         )
 
         # Verify conversion succeeded
-        assert len(results) == 1
-        assert results[0].exists()
+        assert len(created_files) == 1
+        assert len(skipped_files) == 0
+        assert created_files[0].exists()
 
         # BF16 intermediate file should also exist
         bf16_file = output_dir / f"{TEST_MODEL_NAME}_BF16.gguf"
@@ -634,7 +637,7 @@ class TestEdgeCases:
         output_dir = test_output_dir / "f32_test"
         output_dir.mkdir(exist_ok=True)
 
-        results = converter.convert_and_quantize(
+        created_files, skipped_files = converter.convert_and_quantize(
             model_path=downloaded_model,
             output_dir=output_dir,
             quantization_types=["Q4_K_M"],
@@ -643,13 +646,14 @@ class TestEdgeCases:
         )
 
         # Verify conversion succeeded
-        assert len(results) == 1
-        assert results[0].exists()
+        assert len(created_files) == 1
+        assert len(skipped_files) == 0
+        assert created_files[0].exists()
 
         # F32 intermediate should be largest
         f32_file = output_dir / f"{TEST_MODEL_NAME}_F32.gguf"
         assert f32_file.exists()
 
-        q4_size = results[0].stat().st_size
+        q4_size = created_files[0].stat().st_size
         f32_size = f32_file.stat().st_size
         assert f32_size > q4_size, "F32 should be larger than Q4_K_M"

@@ -1354,7 +1354,7 @@ def render_convert_tab(
                     # Strip the "(recommended)" suffix if present
                     mmproj_precision_clean = mmproj_precision_raw.replace(" (recommended)", "").strip()
 
-                    output_files = converter.convert_and_quantize(
+                    created_files, skipped_files = converter.convert_and_quantize(
                         model_path=model_path_clean,
                         output_dir=output_dir_clean,
                         quantization_types=selected_quants,
@@ -1384,7 +1384,13 @@ def render_convert_tab(
                         overwrite_mmproj=overwrite_mmproj
                     )
 
-                st.success(f"Successfully processed {len(output_files)} files!")
+                # Build success message based on what was created vs skipped
+                if created_files and skipped_files:
+                    st.success(f"Created {len(created_files)} file(s), skipped {len(skipped_files)} existing file(s)")
+                elif created_files:
+                    st.success(f"Successfully created {len(created_files)} file(s)!")
+                elif skipped_files:
+                    st.info(f"All {len(skipped_files)} file(s) already existed and were skipped")
 
                 # Update imatrix statistics tab with this conversion's output directory
                 config["imatrix_stats_output_dir"] = output_dir_clean
@@ -1413,10 +1419,19 @@ def render_convert_tab(
                         config["imatrix_stats_model"] = str(intermediate_path)
                     save_config(config)
 
-                st.subheader("Output Files")
-                for file_path in output_files:
-                    file_size = file_path.stat().st_size / (1024**3)  # GB
-                    st.write(f"`{file_path}` ({file_size:.2f} GB)")
+                # Display created files
+                if created_files:
+                    st.subheader("Output Files")
+                    for file_path in created_files:
+                        file_size = file_path.stat().st_size / (1024**3)  # GB
+                        st.write(f"`{file_path}` ({file_size:.2f} GB)")
+
+                # Display skipped files separately
+                if skipped_files:
+                    st.subheader("Skipped Files (already existed)")
+                    for file_path in skipped_files:
+                        file_size = file_path.stat().st_size / (1024**3)  # GB
+                        st.write(f"`{file_path}` ({file_size:.2f} GB)")
 
             except Exception as e:
                 # Show in Streamlit UI
