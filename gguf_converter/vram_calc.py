@@ -105,15 +105,58 @@ def get_system_ram_mb() -> tuple[int, int, int]:
                             mem_info[key] = int(parts[1])
                         except ValueError:
                             pass
-                
+
                 if 'MemTotal' in mem_info:
                     total_mb = int(mem_info['MemTotal'] / 1024)
-                
+
                 if 'MemAvailable' in mem_info:
                     available_mb = int(mem_info['MemAvailable'] / 1024)
                 elif 'MemFree' in mem_info:
                     # Fallback if MemAvailable not present
                     available_mb = int(mem_info['MemFree'] / 1024)
+
+        elif platform.system() == "Darwin":  # macOS
+            # Get total RAM using sysctl
+            result = subprocess.run(
+                ["sysctl", "-n", "hw.memsize"],
+                capture_output=True,
+                text=True,
+                timeout=5
+            )
+            if result.returncode == 0:
+                total_bytes = int(result.stdout.strip())
+                total_mb = int(total_bytes / (1024 * 1024))
+
+            # Get memory pressure/available using vm_stat
+            result = subprocess.run(
+                ["vm_stat"],
+                capture_output=True,
+                text=True,
+                timeout=5
+            )
+            if result.returncode == 0:
+                # Parse vm_stat output for page size and free/inactive pages
+                page_size = 4096  # Default page size
+                free_pages = 0
+                inactive_pages = 0
+
+                for line in result.stdout.split('\n'):
+                    if 'page size of' in line:
+                        match = re.search(r'(\d+) bytes', line)
+                        if match:
+                            page_size = int(match.group(1))
+                    elif line.startswith('Pages free:'):
+                        match = re.search(r'(\d+)', line)
+                        if match:
+                            free_pages = int(match.group(1))
+                    elif line.startswith('Pages inactive:'):
+                        match = re.search(r'(\d+)', line)
+                        if match:
+                            inactive_pages = int(match.group(1))
+
+                # Available = free + inactive (inactive can be reclaimed)
+                available_bytes = (free_pages + inactive_pages) * page_size
+                available_mb = int(available_bytes / (1024 * 1024))
 
     except Exception:
         pass
@@ -425,6 +468,8 @@ def get_gguf_model_info(filepath: Path) -> GGUFModelInfo:
     Extracts architecture details including layer count, context length,
     and other relevant parameters for VRAM calculation.
 
+    Uses a minimal metadata reader that skips tensor info for faster loading.
+
     Args:
         filepath: Path to GGUF model file.
 
@@ -449,25 +494,18 @@ def get_gguf_model_info(filepath: Path) -> GGUFModelInfo:
         file_type=None
     )
 
-    # Try to read metadata from GGUF
+    # Try to read metadata from GGUF using minimal reader (skips tensor info)
     try:
-        from gguf import GGUFReader
+        metadata = _read_gguf_metadata_only(filepath)
 
-        reader = GGUFReader(str(filepath))
+        # Get architecture first
+        arch = metadata.get("general.architecture")
+        if arch is not None:
+            if isinstance(arch, bytes):
+                arch = arch.decode('utf-8')
+            info.architecture = arch
 
-        # Get architecture first (needed for architecture-specific keys)
-        arch = None
-        for field in reader.fields.values():
-            if field.name == "general.architecture":
-                arch = _extract_field_value(field)
-                if isinstance(arch, bytes):
-                    arch = arch.decode('utf-8')
-                info.architecture = arch
-                break
-
-        # Map of metadata keys to extract
-        # Keys can be architecture-specific (e.g., "llama.block_count")
-        # or general (e.g., "general.context_length")
+        # Map of metadata keys to extract (suffix -> attribute name)
         key_mappings = {
             "block_count": "num_layers",
             "context_length": "context_length",
@@ -477,27 +515,20 @@ def get_gguf_model_info(filepath: Path) -> GGUFModelInfo:
             "vocab_size": "vocab_size",
         }
 
-        for field in reader.fields.values():
-            name = field.name
-
-            # Check for architecture-specific keys
+        # Search for architecture-specific or general keys
+        for key, value in metadata.items():
             for key_suffix, attr_name in key_mappings.items():
-                # Try both "{arch}.{key}" and "general.{key}" patterns
-                if name.endswith(f".{key_suffix}") or name == f"general.{key_suffix}":
-                    value = _extract_field_value(field)
+                if key.endswith(f".{key_suffix}") or key == f"general.{key_suffix}":
                     if value is not None and isinstance(value, (int, float)):
                         setattr(info, attr_name, int(value))
                     break
 
             # Get file type (quantization type)
-            if name == "general.file_type":
-                value = _extract_field_value(field)
+            if key == "general.file_type":
                 if value is not None:
                     info.file_type = _get_file_type_name(int(value))
                     info.quantization_version = int(value)
 
-    except ImportError:
-        pass  # gguf library not installed
     except Exception:
         pass  # Failed to read metadata
 
@@ -508,42 +539,106 @@ def get_gguf_model_info(filepath: Path) -> GGUFModelInfo:
     return info
 
 
-def _extract_field_value(field: Any) -> Any:
+def _read_gguf_metadata_only(filepath: Path) -> Dict[str, Any]:
     """
-    Extract the actual value from a GGUF field.
+    Read only the metadata key-value pairs from a GGUF file.
+
+    This is an optimized reader that skips tensor info entirely,
+    providing significant speedup for large models with many tensors.
 
     Args:
-        field: GGUF field object.
+        filepath: Path to GGUF model file.
 
     Returns:
-        Extracted value, or None if extraction fails.
+        Dictionary of metadata key-value pairs.
     """
-    try:
-        # The field structure has 'parts' where the value is typically in the last part
-        if hasattr(field, 'parts') and len(field.parts) > 0:
-            val_part = field.parts[-1]
+    import struct
+    import numpy as np
 
-            # Handle numpy arrays
-            if hasattr(val_part, 'tolist'):
-                val = val_part.tolist()
-                if isinstance(val, list):
-                    if len(val) == 1:
-                        return val[0]
-                    elif len(val) > 0:
-                        # For strings stored as byte arrays
-                        if all(isinstance(x, int) and 0 <= x < 256 for x in val[:10]):
-                            try:
-                                return bytes(val).rstrip(b'\x00')
-                            except (ValueError, TypeError):
-                                pass
-                        return val[0]
-                return val
+    GGUF_MAGIC = 0x46554747  # "GGUF" in little-endian
 
-            return val_part
-    except Exception:
-        pass
+    # GGUF value types
+    GGUF_TYPE_UINT8 = 0
+    GGUF_TYPE_INT8 = 1
+    GGUF_TYPE_UINT16 = 2
+    GGUF_TYPE_INT16 = 3
+    GGUF_TYPE_UINT32 = 4
+    GGUF_TYPE_INT32 = 5
+    GGUF_TYPE_FLOAT32 = 6
+    GGUF_TYPE_BOOL = 7
+    GGUF_TYPE_STRING = 8
+    GGUF_TYPE_ARRAY = 9
+    GGUF_TYPE_UINT64 = 10
+    GGUF_TYPE_INT64 = 11
+    GGUF_TYPE_FLOAT64 = 12
 
-    return None
+    metadata: Dict[str, Any] = {}
+
+    with open(filepath, 'rb') as f:
+        # Read and validate magic
+        magic = struct.unpack('<I', f.read(4))[0]
+        if magic != GGUF_MAGIC:
+            raise ValueError('Invalid GGUF magic')
+
+        # Read version
+        version = struct.unpack('<I', f.read(4))[0]
+        if version not in (2, 3):
+            raise ValueError(f'Unsupported GGUF version: {version}')
+
+        # Read counts
+        tensor_count = struct.unpack('<Q', f.read(8))[0]
+        kv_count = struct.unpack('<Q', f.read(8))[0]
+
+        def read_string() -> str:
+            """Read a GGUF string (length-prefixed)."""
+            length = struct.unpack('<Q', f.read(8))[0]
+            return f.read(length).decode('utf-8')
+
+        def read_value(value_type: int) -> Any:
+            """Read a value of the given GGUF type."""
+            if value_type == GGUF_TYPE_UINT8:
+                return struct.unpack('<B', f.read(1))[0]
+            elif value_type == GGUF_TYPE_INT8:
+                return struct.unpack('<b', f.read(1))[0]
+            elif value_type == GGUF_TYPE_UINT16:
+                return struct.unpack('<H', f.read(2))[0]
+            elif value_type == GGUF_TYPE_INT16:
+                return struct.unpack('<h', f.read(2))[0]
+            elif value_type == GGUF_TYPE_UINT32:
+                return struct.unpack('<I', f.read(4))[0]
+            elif value_type == GGUF_TYPE_INT32:
+                return struct.unpack('<i', f.read(4))[0]
+            elif value_type == GGUF_TYPE_FLOAT32:
+                return struct.unpack('<f', f.read(4))[0]
+            elif value_type == GGUF_TYPE_BOOL:
+                return struct.unpack('<B', f.read(1))[0] != 0
+            elif value_type == GGUF_TYPE_STRING:
+                return read_string()
+            elif value_type == GGUF_TYPE_UINT64:
+                return struct.unpack('<Q', f.read(8))[0]
+            elif value_type == GGUF_TYPE_INT64:
+                return struct.unpack('<q', f.read(8))[0]
+            elif value_type == GGUF_TYPE_FLOAT64:
+                return struct.unpack('<d', f.read(8))[0]
+            elif value_type == GGUF_TYPE_ARRAY:
+                # Read array type and length
+                array_type = struct.unpack('<I', f.read(4))[0]
+                array_len = struct.unpack('<Q', f.read(8))[0]
+                # Read array elements
+                return [read_value(array_type) for _ in range(array_len)]
+            else:
+                raise ValueError(f'Unknown GGUF value type: {value_type}')
+
+        # Read all key-value pairs (this is what we need)
+        for _ in range(kv_count):
+            key = read_string()
+            value_type = struct.unpack('<I', f.read(4))[0]
+            value = read_value(value_type)
+            metadata[key] = value
+
+        # Stop here - don't read tensor info (this is the optimization)
+
+    return metadata
 
 
 def _get_file_type_name(file_type: int) -> str:

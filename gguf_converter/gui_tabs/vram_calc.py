@@ -4,11 +4,11 @@ VRAM Calculator tab for GGUF Converter GUI
 
 import streamlit as st
 from pathlib import Path
-from typing import Dict, Any, TYPE_CHECKING, cast
+from typing import Dict, Any, TYPE_CHECKING
 
 from ..gui_utils import (
     strip_quotes, open_folder, browse_folder,
-    save_config, TKINTER_AVAILABLE, get_platform_path,
+    save_config, get_platform_path,
     path_input_columns, detect_all_model_files
 )
 from ..vram_calc import (
@@ -21,7 +21,16 @@ if TYPE_CHECKING:
 
 
 def render_vram_calc_tab(converter: "GGUFConverter", config: Dict[str, Any]) -> None:
-    """Render the VRAM Calculator tab."""
+    """
+    Render the VRAM Calculator tab.
+
+    Provides GPU detection, model analysis, and VRAM usage estimation
+    to help users determine optimal -ngl (GPU layers) settings.
+
+    Args:
+        converter: The GGUFConverter instance (unused but kept for consistency).
+        config: Configuration dictionary for persistent settings.
+    """
     st.header("VRAM Calculator")
     st.markdown("Estimate VRAM usage and recommended GPU layers (-ngl) for GGUF models")
 
@@ -194,6 +203,14 @@ def render_vram_calc_tab(converter: "GGUFConverter", config: Dict[str, Any]) -> 
     # =========================================================================
     # Row 2: Model Selection (left) | Model Info (right)
     # =========================================================================
+
+    # Initialize variables used across column contexts and later in the function
+    model_files_options: list = []
+    model_files_map: dict = {}
+    dropdown_disabled = True
+    no_files = True
+    selected_display_name = None
+
     col_model_select, col_model_info = st.columns(2)
 
     with col_model_select:
@@ -201,7 +218,7 @@ def render_vram_calc_tab(converter: "GGUFConverter", config: Dict[str, Any]) -> 
 
         # Directory selector using shared component
         cols, has_browse = path_input_columns()
-        
+
         with cols[0]:
             model_dir = st.text_input(
                 "GGUF Directory",
@@ -209,6 +226,11 @@ def render_vram_calc_tab(converter: "GGUFConverter", config: Dict[str, Any]) -> 
                 placeholder=get_platform_path("C:\\Models\\output", "/home/user/models"),
                 help="Directory containing GGUF model files"
             )
+
+        # Save to config when changed
+        if model_dir != config.get("vram_calc_model_dir", ""):
+            config["vram_calc_model_dir"] = model_dir
+            save_config(config)
 
         if has_browse:
             with cols[1]:
@@ -245,15 +267,11 @@ def render_vram_calc_tab(converter: "GGUFConverter", config: Dict[str, Any]) -> 
                     except Exception as e:
                         st.toast(f"Could not open folder: {e}")
 
-        # Detect GGUF files
-        model_files_options = []
-        model_files_map = {}
-        
+        # Detect GGUF files in selected directory
         dir_clean = strip_quotes(model_dir)
         if dir_clean and Path(dir_clean).exists() and Path(dir_clean).is_dir():
-            # Use shared detection logic
             detected = detect_all_model_files(Path(dir_clean))
-            
+
             # Filter for GGUF files only
             for key in sorted(detected.keys()):
                 info = detected[key]
@@ -262,6 +280,7 @@ def render_vram_calc_tab(converter: "GGUFConverter", config: Dict[str, Any]) -> 
                     model_files_options.append(display_name)
                     model_files_map[display_name] = info
 
+        # Set dropdown state based on detection results
         if not model_files_options:
             if not dir_clean or not Path(dir_clean).exists():
                 model_files_options = ["(Invalid directory)"]
@@ -318,7 +337,7 @@ def render_vram_calc_tab(converter: "GGUFConverter", config: Dict[str, Any]) -> 
                         quantization_version=None,
                         file_type=None
                     )
-                    st.session_state.vram_calc_model_info = cast(GGUFModelInfo, partial_info)
+                    st.session_state.vram_calc_model_info = partial_info  # type: ignore[assignment]
                     
                     # Clear previous results as they don't match the new model
                     st.session_state.vram_calc_result = None
@@ -356,7 +375,6 @@ def render_vram_calc_tab(converter: "GGUFConverter", config: Dict[str, Any]) -> 
 
             col_info1, col_info2, col_info3 = st.columns(3)
             with col_info1:
-                st.markdown(f"**Size:** {format_size(model_info.file_size_mb)}")
                 if model_info.architecture:
                     st.markdown(f"**Arch:** {model_info.architecture}")
                 else:
@@ -365,20 +383,12 @@ def render_vram_calc_tab(converter: "GGUFConverter", config: Dict[str, Any]) -> 
                     st.markdown(f"**Quant:** {model_info.file_type}")
                 else:
                     st.markdown("**Quant:** (calc needed)")
+                st.markdown(f"**Size:** {format_size(model_info.file_size_mb)}")
             with col_info2:
                 if model_info.num_layers:
                     st.markdown(f"**Layers:** {model_info.num_layers}")
                 else:
                     st.markdown("**Layers:** -")
-                if model_info.context_length:
-                    st.markdown(f"**Native Context:** {model_info.context_length:,}")
-                else:
-                    st.markdown("**Native Context:** -")
-                if model_info.vocab_size:
-                    st.markdown(f"**Vocab Size:** {model_info.vocab_size:,}")
-                else:
-                    st.markdown("**Vocab Size:** -")
-            with col_info3:
                 if model_info.embedding_length:
                     st.markdown(f"**Embedding:** {model_info.embedding_length:,}")
                 else:
@@ -390,6 +400,15 @@ def render_vram_calc_tab(converter: "GGUFConverter", config: Dict[str, Any]) -> 
                         st.markdown(f"**Attention:** GQA ({model_info.head_count}/{model_info.head_count_kv})")
                 else:
                     st.markdown("**Attention:** -")
+            with col_info3:
+                if model_info.context_length:
+                    st.markdown(f"**Native Context:** {model_info.context_length:,}")
+                else:
+                    st.markdown("**Native Context:** -")
+                if model_info.vocab_size:
+                    st.markdown(f"**Vocab Size:** {model_info.vocab_size:,}")
+                else:
+                    st.markdown("**Vocab Size:** -")
         else:
             st.subheader("Model Info")
             st.info("Calculate VRAM to see model details")
@@ -425,7 +444,7 @@ def render_vram_calc_tab(converter: "GGUFConverter", config: Dict[str, Any]) -> 
 
                 if has_full_info and existing_info is not None:
                     # Reuse existing model info (fast path)
-                    model_info = cast(GGUFModelInfo, existing_info)
+                    model_info = existing_info  # type: ignore[assignment]
                 else:
                     # Extract model info (slow path - first run or model changed)
                     with st.spinner("Analyzing model..."):
@@ -443,7 +462,7 @@ def render_vram_calc_tab(converter: "GGUFConverter", config: Dict[str, Any]) -> 
                 )
 
                 st.session_state.vram_calc_result = result
-                st.session_state.vram_calc_model_info = cast(GGUFModelInfo, model_info)
+                st.session_state.vram_calc_model_info = model_info  # type: ignore[assignment]
                 st.session_state.vram_calc_context_size = context_size
                 st.session_state.vram_calc_kv_quant = kv_quant_selected
                 st.session_state.vram_calc_error = None
