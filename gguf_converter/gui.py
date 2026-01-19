@@ -45,6 +45,7 @@ try:
         render_imatrix_stats_tab,
         render_downloader_tab,
         render_split_merge_tab,
+        render_vram_calc_tab,
         render_llama_cpp_tab,
         render_info_tab,
         render_update_tab
@@ -63,6 +64,7 @@ except ImportError:
         render_imatrix_stats_tab,
         render_downloader_tab,
         render_split_merge_tab,
+        render_vram_calc_tab,
         render_llama_cpp_tab,
         render_info_tab,
         render_update_tab
@@ -337,12 +339,13 @@ def main() -> None:
             st.rerun()
 
     # Main content - tabs
-    tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8 = st.tabs([
+    tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8, tab9 = st.tabs([
         "Convert & Quantize",
         "Imatrix Settings",
         "Imatrix Statistics",
         "HuggingFace Downloader",
         "Split/Merge Shards",
+        "VRAM Calcs",
         "Info",
         "llama.cpp",
         "Update"
@@ -364,12 +367,15 @@ def main() -> None:
         render_split_merge_tab(converter, config)
 
     with tab6:
-        render_info_tab(converter, config)
+        render_vram_calc_tab(converter, config)
 
     with tab7:
-        render_llama_cpp_tab(converter, config)
+        render_info_tab(converter, config)
 
     with tab8:
+        render_llama_cpp_tab(converter, config)
+
+    with tab9:
         render_update_tab(converter, config)
 
 
