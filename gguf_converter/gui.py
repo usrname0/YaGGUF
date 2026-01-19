@@ -345,7 +345,7 @@ def main() -> None:
         "Imatrix Statistics",
         "HuggingFace Downloader",
         "Split/Merge Shards",
-        "VRAM Calcs",
+        "VRAM Calc",
         "Info",
         "llama.cpp",
         "Update"

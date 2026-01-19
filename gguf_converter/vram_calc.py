@@ -56,6 +56,78 @@ class VRAMCalculation:
     error: Optional[str] = None
 
 
+def get_system_ram_mb() -> tuple[int, int, int]:
+    """
+    Get system RAM usage (Total, Used, Available) in MB.
+    
+    Returns:
+        tuple: (total_mb, used_mb, available_mb)
+    """
+    import platform
+    import sys
+    
+    total_mb = 0
+    available_mb = 0
+    
+    try:
+        if platform.system() == "Windows":
+            import ctypes
+            
+            class MEMORYSTATUSEX(ctypes.Structure):
+                _fields_ = [
+                    ("dwLength", ctypes.c_uint32),
+                    ("dwMemoryLoad", ctypes.c_uint32),
+                    ("ullTotalPhys", ctypes.c_uint64),
+                    ("ullAvailPhys", ctypes.c_uint64),
+                    ("ullTotalPageFile", ctypes.c_uint64),
+                    ("ullAvailPageFile", ctypes.c_uint64),
+                    ("ullTotalVirtual", ctypes.c_uint64),
+                    ("ullAvailVirtual", ctypes.c_uint64),
+                    ("ullAvailExtendedVirtual", ctypes.c_uint64),
+                ]
+
+            mem = MEMORYSTATUSEX()
+            mem.dwLength = ctypes.sizeof(MEMORYSTATUSEX)
+            ctypes.windll.kernel32.GlobalMemoryStatusEx(ctypes.byref(mem))
+            
+            total_mb = int(mem.ullTotalPhys / (1024 * 1024))
+            available_mb = int(mem.ullAvailPhys / (1024 * 1024))
+            
+        elif platform.system() == "Linux":
+            with open('/proc/meminfo', 'r') as f:
+                mem_info = {}
+                for line in f:
+                    parts = line.split()
+                    if len(parts) >= 2:
+                        key = parts[0].rstrip(':')
+                        # values are in kB
+                        try:
+                            mem_info[key] = int(parts[1])
+                        except ValueError:
+                            pass
+                
+                if 'MemTotal' in mem_info:
+                    total_mb = int(mem_info['MemTotal'] / 1024)
+                
+                if 'MemAvailable' in mem_info:
+                    available_mb = int(mem_info['MemAvailable'] / 1024)
+                elif 'MemFree' in mem_info:
+                    # Fallback if MemAvailable not present
+                    available_mb = int(mem_info['MemFree'] / 1024)
+
+    except Exception:
+        pass
+        
+    # Ensure reasonable values
+    if total_mb <= 0:
+        total_mb = 16 * 1024 # Assumed default if detection fails
+        available_mb = 8 * 1024
+        
+    used_mb = max(0, total_mb - available_mb)
+    
+    return total_mb, used_mb, available_mb
+
+
 def get_nvidia_gpus() -> List[GPUInfo]:
     """
     Query NVIDIA GPU VRAM using nvidia-smi.
@@ -485,15 +557,16 @@ def _get_file_type_name(file_type: int) -> str:
         Human-readable quantization type name.
     """
     # Common GGUF file types
+    # Based on llama.h enum llama_ftype
     file_types = {
         0: "F32",
         1: "F16",
         2: "Q4_0",
         3: "Q4_1",
-        6: "Q5_0",
-        7: "Q5_1",
-        8: "Q8_0",
-        9: "Q8_1",
+        # 4-6 removed/legacy
+        7: "Q8_0",
+        8: "Q5_0",
+        9: "Q5_1",
         10: "Q2_K",
         11: "Q3_K_S",
         12: "Q3_K_M",
@@ -503,17 +576,23 @@ def _get_file_type_name(file_type: int) -> str:
         16: "Q5_K_S",
         17: "Q5_K_M",
         18: "Q6_K",
-        19: "Q8_K",
-        20: "IQ2_XXS",
-        21: "IQ2_XS",
-        22: "IQ3_XXS",
-        23: "IQ1_S",
-        24: "IQ4_NL",
-        25: "IQ3_S",
-        26: "IQ2_S",
-        27: "IQ4_XS",
-        28: "IQ1_M",
-        29: "BF16",
+        19: "IQ2_XXS",
+        20: "IQ2_XS",
+        21: "Q2_K_S",
+        22: "IQ3_XS",
+        23: "IQ3_XXS",
+        24: "IQ1_S",
+        25: "IQ4_NL",
+        26: "IQ3_S",
+        27: "IQ3_M",
+        28: "IQ2_S",
+        29: "IQ2_M",
+        30: "IQ4_XS",
+        31: "IQ1_M",
+        32: "BF16",
+        36: "TQ1_0",
+        37: "TQ2_0",
+        38: "MXFP4_MOE",
     }
     return file_types.get(file_type, f"Unknown ({file_type})")
 
@@ -560,7 +639,8 @@ def calculate_vram(
     available_vram_mb: float,
     headroom_mb: float = 2048,
     context_size: int = 4096,
-    batch_size: int = 512
+    batch_size: int = 512,
+    kv_cache_quant: str = "f16"
 ) -> VRAMCalculation:
     """
     Calculate recommended GPU layers and VRAM usage.
@@ -571,6 +651,7 @@ def calculate_vram(
         headroom_mb: VRAM to reserve for other applications.
         context_size: Context window size for KV cache calculation.
         batch_size: Batch size for inference.
+        kv_cache_quant: KV cache quantization type ("f16", "q8_0", or "q4_0").
 
     Returns:
         VRAMCalculation with detailed results.
@@ -590,7 +671,8 @@ def calculate_vram(
     context_overhead_mb = _estimate_context_overhead(
         model_info,
         context_size,
-        batch_size
+        batch_size,
+        kv_cache_quant
     )
 
     # Calculate usable VRAM
@@ -641,7 +723,8 @@ def calculate_vram(
 def _estimate_context_overhead(
     model_info: GGUFModelInfo,
     context_size: int,
-    batch_size: int
+    batch_size: int,
+    kv_cache_quant: str = "f16"
 ) -> float:
     """
     Estimate VRAM needed for KV cache and context.
@@ -650,13 +733,23 @@ def _estimate_context_overhead(
         model_info: Model information.
         context_size: Context window size.
         batch_size: Batch size.
+        kv_cache_quant: KV cache quantization type ("f16", "q8_0", or "q4_0").
 
     Returns:
         Estimated context overhead in MB.
     """
     # KV cache size formula:
     # 2 * num_layers * context_size * num_kv_heads * head_dim * bytes_per_element
-    # For FP16 KV cache: bytes_per_element = 2
+    # Bytes per element depends on quantization:
+    # - F16: 2 bytes
+    # - Q8_0: 1 byte
+    # - Q4_0: 0.5 bytes
+
+    bytes_per_element = {
+        "f16": 2.0,
+        "q8_0": 1.0,
+        "q4_0": 0.5
+    }.get(kv_cache_quant.lower(), 2.0)
 
     num_layers = model_info.num_layers or 32
     embedding_length = model_info.embedding_length or 4096
@@ -666,8 +759,8 @@ def _estimate_context_overhead(
     # Head dimension
     head_dim = embedding_length // head_count if head_count > 0 else 128
 
-    # KV cache: 2 (K and V) * layers * context * kv_heads * head_dim * 2 bytes (FP16)
-    kv_cache_bytes = 2 * num_layers * context_size * head_count_kv * head_dim * 2
+    # KV cache: 2 (K and V) * layers * context * kv_heads * head_dim * bytes_per_element
+    kv_cache_bytes = 2 * num_layers * context_size * head_count_kv * head_dim * bytes_per_element
     kv_cache_mb = kv_cache_bytes / (1024 * 1024)
 
     # Add some overhead for activations during inference (~10% of KV cache)
