@@ -33,6 +33,7 @@ def render_info_tab(converter: "GGUFConverter", config: Dict[str, Any]) -> None:
     - **Imatrix Statistics** - Analyze importance matrix files to view statistics
     - **HuggingFace Downloader** - Download models and their supporting files
     - **Split/Merge Shards** - Split and merge GGUF and safetensors files with custom shard sizes
+    - **VRAM Calculator** - Estimate VRAM usage and recommended GPU layers (-ngl) for GGUF models
     - **Cross-platform** - Windows & Linux support (Mac should work too, but untested)
     - **Auto-downloads binaries** - Pre-compiled llama.cpp binaries (CPU)
     - **Customization** - Can use other llama.cpp binaries if desired
@@ -44,9 +45,10 @@ def render_info_tab(converter: "GGUFConverter", config: Dict[str, Any]) -> None:
     3. **Imatrix Statistics** - Analyze existing imatrix files
     4. **HuggingFace Downloader** - Download models from HuggingFace
     5. **Split/Merge Shards** - Split and merge GGUF and safetensors files
-    6. **Info** - This tab
-    7. **llama.cpp** - Customize llama.cpp setup
-    8. **Update** - Update YaGGUF, llama.cpp and dependencies
+    6. **VRAM Calculator** - Estimate VRAM usage and GPU layers for GGUF models
+    7. **Info** - This tab
+    8. **llama.cpp** - Customize llama.cpp setup
+    9. **Update** - Update YaGGUF, llama.cpp and dependencies
 
     **Settings:**
     - Your settings are automatically saved as you change them

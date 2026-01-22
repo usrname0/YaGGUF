@@ -27,6 +27,7 @@ There are simultaneously too many and not enough GGUF converters in the world.
 - **Model quirks detection** - Handles Mistral format, pre-quantized models, and architecture-specific flags
 - **Vision/Multimodal models** - Automatic detection and two-step conversion (text model + `mmproj-*.gguf`)
 - **Sentence-transformers** - Auto-detect and include dense modules for embedding models
+- **VRAM Calculator** - Estimate VRAM usage and recommended GPU layers (-ngl) for GGUF models
 
 ## Quantization Types
 
