@@ -26,7 +26,7 @@ except ImportError:
 __all__ = ['TKINTER_AVAILABLE', 'browse_folder', 'open_folder', 'strip_quotes',
            'save_config', 'load_config', 'make_config_saver', 'path_input_columns',
            'extract_repo_id_from_url', 'get_platform_path', 'CONFIG_FILE', 'HF_TOKEN_PATH',
-           'STREAMLIT_CONFIG_DIR', 'HF_CACHE_DIR']
+           'STREAMLIT_CONFIG_DIR', 'HF_CACHE_DIR', 'show_processing_overlay']
 
 
 # Config file location
@@ -822,3 +822,86 @@ def detect_all_model_files(model_path: Path) -> Dict[str, Dict[str, Any]]:
                 }
 
     return detected_files
+
+
+def show_processing_overlay(message: str = "Processing...") -> Any:
+    """
+    Display a full-screen overlay that blocks all user interaction.
+
+    This is useful for long-running operations where clicking other widgets
+    would cause issues. The overlay covers the entire viewport and intercepts
+    all click events.
+
+    Args:
+        message: Text to display on the overlay (default: "Processing...")
+
+    Returns:
+        A Streamlit empty container that can be cleared via .empty() to remove
+        the overlay after processing completes.
+
+    Example:
+        overlay = show_processing_overlay("Converting...")
+        try:
+            do_long_running_task()
+        finally:
+            overlay.empty()  # Remove overlay when done
+
+    Note:
+        The overlay uses CSS position:fixed to cover the viewport and a high
+        z-index to sit above Streamlit widgets. The pointer-events:all ensures
+        clicks are captured by the overlay rather than passing through.
+    """
+    overlay_html = f"""
+    <style>
+        .yagguf-processing-overlay {{
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            background-color: rgba(14, 17, 23, 0.85);
+            z-index: 99999;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            pointer-events: all;
+            cursor: wait;
+        }}
+        .yagguf-processing-message {{
+            color: #fafafa;
+            font-size: 1.5rem;
+            font-weight: 500;
+            margin-bottom: 1rem;
+            animation: yagguf-pulse 2s ease-in-out infinite;
+        }}
+        .yagguf-processing-spinner {{
+            width: 50px;
+            height: 50px;
+            border: 4px solid rgba(255, 255, 255, 0.2);
+            border-top-color: #ff4b4b;
+            border-radius: 50%;
+            animation: yagguf-spin 1s linear infinite;
+        }}
+        .yagguf-processing-hint {{
+            color: rgba(250, 250, 250, 0.6);
+            font-size: 0.9rem;
+            margin-top: 1.5rem;
+        }}
+        @keyframes yagguf-pulse {{
+            0%, 100% {{ opacity: 1; }}
+            50% {{ opacity: 0.6; }}
+        }}
+        @keyframes yagguf-spin {{
+            to {{ transform: rotate(360deg); }}
+        }}
+    </style>
+    <div class="yagguf-processing-overlay">
+        <div class="yagguf-processing-spinner"></div>
+        <div class="yagguf-processing-message">{message}</div>
+        <div class="yagguf-processing-hint">Please wait - do not close this tab</div>
+    </div>
+    """
+    placeholder = st.empty()
+    placeholder.markdown(overlay_html, unsafe_allow_html=True)
+    return placeholder

@@ -12,7 +12,7 @@ from ..theme import THEME as theme
 from ..gui_utils import (
     strip_quotes, open_folder, browse_folder,
     save_config, make_config_saver, path_input_columns,
-    get_platform_path, detect_all_model_files
+    get_platform_path, detect_all_model_files, show_processing_overlay
 )
 
 from .convert_helpers import (
@@ -1324,6 +1324,9 @@ def render_convert_tab(
 
                     save_config(config)
 
+                # Show blocking overlay to prevent interaction during processing
+                overlay = show_processing_overlay("Converting and quantizing...")
+
                 with st.spinner("Converting and quantizing... This may take a while."):
                     # Use GPU offloading if configured
                     num_gpu_layers_value = int(config.get("imatrix_num_gpu_layers", 0))
@@ -1433,6 +1436,9 @@ def render_convert_tab(
                         file_size = file_path.stat().st_size / (1024**3)  # GB
                         st.write(f"`{file_path}` ({file_size:.2f} GB)")
 
+                # Clear the overlay now that processing is complete
+                overlay.empty()
+
             except Exception as e:
                 # Show in Streamlit UI
                 st.error(f"Error: {e}")
@@ -1452,3 +1458,9 @@ def render_convert_tab(
                     # Unexpected errors - print full traceback for debugging
                     traceback.print_tb(exc_tb)
                     print(f"{theme['error']}{exc_type.__name__}: {exc_value}{Style.RESET_ALL}")
+
+                # Clear the overlay if it was created
+                try:
+                    overlay.empty()
+                except NameError:
+                    pass  # Overlay wasn't created (error occurred before overlay)
