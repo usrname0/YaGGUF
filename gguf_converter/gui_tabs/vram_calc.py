@@ -166,12 +166,12 @@ def render_vram_calc_tab(converter: "GGUFConverter", config: Dict[str, Any]) -> 
                 st.metric("Available VRAM", format_size(selected_gpu.free_mb))
             with col_suggested:
                 suggested_headroom = selected_gpu.total_mb - selected_gpu.free_mb
-                st.metric("Suggested Headroom", format_size(suggested_headroom))
+                st.metric("Minimum Headroom", format_size(suggested_headroom))
         else:
             st.subheader("Manually Entered VRAM Stats")
             st.metric("Total VRAM", format_size(total_vram))
 
-        st.caption("Suggested headroom reflects currently running applications.")
+        st.caption("Note: Suggested minimum headroom reflects currently running applications.")
 
         st.markdown("---")
         
