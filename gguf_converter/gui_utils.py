@@ -854,18 +854,18 @@ def show_processing_overlay(message: str = "Processing...") -> Any:
     overlay_html = f"""
     <style>
         .yagguf-processing-overlay {{
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100vw;
-            height: 100vh;
-            background-color: rgba(14, 17, 23, 0.85);
-            z-index: 99999;
-            display: flex;
+            position: fixed !important;
+            top: 0 !important;
+            left: 0 !important;
+            width: 100vw !important;
+            height: 100vh !important;
+            background-color: rgba(14, 17, 23, 0.85) !important;
+            z-index: 1000001 !important;
+            display: flex !important;
             flex-direction: column;
             justify-content: center;
             align-items: center;
-            pointer-events: all;
+            pointer-events: all !important;
             cursor: wait;
         }}
         .yagguf-processing-message {{
