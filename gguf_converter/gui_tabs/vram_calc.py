@@ -32,7 +32,7 @@ def render_vram_calc_tab(converter: "GGUFConverter", config: Dict[str, Any]) -> 
         config: Configuration dictionary for persistent settings.
     """
     st.header("VRAM Calculator")
-    st.markdown("Estimate VRAM usage and recommended GPU layers (-ngl) for GGUF models")
+    st.markdown("Estimate VRAM usage, context size and recommended GPU layers (-ngl) for GGUF models")
 
     # =========================================================================
     # Row 1: GPU Detection (left) | GPU Stats (right)
@@ -94,37 +94,37 @@ def render_vram_calc_tab(converter: "GGUFConverter", config: Dict[str, Any]) -> 
             default_vram = max(512, config.get("vram_calc_manual_vram", 8192))
         else:
             selected_gpu = gpus[selected_gpu_idx]
-            default_vram = max(512, selected_gpu.free_mb)
+            default_vram = max(512, selected_gpu.total_mb)
 
-        # Each input field with its own conversion
-        vram_label = "Manually Enter Available VRAM (MB)" if use_manual_vram else "GPU's Available VRAM (MB)"
-        col_vram_input, col_vram_conv = st.columns(2)
-        with col_vram_input:
-            manual_vram = st.number_input(
+        # VRAM and Headroom inputs in columns (both in GB, converted to MB internally)
+        col_vram, col_headroom = st.columns(2)
+        with col_vram:
+            vram_label = "Manually Enter Total VRAM (GB)" if use_manual_vram else "GPU's Total VRAM (GB)"
+            default_vram_gb = default_vram / 1024
+            manual_vram_gb = st.number_input(
                 vram_label,
-                min_value=512,
-                max_value=524288,
-                value=default_vram,
-                step=512,
-                help="Manually specify available VRAM in MB" if use_manual_vram else "Select 'Manually specify VRAM' to edit",
+                min_value=0.5,
+                max_value=512.0,
+                value=default_vram_gb,
+                step=0.5,
+                format="%.1f",
+                help="Manually specify total VRAM in GB" if use_manual_vram else "Select 'Manually specify VRAM' to edit",
                 disabled=not use_manual_vram
             )
-        available_vram = manual_vram if use_manual_vram else selected_gpu.free_mb
-        with col_vram_conv:
-            st.text_input("Available VRAM", value=f"{available_vram/1000:.1f} GB / {available_vram/1024:.1f} GiB", disabled=True)
+        total_vram = int(manual_vram_gb * 1024) if use_manual_vram else selected_gpu.total_mb
 
-        col_head_input, col_head_conv = st.columns(2)
-        with col_head_input:
-            headroom_mb = st.number_input(
-                "VRAM Headroom (MB)",
-                min_value=0,
-                max_value=16384,
-                value=int(config.get("vram_calc_headroom_mb", 2048)),
-                step=256,
+        with col_headroom:
+            saved_headroom_mb = int(config.get("vram_calc_headroom_mb", 2048))
+            headroom_gb = st.number_input(
+                "VRAM Headroom (GB)",
+                min_value=0.0,
+                max_value=16.0,
+                value=saved_headroom_mb / 1024,
+                step=0.25,
+                format="%.2f",
                 help="VRAM to reserve for other applications"
             )
-        with col_head_conv:
-            st.text_input("Headroom", value=f"{headroom_mb/1000:.1f} GB / {headroom_mb/1024:.1f} GiB", disabled=True)
+        headroom_mb = int(headroom_gb * 1024)
 
         col_ctx_input, col_ctx_conv = st.columns(2)
         with col_ctx_input:
@@ -159,44 +159,32 @@ def render_vram_calc_tab(converter: "GGUFConverter", config: Dict[str, Any]) -> 
     with col_gpu_stats:
         if selected_gpu:
             st.subheader(f"{selected_gpu.name} Stats")
-            col_total, col_used, col_free = st.columns(3)
+            col_total, col_avail, col_suggested = st.columns(3)
             with col_total:
                 st.metric("Total VRAM", format_size(selected_gpu.total_mb))
-            with col_used:
-                st.metric("Currently Used VRAM", format_size(selected_gpu.used_mb))
-            with col_free:
+            with col_avail:
                 st.metric("Available VRAM", format_size(selected_gpu.free_mb))
+            with col_suggested:
+                suggested_headroom = selected_gpu.total_mb - selected_gpu.free_mb
+                st.metric("Suggested Headroom", format_size(suggested_headroom))
         else:
             st.subheader("Manually Entered VRAM Stats")
-            st.metric("Available VRAM", format_size(available_vram))
+            st.metric("Total VRAM", format_size(total_vram))
 
-        # VRAM Breakdown (updates dynamically)
-        usable_after_headroom = available_vram - headroom_mb
-        st.markdown(
-            f"Available: **{format_size(available_vram)}** - "
-            f"Headroom: **{format_size(headroom_mb)}** = "
-            f"Usable: **{format_size(max(0, usable_after_headroom))}**"
-        )
-        
+        st.caption("Suggested headroom reflects currently running applications.")
+
         st.markdown("---")
         
         # System RAM Stats
         ram_total, ram_used, ram_avail = get_system_ram_mb()
         st.subheader("System RAM Stats")
-        col_ram_total, col_ram_used, col_ram_free = st.columns(3)
+        col_ram_total, col_ram_avail, col_ram_used = st.columns(3)
         with col_ram_total:
             st.metric("Total RAM", format_size(ram_total))
-        with col_ram_used:
-            st.metric("Currently Used RAM", format_size(ram_used))
-        with col_ram_free:
+        with col_ram_avail:
             st.metric("Available RAM", format_size(ram_avail))
-
-        # RAM Breakdown
-        st.markdown(
-            f"Total: **{format_size(ram_total)}** - "
-            f"Used: **{format_size(ram_used)}** = "
-            f"Available: **{format_size(ram_avail)}**"
-        )
+        with col_ram_used:
+            st.metric("Used RAM", format_size(ram_used))
 
     st.markdown("---")
 
@@ -411,7 +399,10 @@ def render_vram_calc_tab(converter: "GGUFConverter", config: Dict[str, Any]) -> 
                     st.markdown("**Vocab Size:** -")
         else:
             st.subheader("Model Info")
-            st.info("Calculate VRAM to see model details")
+            if no_files:
+                st.info("Select a folder containing GGUF files")
+            else:
+                st.info("Select a model and calculate VRAM to see details")
 
     st.markdown("---")
 
@@ -455,7 +446,7 @@ def render_vram_calc_tab(converter: "GGUFConverter", config: Dict[str, Any]) -> 
                 kv_quant_value = kv_quant_map.get(kv_quant_selected, "f16")
                 result = calculate_vram(
                     model_info,
-                    available_vram_mb=available_vram,
+                    available_vram_mb=total_vram,
                     headroom_mb=headroom_mb,
                     context_size=context_size,
                     kv_cache_quant=kv_quant_value
@@ -473,7 +464,7 @@ def render_vram_calc_tab(converter: "GGUFConverter", config: Dict[str, Any]) -> 
                 config["vram_calc_context_size"] = context_size
                 config["vram_calc_kv_quant"] = kv_quant_selected
                 if use_manual_vram:
-                    config["vram_calc_manual_vram"] = available_vram
+                    config["vram_calc_manual_vram"] = total_vram
                 save_config(config)
                 
                 # Rerun to update the Model Info column immediately
@@ -499,7 +490,7 @@ def render_vram_calc_tab(converter: "GGUFConverter", config: Dict[str, Any]) -> 
             # Calculate RAM offload info for partial loading
             layers_on_cpu = result.total_layers - result.recommended_layers
             ram_offload_mb = layers_on_cpu * result.mb_per_layer
-            ram_total, ram_used, ram_avail = get_system_ram_mb()
+            ram_total, _, ram_avail = get_system_ram_mb()
             ram_offload_pct = (ram_offload_mb / ram_avail * 100) if ram_avail > 0 else 0
 
             col_res_left, col_res_right = st.columns(2)
@@ -633,6 +624,10 @@ def render_vram_calc_tab(converter: "GGUFConverter", config: Dict[str, Any]) -> 
                 )
                 st.code(
                     f'llama-server -m "{model_path}" -ngl {result.recommended_layers} -c {context_size}{kv_flags}',
+                    language="bash"
+                )
+                st.code(
+                    f'llama-bench -m "{model_path}" -ngl {result.recommended_layers}',
                     language="bash"
                 )
 

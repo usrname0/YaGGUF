@@ -45,14 +45,11 @@ class VRAMCalculation:
     recommended_layers: int
     total_layers: int
     mb_per_layer: float
-    model_size_mb: float
     available_vram_mb: float
     headroom_mb: float
     context_overhead_mb: float
-    usable_vram_mb: float
     estimated_usage_mb: float
     fits_entirely: bool
-    offload_percentage: float
     error: Optional[str] = None
 
 
@@ -64,7 +61,6 @@ def get_system_ram_mb() -> tuple[int, int, int]:
         tuple: (total_mb, used_mb, available_mb)
     """
     import platform
-    import sys
     
     total_mb = 0
     available_mb = 0
@@ -529,6 +525,12 @@ def get_gguf_model_info(filepath: Path) -> GGUFModelInfo:
                     info.file_type = _get_file_type_name(int(value))
                     info.quantization_version = int(value)
 
+        # Fallback for vocab_size: use tokenizer.ggml.tokens length if not found
+        if info.vocab_size is None:
+            tokens = metadata.get("tokenizer.ggml.tokens")
+            if tokens is not None and isinstance(tokens, list):
+                info.vocab_size = len(tokens)
+
     except Exception:
         pass  # Failed to read metadata
 
@@ -553,7 +555,6 @@ def _read_gguf_metadata_only(filepath: Path) -> Dict[str, Any]:
         Dictionary of metadata key-value pairs.
     """
     import struct
-    import numpy as np
 
     GGUF_MAGIC = 0x46554747  # "GGUF" in little-endian
 
@@ -734,7 +735,6 @@ def calculate_vram(
     available_vram_mb: float,
     headroom_mb: float = 2048,
     context_size: int = 4096,
-    batch_size: int = 512,
     kv_cache_quant: str = "f16"
 ) -> VRAMCalculation:
     """
@@ -745,7 +745,6 @@ def calculate_vram(
         available_vram_mb: Total available VRAM in MB.
         headroom_mb: VRAM to reserve for other applications.
         context_size: Context window size for KV cache calculation.
-        batch_size: Batch size for inference.
         kv_cache_quant: KV cache quantization type ("f16", "q8_0", or "q4_0").
 
     Returns:
@@ -766,7 +765,6 @@ def calculate_vram(
     context_overhead_mb = _estimate_context_overhead(
         model_info,
         context_size,
-        batch_size,
         kv_cache_quant
     )
 
@@ -778,14 +776,11 @@ def calculate_vram(
             recommended_layers=0,
             total_layers=num_layers,
             mb_per_layer=mb_per_layer,
-            model_size_mb=model_size_mb,
             available_vram_mb=available_vram_mb,
             headroom_mb=headroom_mb,
             context_overhead_mb=context_overhead_mb,
-            usable_vram_mb=usable_vram,
             estimated_usage_mb=0,
             fits_entirely=False,
-            offload_percentage=0,
             error="Not enough VRAM after headroom and context allocation"
         )
 
@@ -796,21 +791,15 @@ def calculate_vram(
     # Estimate actual VRAM usage
     estimated_usage = (recommended * mb_per_layer) + context_overhead_mb
 
-    # Calculate offload percentage
-    offload_pct = (recommended / num_layers) * 100 if num_layers > 0 else 0
-
     return VRAMCalculation(
         recommended_layers=recommended,
         total_layers=num_layers,
         mb_per_layer=mb_per_layer,
-        model_size_mb=model_size_mb,
         available_vram_mb=available_vram_mb,
         headroom_mb=headroom_mb,
         context_overhead_mb=context_overhead_mb,
-        usable_vram_mb=usable_vram,
         estimated_usage_mb=estimated_usage,
         fits_entirely=calculated_layers >= num_layers,
-        offload_percentage=offload_pct,
         error=None
     )
 
@@ -818,7 +807,6 @@ def calculate_vram(
 def _estimate_context_overhead(
     model_info: GGUFModelInfo,
     context_size: int,
-    batch_size: int,
     kv_cache_quant: str = "f16"
 ) -> float:
     """
@@ -827,7 +815,6 @@ def _estimate_context_overhead(
     Args:
         model_info: Model information.
         context_size: Context window size.
-        batch_size: Batch size.
         kv_cache_quant: KV cache quantization type ("f16", "q8_0", or "q4_0").
 
     Returns:
@@ -861,10 +848,7 @@ def _estimate_context_overhead(
     # Add some overhead for activations during inference (~10% of KV cache)
     activation_overhead = kv_cache_mb * 0.1
 
-    # Batch size overhead (minimal for inference)
-    batch_overhead = (batch_size * embedding_length * 2) / (1024 * 1024)
-
-    return kv_cache_mb + activation_overhead + batch_overhead
+    return kv_cache_mb + activation_overhead
 
 
 def format_size(size_mb: float) -> str:
