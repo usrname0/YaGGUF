@@ -429,7 +429,7 @@ def get_binary_version(converter: Any) -> Dict[str, Any]:
             return {
                 "status": "missing",
                 "version": None,
-                "message": "Binaries not installed. Run a conversion or use the update button to download them."
+                "message": "Binaries not installed. If something went wrong try 'Update Binaries - Recommended Version.'"
             }
 
     except Exception as e:
@@ -561,7 +561,7 @@ def get_conversion_scripts_info(converter: Any) -> Dict[str, Any]:
             return {
                 "status": "missing",
                 "version": None,
-                "message": "Conversion scripts repository not found"
+                "message": "Conversion scripts repository not found. If something went wrong try 'Update Conversion Scripts - Recommended Version.'"
             }
 
     except Exception as e:

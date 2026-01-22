@@ -8,11 +8,25 @@ import subprocess
 import platform
 import io
 import os
+import re
 import sys
 from contextlib import redirect_stdout
 from typing import Dict, Any, TYPE_CHECKING
 from colorama import Style
 from ..theme import THEME as theme
+
+
+def strip_ansi_codes(text: str) -> str:
+    """
+    Strip ANSI color/style escape codes from text for clean GUI display.
+
+    Args:
+        text: String potentially containing ANSI escape sequences
+
+    Returns:
+        Clean string with all ANSI codes removed
+    """
+    return re.sub(r'\x1b\[[0-9;]*m', '', text)
 
 from ..gui_utils import (
     get_current_version, check_git_updates_available,
@@ -169,7 +183,7 @@ def render_update_tab(converter: "GGUFConverter", config: Dict[str, Any]) -> Non
                     success = False
 
             output = f.getvalue()
-            output_container.code(output, language='bash')
+            output_container.code(strip_ansi_codes(output), language='bash')
 
             if success:
                 st.rerun()
@@ -193,7 +207,7 @@ def render_update_tab(converter: "GGUFConverter", config: Dict[str, Any]) -> Non
                     success = False
 
             output = f.getvalue()
-            output_container.code(output, language='bash')
+            output_container.code(strip_ansi_codes(output), language='bash')
 
             if success:
                 st.rerun()
@@ -240,7 +254,7 @@ def render_update_tab(converter: "GGUFConverter", config: Dict[str, Any]) -> Non
                     success = False
 
             output = f.getvalue()
-            output_container.code(output, language='bash')
+            output_container.code(strip_ansi_codes(output), language='bash')
 
             if success:
                 st.rerun()
@@ -269,7 +283,7 @@ def render_update_tab(converter: "GGUFConverter", config: Dict[str, Any]) -> Non
                     success = False
 
             output = f.getvalue()
-            output_container.code(output, language='bash')
+            output_container.code(strip_ansi_codes(output), language='bash')
 
             if success:
                 st.rerun()
