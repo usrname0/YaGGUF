@@ -275,20 +275,15 @@ def check_git_updates_available() -> Dict[str, Any]:
     """
     try:
         import urllib.request
-        import os
 
         # Get current version
         current_version = get_current_version()
 
-        # Check GitHub Releases API for latest release
+        # Check GitHub Releases API for latest release (public repo, no auth needed)
         url = "https://api.github.com/repos/usrname0/YaGGUF/releases/latest"
         req = urllib.request.Request(url)
         req.add_header('Accept', 'application/vnd.github.v3+json')
-
-        # Add authentication if token is available
-        github_token = os.environ.get('GITHUB_TOKEN')
-        if github_token:
-            req.add_header('Authorization', f'token {github_token}')
+        req.add_header('User-Agent', 'YaGGUF')
 
         with urllib.request.urlopen(req, timeout=10) as response:
             release_data = json.loads(response.read().decode())
@@ -317,7 +312,11 @@ def check_git_updates_available() -> Dict[str, Any]:
                     "message": "No releases found",
                     "latest_version": None
                 }
-    except Exception:
+    except Exception as e:
+        # Log the actual error to terminal for debugging
+        from colorama import Style
+        from .theme import THEME as theme
+        print(f"{theme['warning']}Warning: Could not check for YaGGUF updates: {e}{Style.RESET_ALL}")
         return {
             "status": "unknown",
             "message": "Could not check for updates",
