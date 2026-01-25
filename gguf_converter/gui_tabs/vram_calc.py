@@ -607,6 +607,7 @@ def render_vram_calc_tab(converter: "GGUFConverter", config: Dict[str, Any]) -> 
 
             with col_res_right:
                 st.subheader("Example Commands")
+                st.caption("Note: -ngl and -c are optional in recent llama.cpp (auto-detected)")
                 model_info = st.session_state.vram_calc_model_info
                 model_path = str(model_info.file_path) if model_info else "model.gguf"
 

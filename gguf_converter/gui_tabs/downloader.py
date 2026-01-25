@@ -14,7 +14,7 @@ from ..theme import THEME as theme
 from ..gui_utils import (
     strip_quotes, open_folder, browse_folder,
     save_config, TKINTER_AVAILABLE, extract_repo_id_from_url,
-    get_platform_path
+    get_platform_path, show_processing_overlay
 )
 
 if TYPE_CHECKING:
@@ -361,6 +361,9 @@ def render_downloader_tab(converter: "GGUFConverter", config: Dict[str, Any]) ->
             config["download_dir"] = download_dir_clean
             save_config(config)
 
+            # Show blocking overlay to prevent interaction during download
+            overlay = show_processing_overlay("Downloading model...")
+
             try:
                 with st.spinner(f"Downloading {repo_id_clean}..."):
                     model_path = converter.download_model(repo_id_clean, download_dir_clean)
@@ -371,9 +374,15 @@ def render_downloader_tab(converter: "GGUFConverter", config: Dict[str, Any]) ->
                 # Store in session state and mark as just completed
                 st.session_state.downloaded_model_path = str(model_path)
                 st.session_state.download_just_completed = True
+
+                # Clear the overlay now that download is complete
+                overlay.empty()
                 st.rerun()
 
             except GatedRepoError as e:
+                # Clear the overlay before showing auth UI
+                overlay.empty()
+
                 # Handle gated repository - show login UI and error below Download button
                 st.session_state.show_hf_login = True
                 st.session_state.gated_repo_id = repo_id_clean
@@ -383,6 +392,9 @@ def render_downloader_tab(converter: "GGUFConverter", config: Dict[str, Any]) ->
                 st.rerun()
 
             except Exception as e:
+                # Clear the overlay on error
+                overlay.empty()
+
                 # Show in Streamlit UI
                 st.error(f"Error: {e}")
 

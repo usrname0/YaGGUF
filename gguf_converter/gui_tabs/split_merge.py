@@ -18,7 +18,7 @@ import shutil
 from ..gui_utils import (
     strip_quotes, open_folder, browse_folder,
     save_config, path_input_columns, get_platform_path,
-    detect_all_model_files
+    detect_all_model_files, show_processing_overlay
 )
 from ..theme import THEME
 
@@ -575,6 +575,9 @@ def render_split_merge_tab(converter, config: Dict[str, Any]):
 
                     print()  # Empty line after header
 
+                    # Show blocking overlay to prevent interaction during merge
+                    overlay = show_processing_overlay("Merging shards...")
+
                     try:
                         with st.spinner(f"Merging {selected_file_info['extension'].upper()} shards..."):
                             if selected_file_info['extension'] == 'gguf':
@@ -593,7 +596,12 @@ def render_split_merge_tab(converter, config: Dict[str, Any]):
                             if copied_files:
                                 st.write(f"+ {len(copied_files)} auxiliary file(s)")
 
+                        # Clear the overlay now that merge is complete
+                        overlay.empty()
+
                     except Exception as e:
+                        # Clear the overlay on error
+                        overlay.empty()
                         st.error(f"Failed to merge: {e}")
                         import traceback
                         st.exception(e)
@@ -660,6 +668,9 @@ def render_split_merge_tab(converter, config: Dict[str, Any]):
 
                     print()  # Empty line after header
 
+                    # Show blocking overlay to prevent interaction during split
+                    overlay = show_processing_overlay("Splitting file...")
+
                     try:
                         with st.spinner(f"Splitting {selected_file_info['extension'].upper()} file..."):
                             if selected_file_info['extension'] == 'gguf':
@@ -679,7 +690,12 @@ def render_split_merge_tab(converter, config: Dict[str, Any]):
                             if copied_files:
                                 st.write(f"+ {len(copied_files)} auxiliary file(s)")
 
+                        # Clear the overlay now that split is complete
+                        overlay.empty()
+
                     except Exception as e:
+                        # Clear the overlay on error
+                        overlay.empty()
                         st.error(f"Failed to split: {e}")
                         import traceback
                         st.exception(e)
@@ -732,6 +748,9 @@ def render_split_merge_tab(converter, config: Dict[str, Any]):
 
                     print()  # Empty line after header
 
+                    # Show blocking overlay to prevent interaction during resplit
+                    overlay = show_processing_overlay("Resplitting shards...")
+
                     try:
                         with st.spinner(f"Resplitting {selected_file_info['extension'].upper()} shards..."):
                             # Deletion happens inside resplit function after merge but before split
@@ -760,7 +779,12 @@ def render_split_merge_tab(converter, config: Dict[str, Any]):
                             if copied_files:
                                 st.write(f"+ {len(copied_files)} auxiliary file(s)")
 
+                        # Clear the overlay now that resplit is complete
+                        overlay.empty()
+
                     except Exception as e:
+                        # Clear the overlay on error
+                        overlay.empty()
                         st.error(f"Failed to resplit: {e}")
                         import traceback
                         st.exception(e)
