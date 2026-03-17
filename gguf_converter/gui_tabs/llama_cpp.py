@@ -32,9 +32,9 @@ def render_llama_cpp_tab(converter: "GGUFConverter", config: Dict[str, Any]) -> 
     st.header("llama.cpp Custom Install")
 
     st.markdown("""
-    YaGGUF automatically downloads CPU binaries (good for most cases) and a repo for model conversion scripts.
-    Those can be managed on the "Update" tab.  
-    You can also opt to use your own specific [llama.cpp](https://github.com/ggml-org/llama.cpp) resources below.  
+    YaGGUF automatically downloads llama.cpp binaries and a repo for model conversion scripts.
+    The GPU backend (CPU, CUDA, Vulkan) can be selected on the "Update" tab before downloading.
+    You can also opt to use your own specific [llama.cpp](https://github.com/ggml-org/llama.cpp) resources below.
     """)
 
     # Local/Custom Binary Settings Section

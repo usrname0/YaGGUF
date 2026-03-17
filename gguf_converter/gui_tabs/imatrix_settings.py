@@ -365,9 +365,10 @@ def render_imatrix_settings_tab(converter: "GGUFConverter", config: Dict[str, An
 
         with col_proc2:
             # GPU offloading
-            # Disable GPU layers when using YaGGUF binaries (CPU-only)
+            # Enabled if using custom binaries, or if YaGGUF's own binaries use a GPU backend
             using_custom_binaries = config.get("use_custom_binaries", False)
-            gpu_disabled = not using_custom_binaries
+            gpu_backend = config.get("gpu_backend", "cpu")
+            gpu_disabled = not using_custom_binaries and gpu_backend == "cpu"
 
             # Auto-save callback for num_gpu_layers
             def save_num_gpu_layers():
@@ -377,11 +378,11 @@ def render_imatrix_settings_tab(converter: "GGUFConverter", config: Dict[str, An
                     save_config(config)
 
             if gpu_disabled:
-                help_text = "Disabled: YaGGUF binaries are CPU-only. Enable custom binaries on the llama.cpp tab to use GPU."
+                help_text = "Disabled: binaries are CPU-only. Select a GPU backend on the Update tab before downloading binaries, or enable custom binaries."
                 gpu_value = 0
             else:
-                help_text = "0 = CPU only, >99 = fully offloaded in most cases."
-                gpu_value = int(config.get("imatrix_num_gpu_layers", 0))
+                help_text = "0 = CPU only, 99 = offload all layers (recommended). GPU offloading speeds up imatrix generation with no quality impact."
+                gpu_value = int(config.get("imatrix_num_gpu_layers", 99))
 
             imatrix_num_gpu_layers_input = st.number_input(
                 "GPU layers (-ngl)",
@@ -396,9 +397,9 @@ def render_imatrix_settings_tab(converter: "GGUFConverter", config: Dict[str, An
             )
             st.caption("Number of model layers to offload to GPU.")
             if gpu_disabled:
-                st.caption("Requires custom GPU-enabled binaries.")
+                st.caption("Select CUDA or Vulkan on the Update tab to enable.")
             else:
-                st.caption("Requires GPU-enabled llama.cpp build.")
+                st.caption("99 offloads all layers for most models.")
 
         with col_proc3:
             # Auto-save callback for no ppl

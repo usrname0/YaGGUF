@@ -34,7 +34,7 @@ class LlamaCppManager:
     Manages llama.cpp resources including binaries and conversion scripts
     """
 
-    LLAMA_CPP_VERSION = "b7836"
+    LLAMA_CPP_VERSION = "b8390"
     RELEASE_URL_TEMPLATE = "https://github.com/ggml-org/llama.cpp/releases/download/{tag}/{filename}"
 
     def __init__(self, bin_dir: Optional[Path] = None, custom_binaries_folder: Optional[str] = None):
@@ -156,13 +156,57 @@ class LlamaCppManager:
             print(f"{theme['info']}Falling back to recommended version: {self.LLAMA_CPP_VERSION}{Style.RESET_ALL}")
             return self.LLAMA_CPP_VERSION
 
-    def update_binaries(self, force: bool = False, version: Optional[str] = None) -> Path:
+    def _bin_info_path(self) -> Path:
+        return self.bin_dir / ".yagguf_bin_info.json"
+
+    def _write_bin_info(self, tag: str, gpu_backend: str) -> None:
+        try:
+            with open(self._bin_info_path(), 'w') as f:
+                json.dump({"version": tag, "gpu_backend": gpu_backend}, f)
+        except Exception:
+            pass  # Non-critical
+
+    def _read_bin_info(self) -> Dict[str, Optional[str]]:
+        try:
+            with open(self._bin_info_path()) as f:
+                data = json.load(f)
+                return {
+                    "version": data.get("version"),
+                    "gpu_backend": data.get("gpu_backend"),
+                }
+        except Exception:
+            return {"version": None, "gpu_backend": None}
+
+    def get_available_gpu_backends(self) -> list:
+        """
+        Return list of (label, value) tuples for available GPU backends on this platform.
+
+        Labels are human-readable, values are used in llama.cpp release filenames.
+        """
+        os_name = self.platform_info['os']
+        if os_name == 'win':
+            return [
+                ("CPU (recommended)", "cpu"),
+                ("CUDA 12.4 (Nvidia)", "cuda-12.4"),
+                ("CUDA 13.1 (Nvidia)", "cuda-13.1"),
+                ("Vulkan (Nvidia/AMD/Intel)", "vulkan"),
+                ("HIP / ROCm (AMD)", "hip-radeon"),
+                ("SYCL (Intel)", "sycl"),
+            ]
+        elif os_name == 'macos':
+            return [("CPU + Metal (built-in)", "cpu")]
+        else:  # ubuntu/linux
+            return [("CPU", "cpu")]
+
+    def update_binaries(self, force: bool = False, version: Optional[str] = None, gpu_backend: str = "cpu") -> Path:
         """
         Update llama.cpp binaries to recommended or specific version
 
         Args:
             force: Force re-download even if binaries exist at target version
             version: Specific version to download (None = use recommended LLAMA_CPP_VERSION)
+            gpu_backend: Backend variant to download (e.g. "cpu", "cuda-cu12.2.0", "vulkan").
+                         Only relevant for Windows; ignored on macOS and Linux.
 
         Returns:
             Path to bin directory containing executables
@@ -179,13 +223,16 @@ class LlamaCppManager:
         print(f"{theme['info']}{timestamp.center(80)}{Style.RESET_ALL}")
         print(f"{theme['info']}{banner_line}{Style.RESET_ALL}\n")
 
-        # Check if binaries exist and match the requested version
+        # Check if binaries exist and match the requested version AND backend
         if not force and self._binaries_exist():
             installed_version = self.get_installed_version_tag()
-            if installed_version == tag:
-                print(f"{theme['info']}Binaries already at version {tag}{Style.RESET_ALL}")
+            installed_backend = self._read_bin_info().get("gpu_backend")
+            if installed_version == tag and installed_backend == gpu_backend:
+                print(f"{theme['info']}Binaries already at version {tag} ({gpu_backend}){Style.RESET_ALL}")
                 print(f"{theme['success']}Binaries ready in {self.bin_dir}{Style.RESET_ALL}")
                 return self.bin_dir
+            elif installed_version == tag and installed_backend != gpu_backend:
+                print(f"{theme['info']}Version matches ({tag}) but backend differs: {installed_backend} → {gpu_backend}{Style.RESET_ALL}")
             elif installed_version:
                 print(f"{theme['info']}Installed version {installed_version} differs from requested {tag}{Style.RESET_ALL}")
             else:
@@ -196,14 +243,13 @@ class LlamaCppManager:
         arch = self.platform_info['arch']
 
         if os_name == "win":
-            build_type = "cuda-cu12.2.0" if self.platform_info.get('cuda') else "cpu"
             ext = "zip"
-            filename = f"llama-{tag}-bin-{os_name}-{build_type}-{arch}.{ext}"
-        elif os_name == "mac":
+            filename = f"llama-{tag}-bin-{os_name}-{gpu_backend}-{arch}.{ext}"
+        elif os_name == "macos":
             variant = self.platform_info['variant']
             ext = "zip"
             filename = f"llama-{tag}-bin-{os_name}-{variant}.{ext}"
-        else:  # linux
+        else:  # linux/ubuntu
             variant = self.platform_info['variant']
             ext = "tar.gz"
             filename = f"llama-{tag}-bin-{os_name}-{variant}.{ext}"
@@ -246,11 +292,29 @@ class LlamaCppManager:
         download_path.unlink()
         print(f"{theme['info']}Extraction complete{Style.RESET_ALL}")
 
+        # For Windows CUDA builds, also download the CUDA runtime DLLs
+        if os_name == "win" and gpu_backend.startswith("cuda"):
+            cudart_filename = f"cudart-llama-bin-win-{gpu_backend}-{arch}.zip"
+            cudart_url = self.RELEASE_URL_TEMPLATE.format(tag=tag, filename=cudart_filename)
+            cudart_path = self.bin_dir / cudart_filename
+            print(f"{theme['info']}Downloading CUDA runtime DLLs...{Style.RESET_ALL}")
+            print(f"{theme['highlight']}{cudart_url}{Style.RESET_ALL}")
+            try:
+                urlretrieve(cudart_url, cudart_path, reporthook=self._progress_hook)
+                print()
+                self._extract_archive(cudart_path)
+                cudart_path.unlink()
+                print(f"{theme['info']}CUDA runtime DLLs extracted{Style.RESET_ALL}")
+            except Exception as e:
+                print(f"{theme['warning']}Warning: Could not download CUDA runtime DLLs: {e}{Style.RESET_ALL}")
+                print(f"{theme['warning']}CUDA may not work correctly without these files.{Style.RESET_ALL}")
+
         # Verify binaries exist
         if not self._check_binary_files_exist():
             raise RuntimeError("Binary extraction succeeded but executables not found")
 
-        print(f"{theme['success']}Installed binary version: {tag}{Style.RESET_ALL}")
+        self._write_bin_info(tag, gpu_backend)
+        print(f"{theme['success']}Installed binary version: {tag} ({gpu_backend}){Style.RESET_ALL}")
         print(f"{theme['success']}Binaries ready in {self.bin_dir}{Style.RESET_ALL}")
         return self.bin_dir
 

@@ -282,7 +282,8 @@ def get_yagguf_server_path() -> Optional[Path]:
         try:
             server_path = manager.get_server_path()
         except RuntimeError:
-            server_path = manager.bin_dir / "llama-server.exe" # Fallback to default check
+            exe_suffix = ".exe" if manager.platform_info['os'] == 'win' else ""
+            server_path = manager.bin_dir / f"llama-server{exe_suffix}"
 
         if server_path.exists():
             return server_path

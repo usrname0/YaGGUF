@@ -71,7 +71,7 @@ def get_default_config() -> Dict[str, Any]:
         "imatrix_no_ppl": False,  # Disable perplexity
         "imatrix_parse_special": False,  # Parse special tokens
         "imatrix_output_frequency": 10,  # Save interval
-        "imatrix_num_gpu_layers": 0,  # GPU layers (0 = CPU only)
+        "imatrix_num_gpu_layers": 99,  # GPU layers (99 = offload all layers)
         "imatrix_stats_model": "",  # Model for statistics utility
         "imatrix_stats_path": "",  # Imatrix file for statistics
         "max_preview_lines": 1000,  # Maximum lines to show in calibration preview
@@ -128,6 +128,7 @@ def get_default_config() -> Dict[str, Any]:
         # Custom binaries
         "use_custom_binaries": False,
         "custom_binaries_folder": "",
+        "gpu_backend": "cpu",  # Backend for auto-downloaded binaries: "cpu", "cuda-cu12.2.0", "vulkan"
 
         # Custom conversion script
         "use_custom_conversion_script": False,
