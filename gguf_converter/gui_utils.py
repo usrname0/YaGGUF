@@ -131,7 +131,8 @@ def get_default_config() -> Dict[str, Any]:
 
         # Custom conversion script
         "use_custom_conversion_script": False,
-        "custom_llama_cpp_repo": ""
+        "custom_llama_cpp_repo": "",
+
     }
 
 
