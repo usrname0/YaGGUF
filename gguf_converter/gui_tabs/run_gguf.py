@@ -1,0 +1,973 @@
+"""
+Run GGUF tab — launch llama-server, llama-cli, or llama-bench against a local GGUF file.
+"""
+
+import streamlit as st
+import webbrowser
+from pathlib import Path
+from typing import Dict, Any, List, Optional, TYPE_CHECKING
+
+from ..gui_utils import (
+    strip_quotes, browse_folder, open_folder, save_config, path_input_columns,
+    get_platform_path, detect_all_model_files, launch_in_terminal,
+    load_presets, save_preset, delete_preset,
+)
+
+if TYPE_CHECKING:
+    from ..converter import GGUFConverter
+
+
+# ---------------------------------------------------------------------------
+# Pure command builders
+# ---------------------------------------------------------------------------
+
+def build_server_cmd(binary_path: str, model_file: str, params: Dict[str, Any]) -> List[str]:
+    cmd = [binary_path, "-m", model_file]
+    cmd += ["-ngl", str(params["ngl"])]
+    cmd += ["-c", str(params["ctx"])]
+    if params.get("flash_attn"):
+        cmd += ["-fa"]
+    if params.get("fit_target", 0) > 0:
+        cmd += ["--fit-target", str(params["fit_target"])]
+    if params.get("cache_type_k", "f16") != "f16":
+        cmd += ["-ctk", params["cache_type_k"]]
+    if params.get("cache_type_v", "f16") != "f16":
+        cmd += ["-ctv", params["cache_type_v"]]
+    cmd += ["--port", str(params["port"])]
+    cmd += ["--host", params["host"]]
+    cmd += ["-np", str(params["parallel"])]
+    cmd += ["--temp", str(params["temp"])]
+    cmd += ["--top-k", str(params["top_k"])]
+    cmd += ["--top-p", str(params["top_p"])]
+    cmd += ["--min-p", str(params["min_p"])]
+    cmd += ["--presence-penalty", str(params["presence_penalty"])]
+    if params.get("jinja"):
+        cmd += ["--jinja"]
+        if params.get("reasoning") and params["reasoning"] != "auto":
+            cmd += ["--reasoning", params["reasoning"]]
+    return cmd
+
+
+def build_cli_cmd(binary_path: str, model_file: str, params: Dict[str, Any]) -> List[str]:
+    cmd = [binary_path, "-m", model_file]
+    cmd += ["-ngl", str(params["ngl"])]
+    cmd += ["-c", str(params["ctx"])]
+    if params.get("flash_attn"):
+        cmd += ["-fa"]
+    if params.get("fit_target", 0) > 0:
+        cmd += ["--fit-target", str(params["fit_target"])]
+    if params.get("cache_type_k", "f16") != "f16":
+        cmd += ["-ctk", params["cache_type_k"]]
+    if params.get("cache_type_v", "f16") != "f16":
+        cmd += ["-ctv", params["cache_type_v"]]
+    cmd += ["--temp", str(params["temp"])]
+    cmd += ["--top-k", str(params["top_k"])]
+    cmd += ["--top-p", str(params["top_p"])]
+    cmd += ["--min-p", str(params["min_p"])]
+    cmd += ["--presence-penalty", str(params["presence_penalty"])]
+    if params.get("jinja"):
+        cmd += ["--jinja"]
+        if params.get("reasoning") and params["reasoning"] != "auto":
+            cmd += ["--reasoning", params["reasoning"]]
+    cmd += ["-cnv"]
+    return cmd
+
+
+def build_bench_cmd(binary_path: str, model_file: str, params: Dict[str, Any]) -> List[str]:
+    cmd = [binary_path, "-m", model_file]
+    cmd += ["-ngl", str(params["ngl"])]
+    cmd += ["-p", str(params["bench_n_prompt"])]
+    cmd += ["-n", str(params["bench_n_gen"])]
+    cmd += ["-b", str(params["bench_batch_size"])]
+    cmd += ["-ub", str(params["bench_ubatch_size"])]
+    cmd += ["-r", str(params["bench_repetitions"])]
+    if params.get("bench_threads", 0) > 0:
+        cmd += ["-t", str(params["bench_threads"])]
+    cmd += ["-ctk", params["bench_cache_type_k"]]
+    cmd += ["-ctv", params["bench_cache_type_v"]]
+    cmd += ["-fa", "1" if params.get("flash_attn") else "0"]
+    cmd += ["-o", params["bench_output"]]
+    if params.get("bench_no_warmup"):
+        cmd += ["--no-warmup"]
+    if params.get("bench_progress"):
+        cmd += ["--progress"]
+    return cmd
+
+
+# ---------------------------------------------------------------------------
+# Tab render function
+# ---------------------------------------------------------------------------
+
+def render_run_gguf_tab(converter: "GGUFConverter", config: Dict[str, Any]) -> None:
+    """Render the Run GGUF tab."""
+    st.header("Run GGUF")
+
+    col1, col2 = st.columns(2)
+
+    # ------------------------------------------------------------------
+    # Left column: model selection, presets, launch buttons
+    # ------------------------------------------------------------------
+    with col1:
+        st.subheader("Model")
+
+        # Model path input
+        cols, has_browse = path_input_columns()
+
+        with cols[0]:
+            path_kwargs: Dict[str, Any] = {
+                "label": "Model folder",
+                "placeholder": get_platform_path(
+                    "C:\\Models\\my-model", "/home/user/Models/my-model"
+                ),
+                "help": "Directory containing GGUF file(s).",
+                "key": "run_model_path_input",
+            }
+            if "run_model_path_input" not in st.session_state:
+                path_kwargs["value"] = config.get("run_model_path", "")
+            run_model_path_str = st.text_input(**path_kwargs)  # type: ignore[arg-type]
+
+        cleaned = strip_quotes(run_model_path_str)
+        if cleaned != config.get("run_model_path", ""):
+            config["run_model_path"] = cleaned
+            config["run_model_file"] = ""
+            save_config(config)
+            st.session_state.run_reset_count += 1
+
+        if has_browse:
+            with cols[1]:
+                st.markdown("<br>", unsafe_allow_html=True)
+                if st.button(
+                    "Select Folder",
+                    key="run_browse_folder_btn",
+                    use_container_width=True,
+                ):
+                    current = config.get("run_model_path", "")
+                    initial = current if current and Path(current).exists() else None
+                    selected = browse_folder(initial)
+                    if selected:
+                        config["run_model_path"] = selected
+                        config["run_model_file"] = ""
+                        save_config(config)
+                        st.session_state.pending_run_model_path = selected
+                        st.rerun()
+
+        with cols[-1]:
+            st.markdown("<br>", unsafe_allow_html=True)
+            if st.button("Open Folder", key="run_open_folder_btn", use_container_width=True):
+                path_clean = strip_quotes(run_model_path_str)
+                if path_clean and Path(path_clean).exists():
+                    try:
+                        open_folder(path_clean)
+                    except Exception as e:
+                        st.error(str(e))
+                else:
+                    st.warning("Folder not found.")
+
+        # Detect GGUF files
+        model_path_clean = strip_quotes(run_model_path_str)
+        model_path = Path(model_path_clean) if model_path_clean else None
+
+        gguf_files: Dict[str, Any] = {}
+        if model_path and model_path.exists():
+            all_files = detect_all_model_files(model_path)
+            gguf_files = {
+                k: v for k, v in all_files.items()
+                if v["extension"] == "gguf"
+                and "mmproj" not in v["display_name"].lower()
+            }
+
+        no_files = not gguf_files
+        if no_files:
+            file_options = ["No files found"]
+            file_keys: List[Optional[str]] = [None]
+        else:
+            file_options = [v["display_name"] for v in gguf_files.values()]
+            file_keys = list(gguf_files.keys())
+
+        saved_file = config.get("run_model_file", "")
+        default_idx = 0
+        if saved_file and not no_files:
+            for i, key in enumerate(file_keys):
+                if key and gguf_files.get(key, {}).get("primary_file") and \
+                        str(gguf_files[key]["primary_file"].name) == saved_file:
+                    default_idx = i
+                    break
+
+        current_select_key = f"run_model_file_select_{st.session_state.run_reset_count}"
+
+        def save_run_model_file():
+            val = st.session_state.get(current_select_key)
+            if val not in file_options:
+                return
+            assert isinstance(val, str)
+            idx = file_options.index(val)
+            selected_key = file_keys[idx]
+            if selected_key and selected_key in gguf_files:
+                config["run_model_file"] = str(gguf_files[selected_key]["primary_file"].name)
+            else:
+                config["run_model_file"] = ""
+            save_config(config)
+
+        gguf_label = "GGUF file" if no_files else f"GGUF file: {len(gguf_files)} detected"
+        st.selectbox(
+            gguf_label,
+            options=file_options,
+            index=default_idx,
+            key=current_select_key,
+            on_change=save_run_model_file,
+            help="Select the GGUF file to run.",
+            disabled=no_files,
+        )
+
+        # Resolve selected file path
+        selected_display = st.session_state.get(current_select_key, "")
+        selected_file_path: Optional[str] = None
+        if not no_files and selected_display and selected_display in file_options:
+            idx = file_options.index(selected_display)
+            key = file_keys[idx]
+            if key and key in gguf_files:
+                selected_file_path = str(gguf_files[key]["primary_file"])
+
+        # ------------------------------------------------------------------
+        # Launch buttons
+        # ------------------------------------------------------------------
+        params = _collect_params(config)
+        binary_dir = _get_binary_dir(converter)
+
+        if params.get("cache_type_v", "f16") != "f16" and not params.get("flash_attn"):
+            st.warning(
+                f"-ctv {params['cache_type_v']} requires Flash Attention (-fa). "
+                "Enable it in the Hardware section."
+            )
+
+        # llama-server
+        server_binary = _find_binary(binary_dir, "llama-server")
+        server_cmd = build_server_cmd(
+            server_binary, selected_file_path or "(no file selected)", params
+        ) if selected_file_path else []
+
+        st.subheader("Launch")
+
+        if st.button(
+            "Launch llama-server",
+            key="run_launch_server_btn",
+            use_container_width=True,
+            disabled=not selected_file_path,
+            help="Start llama-server in a new terminal window",
+        ):
+            assert selected_file_path
+            ok = launch_in_terminal(
+                build_server_cmd(server_binary, selected_file_path, params),
+                window_title="llama-server",
+            )
+            if ok:
+                st.toast("llama-server launched.")
+                if config.get("run_open_browser", True):
+                    host = config.get("run_host", "127.0.0.1")
+                    port = config.get("run_port", 8080)
+                    webbrowser.open(f"http://{host}:{port}")
+            else:
+                st.error("Could not find a terminal emulator to launch llama-server.")
+
+        if server_cmd:
+            st.code(" ".join(server_cmd), language="bash")
+        else:
+            st.caption("Select a GGUF file to see the command.")
+
+        st.markdown("")
+
+        # llama-cli
+        cli_binary = _find_binary(binary_dir, "llama-cli")
+        cli_cmd = build_cli_cmd(
+            cli_binary, selected_file_path or "(no file selected)", params
+        ) if selected_file_path else []
+
+        if st.button(
+            "Launch llama-cli",
+            key="run_launch_cli_btn",
+            use_container_width=True,
+            disabled=not selected_file_path,
+            help="Start an interactive chat session in a new terminal window",
+        ):
+            assert selected_file_path
+            ok = launch_in_terminal(
+                build_cli_cmd(cli_binary, selected_file_path, params),
+                window_title="llama-cli",
+            )
+            if ok:
+                st.toast("llama-cli launched.")
+            else:
+                st.error("Could not find a terminal emulator to launch llama-cli.")
+
+        if cli_cmd:
+            st.code(" ".join(cli_cmd), language="bash")
+        else:
+            st.caption("Select a GGUF file to see the command.")
+
+        st.markdown("")
+
+        # llama-bench
+        bench_binary = _find_binary(binary_dir, "llama-bench")
+        bench_cmd = build_bench_cmd(
+            bench_binary, selected_file_path or "(no file selected)", params
+        ) if selected_file_path else []
+
+        if st.button(
+            "Launch llama-bench",
+            key="run_launch_bench_btn",
+            use_container_width=True,
+            disabled=not selected_file_path,
+            help="Run benchmarks in a new terminal window",
+        ):
+            assert selected_file_path
+            ok = launch_in_terminal(
+                build_bench_cmd(bench_binary, selected_file_path, params),
+                window_title="llama-bench",
+            )
+            if ok:
+                st.toast("llama-bench launched.")
+            else:
+                st.error("Could not find a terminal emulator to launch llama-bench.")
+
+        if bench_cmd:
+            st.code(" ".join(bench_cmd), language="bash")
+        else:
+            st.caption("Select a GGUF file to see the command.")
+
+    # ------------------------------------------------------------------
+    # Right column: parameters in 3 sub-columns
+    # ------------------------------------------------------------------
+    with col2:
+
+        def _make_saver(cfg_key: str, session_key: str):
+            def _save():
+                val = st.session_state.get(session_key)
+                if val is not None:
+                    config[cfg_key] = val
+                    save_config(config)
+            return _save
+
+        # ------------------------------------------------------------------
+        # Presets
+        # ------------------------------------------------------------------
+        with st.expander("Presets", expanded=False):
+            presets = load_presets()
+            preset_names = list(presets.keys())
+
+            preset_select = st.selectbox(
+                "Saved presets",
+                options=["(none)"] + preset_names,
+                key="run_preset_select",
+            )
+
+            preset_name_input = st.text_input(
+                "Preset name",
+                key="run_preset_name_input",
+                placeholder="My preset",
+            )
+
+            btn_col1, btn_col2, btn_col3 = st.columns(3)
+
+            with btn_col1:
+                if st.button("Save", key="run_preset_save_btn", use_container_width=True):
+                    name = preset_name_input.strip()
+                    if name:
+                        params = _collect_params(config)
+                        save_preset(name, params)
+                        st.toast(f"Preset '{name}' saved.")
+                    else:
+                        st.warning("Enter a preset name first.")
+
+            with btn_col2:
+                if st.button("Load", key="run_preset_load_btn", use_container_width=True):
+                    if preset_select != "(none)" and preset_select in presets:
+                        _apply_preset(presets[preset_select], config)
+                        st.rerun()
+                    else:
+                        st.warning("Select a preset to load.")
+
+            with btn_col3:
+                if st.button("Delete", key="run_preset_delete_btn", use_container_width=True):
+                    if preset_select != "(none)" and preset_select in presets:
+                        delete_preset(preset_select)
+                        st.toast(f"Preset '{preset_select}' deleted.")
+                        st.rerun()
+                    else:
+                        st.warning("Select a preset to delete.")
+
+            if st.button(
+                "Restore defaults",
+                key="run_restore_defaults_btn",
+                use_container_width=True,
+                help="Reset all Run GGUF parameters to defaults",
+            ):
+                _reset_run_defaults(config)
+                st.rerun()
+
+        # ------------------------------------------------------------------
+        # Section: Hardware
+        # ------------------------------------------------------------------
+        with st.expander("Hardware (server, cli, bench)", expanded=True):
+            hw_c1, hw_c2, hw_c3 = st.columns(3)
+
+            with hw_c1:
+                ngl_kwargs: Dict[str, Any] = {
+                    "label": "GPU Layers (-ngl)",
+                    "min_value": 0,
+                    "max_value": 999,
+                    "step": 1,
+                    "help": "Number of layers to offload to GPU. 99 = all layers.",
+                    "key": "run_ngl_input",
+                    "on_change": _make_saver("run_ngl", "run_ngl_input"),
+                }
+                if "run_ngl_input" not in st.session_state:
+                    ngl_kwargs["value"] = int(config.get("run_ngl", 99))
+                st.number_input(**ngl_kwargs)  # type: ignore[arg-type]
+
+            with hw_c2:
+                ctx_kwargs: Dict[str, Any] = {
+                    "label": "Context Size (-c)",
+                    "min_value": 512,
+                    "max_value": 131072,
+                    "step": 512,
+                    "help": "Context window size in tokens.",
+                    "key": "run_ctx_input",
+                    "on_change": _make_saver("run_ctx", "run_ctx_input"),
+                }
+                if "run_ctx_input" not in st.session_state:
+                    ctx_kwargs["value"] = int(config.get("run_ctx", 4096))
+                st.number_input(**ctx_kwargs)  # type: ignore[arg-type]
+
+            with hw_c3:
+                st.markdown("<br>", unsafe_allow_html=True)
+                fa_kwargs: Dict[str, Any] = {
+                    "label": "Flash Attention (-fa)",
+                    "help": "Enable flash attention for faster inference (requires compatible GPU).",
+                    "key": "run_flash_attn_checkbox",
+                    "on_change": _make_saver("run_flash_attn", "run_flash_attn_checkbox"),
+                }
+                if "run_flash_attn_checkbox" not in st.session_state:
+                    fa_kwargs["value"] = bool(config.get("run_flash_attn", False))
+                st.checkbox(**fa_kwargs)  # type: ignore[arg-type]
+
+            hw_c4, hw_c5, hw_c6 = st.columns(3)
+            cache_type_options = ["f16", "q8_0", "q4_0", "q4_1", "iq4_nl", "bf16"]
+
+            with hw_c4:
+                fit_target_kwargs: Dict[str, Any] = {
+                    "label": "VRAM headroom (--fit-target, MiB)",
+                    "min_value": 0,
+                    "max_value": 4095,
+                    "step": 256,
+                    "help": (
+                        "Free VRAM to leave on each GPU (MiB) when auto-fitting. "
+                        "0 = omit flag (llama.cpp default: 1024 MiB). "
+                        "Lower values pack more onto GPU; raise if hitting OOM. "
+                        "Has no effect when -ngl is set (auto-fit requires omitting -ngl). "
+                        "Capped at 4095 MiB due to a Windows overflow bug in older llama.cpp builds."
+                    ),
+                    "key": "run_fit_target_input",
+                    "on_change": _make_saver("run_fit_target", "run_fit_target_input"),
+                }
+                if "run_fit_target_input" not in st.session_state:
+                    fit_target_kwargs["value"] = int(config.get("run_fit_target", 0))
+                st.number_input(**fit_target_kwargs)  # type: ignore[arg-type]
+
+            with hw_c5:
+                ctk_kwargs: Dict[str, Any] = {
+                    "label": "KV cache K type (-ctk)",
+                    "options": cache_type_options,
+                    "help": "Quantize the KV cache keys. q8_0 halves memory vs f16 with minimal quality loss.",
+                    "key": "run_cache_type_k_select",
+                    "on_change": _make_saver("run_cache_type_k", "run_cache_type_k_select"),
+                }
+                saved_ctk = config.get("run_cache_type_k", "f16")
+                if "run_cache_type_k_select" not in st.session_state:
+                    ctk_kwargs["index"] = cache_type_options.index(saved_ctk) \
+                        if saved_ctk in cache_type_options else 0
+                st.selectbox(**ctk_kwargs)  # type: ignore[arg-type]
+
+            with hw_c6:
+                ctv_kwargs: Dict[str, Any] = {
+                    "label": "KV cache V type (-ctv)",
+                    "options": cache_type_options,
+                    "help": (
+                        "Quantize the KV cache values. q8_0 halves memory vs f16 with minimal quality loss. "
+                        "Quantized V types require Flash Attention (-fa) — a warning will appear if mismatched."
+                    ),
+                    "key": "run_cache_type_v_select",
+                    "on_change": _make_saver("run_cache_type_v", "run_cache_type_v_select"),
+                }
+                saved_ctv = config.get("run_cache_type_v", "f16")
+                if "run_cache_type_v_select" not in st.session_state:
+                    ctv_kwargs["index"] = cache_type_options.index(saved_ctv) \
+                        if saved_ctv in cache_type_options else 0
+                st.selectbox(**ctv_kwargs)  # type: ignore[arg-type]
+
+        # ------------------------------------------------------------------
+        # Section: Server
+        # ------------------------------------------------------------------
+        with st.expander("Server (llama-server)", expanded=True):
+            sv_c1, sv_c2, sv_c3 = st.columns(3)
+
+            with sv_c1:
+                port_kwargs: Dict[str, Any] = {
+                    "label": "Port (--port)",
+                    "min_value": 1,
+                    "max_value": 65535,
+                    "step": 1,
+                    "help": "Port for llama-server to listen on.",
+                    "key": "run_port_input",
+                    "on_change": _make_saver("run_port", "run_port_input"),
+                }
+                if "run_port_input" not in st.session_state:
+                    port_kwargs["value"] = int(config.get("run_port", 8080))
+                st.number_input(**port_kwargs)  # type: ignore[arg-type]
+
+            with sv_c2:
+                host_kwargs: Dict[str, Any] = {
+                    "label": "Host (--host)",
+                    "help": "Host address for llama-server. Use 0.0.0.0 to expose on LAN.",
+                    "key": "run_host_input",
+                    "on_change": _make_saver("run_host", "run_host_input"),
+                }
+                if "run_host_input" not in st.session_state:
+                    host_kwargs["value"] = config.get("run_host", "127.0.0.1")
+                st.text_input(**host_kwargs)  # type: ignore[arg-type]
+
+            with sv_c3:
+                parallel_kwargs: Dict[str, Any] = {
+                    "label": "Parallel slots (-np)",
+                    "min_value": 1,
+                    "max_value": 64,
+                    "step": 1,
+                    "help": (
+                        "Number of parallel inference slots for llama-server. "
+                        "KV cache is shared across all slots, so effective per-slot context = "
+                        "context size ÷ slots. Use 1 for lowest latency (single user). "
+                        "Increase only if serving multiple concurrent users."
+                    ),
+                    "key": "run_parallel_input",
+                    "on_change": _make_saver("run_parallel", "run_parallel_input"),
+                }
+                if "run_parallel_input" not in st.session_state:
+                    parallel_kwargs["value"] = int(config.get("run_parallel", 1))
+                st.number_input(**parallel_kwargs)  # type: ignore[arg-type]
+
+            st.markdown("")
+            browser_kwargs: Dict[str, Any] = {
+                "label": "Open browser on launch",
+                "help": "Automatically open the browser when launching llama-server.",
+                "key": "run_open_browser_checkbox",
+                "on_change": _make_saver("run_open_browser", "run_open_browser_checkbox"),
+            }
+            if "run_open_browser_checkbox" not in st.session_state:
+                browser_kwargs["value"] = bool(config.get("run_open_browser", True))
+            st.checkbox(**browser_kwargs)  # type: ignore[arg-type]
+
+        # ------------------------------------------------------------------
+        # Section: Generation
+        # ------------------------------------------------------------------
+        with st.expander("Generation (server, cli)", expanded=True):
+            gen_c1, gen_c2, gen_c3 = st.columns(3)
+
+            with gen_c1:
+                temp_kwargs: Dict[str, Any] = {
+                    "label": "Temp (--temp)",
+                    "min_value": 0.0,
+                    "max_value": 5.0,
+                    "step": 0.05,
+                    "format": "%.2f",
+                    "help": "Sampling temperature.",
+                    "key": "run_temp_input",
+                    "on_change": _make_saver("run_temp", "run_temp_input"),
+                }
+                if "run_temp_input" not in st.session_state:
+                    temp_kwargs["value"] = float(config.get("run_temp", 0.8))
+                st.number_input(**temp_kwargs)  # type: ignore[arg-type]
+
+            with gen_c2:
+                topk_kwargs: Dict[str, Any] = {
+                    "label": "Top-K (--top-k)",
+                    "min_value": 0,
+                    "max_value": 1000,
+                    "step": 1,
+                    "help": "Top-K sampling. 0 = disabled.",
+                    "key": "run_top_k_input",
+                    "on_change": _make_saver("run_top_k", "run_top_k_input"),
+                }
+                if "run_top_k_input" not in st.session_state:
+                    topk_kwargs["value"] = int(config.get("run_top_k", 40))
+                st.number_input(**topk_kwargs)  # type: ignore[arg-type]
+
+            with gen_c3:
+                topp_kwargs: Dict[str, Any] = {
+                    "label": "Top-P (--top-p)",
+                    "min_value": 0.0,
+                    "max_value": 1.0,
+                    "step": 0.01,
+                    "format": "%.2f",
+                    "help": "Top-P (nucleus) sampling.",
+                    "key": "run_top_p_input",
+                    "on_change": _make_saver("run_top_p", "run_top_p_input"),
+                }
+                if "run_top_p_input" not in st.session_state:
+                    topp_kwargs["value"] = float(config.get("run_top_p", 0.95))
+                st.number_input(**topp_kwargs)  # type: ignore[arg-type]
+
+            gen_c4, gen_c5, _ = st.columns(3)
+
+            with gen_c4:
+                minp_kwargs: Dict[str, Any] = {
+                    "label": "Min-P (--min-p)",
+                    "min_value": 0.0,
+                    "max_value": 1.0,
+                    "step": 0.01,
+                    "format": "%.2f",
+                    "help": "Min-P sampling threshold.",
+                    "key": "run_min_p_input",
+                    "on_change": _make_saver("run_min_p", "run_min_p_input"),
+                }
+                if "run_min_p_input" not in st.session_state:
+                    minp_kwargs["value"] = float(config.get("run_min_p", 0.05))
+                st.number_input(**minp_kwargs)  # type: ignore[arg-type]
+
+            with gen_c5:
+                pp_kwargs: Dict[str, Any] = {
+                    "label": "Presence (--presence-penalty)",
+                    "min_value": -2.0,
+                    "max_value": 2.0,
+                    "step": 0.05,
+                    "format": "%.2f",
+                    "help": "Presence penalty for repetition reduction.",
+                    "key": "run_presence_penalty_input",
+                    "on_change": _make_saver("run_presence_penalty", "run_presence_penalty_input"),
+                }
+                if "run_presence_penalty_input" not in st.session_state:
+                    pp_kwargs["value"] = float(config.get("run_presence_penalty", 0.0))
+                st.number_input(**pp_kwargs)  # type: ignore[arg-type]
+
+        # ------------------------------------------------------------------
+        # Section: Bench
+        # ------------------------------------------------------------------
+        with st.expander("Bench (llama-bench)", expanded=False):
+            bench_c1, bench_c2, bench_c3 = st.columns(3)
+
+            with bench_c1:
+                bp_kwargs: Dict[str, Any] = {
+                    "label": "Prompt tokens (-p)",
+                    "min_value": 0,
+                    "max_value": 65536,
+                    "step": 64,
+                    "help": "Number of prompt tokens to process.",
+                    "key": "run_bench_n_prompt_input",
+                    "on_change": _make_saver("run_bench_n_prompt", "run_bench_n_prompt_input"),
+                }
+                if "run_bench_n_prompt_input" not in st.session_state:
+                    bp_kwargs["value"] = int(config.get("run_bench_n_prompt", 512))
+                st.number_input(**bp_kwargs)  # type: ignore[arg-type]
+
+            with bench_c2:
+                bg_kwargs: Dict[str, Any] = {
+                    "label": "Gen tokens (-n)",
+                    "min_value": 0,
+                    "max_value": 65536,
+                    "step": 16,
+                    "help": "Number of tokens to generate.",
+                    "key": "run_bench_n_gen_input",
+                    "on_change": _make_saver("run_bench_n_gen", "run_bench_n_gen_input"),
+                }
+                if "run_bench_n_gen_input" not in st.session_state:
+                    bg_kwargs["value"] = int(config.get("run_bench_n_gen", 128))
+                st.number_input(**bg_kwargs)  # type: ignore[arg-type]
+
+            with bench_c3:
+                br_kwargs: Dict[str, Any] = {
+                    "label": "Repetitions (-r)",
+                    "min_value": 1,
+                    "max_value": 50,
+                    "step": 1,
+                    "help": "Number of times to repeat each test.",
+                    "key": "run_bench_repetitions_input",
+                    "on_change": _make_saver("run_bench_repetitions", "run_bench_repetitions_input"),
+                }
+                if "run_bench_repetitions_input" not in st.session_state:
+                    br_kwargs["value"] = int(config.get("run_bench_repetitions", 5))
+                st.number_input(**br_kwargs)  # type: ignore[arg-type]
+
+            bench_c4, bench_c5, bench_c6 = st.columns(3)
+
+            with bench_c4:
+                bb_kwargs: Dict[str, Any] = {
+                    "label": "Batch size (-b)",
+                    "min_value": 1,
+                    "max_value": 65536,
+                    "step": 64,
+                    "help": "Batch size for prompt processing.",
+                    "key": "run_bench_batch_size_input",
+                    "on_change": _make_saver("run_bench_batch_size", "run_bench_batch_size_input"),
+                }
+                if "run_bench_batch_size_input" not in st.session_state:
+                    bb_kwargs["value"] = int(config.get("run_bench_batch_size", 2048))
+                st.number_input(**bb_kwargs)  # type: ignore[arg-type]
+
+            with bench_c5:
+                bub_kwargs: Dict[str, Any] = {
+                    "label": "Ubatch size (-ub)",
+                    "min_value": 1,
+                    "max_value": 65536,
+                    "step": 64,
+                    "help": "Micro-batch size for prompt processing.",
+                    "key": "run_bench_ubatch_size_input",
+                    "on_change": _make_saver("run_bench_ubatch_size", "run_bench_ubatch_size_input"),
+                }
+                if "run_bench_ubatch_size_input" not in st.session_state:
+                    bub_kwargs["value"] = int(config.get("run_bench_ubatch_size", 512))
+                st.number_input(**bub_kwargs)  # type: ignore[arg-type]
+
+            with bench_c6:
+                bt_kwargs: Dict[str, Any] = {
+                    "label": "Threads (-t)",
+                    "min_value": 0,
+                    "max_value": 256,
+                    "step": 1,
+                    "help": "CPU threads. 0 = use llama-bench default.",
+                    "key": "run_bench_threads_input",
+                    "on_change": _make_saver("run_bench_threads", "run_bench_threads_input"),
+                }
+                if "run_bench_threads_input" not in st.session_state:
+                    bt_kwargs["value"] = int(config.get("run_bench_threads", 0))
+                st.number_input(**bt_kwargs)  # type: ignore[arg-type]
+
+            bench_c7, bench_c8, bench_c9 = st.columns(3)
+            cache_type_options = ["f16", "q8_0", "q4_0", "q4_1", "iq4_nl", "bf16"]
+
+            with bench_c7:
+                ctk_kwargs: Dict[str, Any] = {
+                    "label": "Cache type K (-ctk)",
+                    "options": cache_type_options,
+                    "help": "KV cache type for keys. Useful for benchmarking KV quantization.",
+                    "key": "run_bench_cache_type_k_select",
+                    "on_change": _make_saver("run_bench_cache_type_k", "run_bench_cache_type_k_select"),
+                }
+                saved_ctk = config.get("run_bench_cache_type_k", "f16")
+                if "run_bench_cache_type_k_select" not in st.session_state:
+                    ctk_kwargs["index"] = cache_type_options.index(saved_ctk) \
+                        if saved_ctk in cache_type_options else 0
+                st.selectbox(**ctk_kwargs)  # type: ignore[arg-type]
+
+            with bench_c8:
+                ctv_kwargs: Dict[str, Any] = {
+                    "label": "Cache type V (-ctv)",
+                    "options": cache_type_options,
+                    "help": "KV cache type for values.",
+                    "key": "run_bench_cache_type_v_select",
+                    "on_change": _make_saver("run_bench_cache_type_v", "run_bench_cache_type_v_select"),
+                }
+                saved_ctv = config.get("run_bench_cache_type_v", "f16")
+                if "run_bench_cache_type_v_select" not in st.session_state:
+                    ctv_kwargs["index"] = cache_type_options.index(saved_ctv) \
+                        if saved_ctv in cache_type_options else 0
+                st.selectbox(**ctv_kwargs)  # type: ignore[arg-type]
+
+            with bench_c9:
+                output_options = ["md", "csv", "json", "jsonl", "sql"]
+                bo_kwargs: Dict[str, Any] = {
+                    "label": "Output format (-o)",
+                    "options": output_options,
+                    "help": "Output format for benchmark results.",
+                    "key": "run_bench_output_select",
+                    "on_change": _make_saver("run_bench_output", "run_bench_output_select"),
+                }
+                saved_bo = config.get("run_bench_output", "md")
+                if "run_bench_output_select" not in st.session_state:
+                    bo_kwargs["index"] = output_options.index(saved_bo) \
+                        if saved_bo in output_options else 0
+                st.selectbox(**bo_kwargs)  # type: ignore[arg-type]
+
+            bench_chk_c1, bench_chk_c2, _ = st.columns(3)
+
+            with bench_chk_c1:
+                nw_kwargs: Dict[str, Any] = {
+                    "label": "No warmup (--no-warmup)",
+                    "help": "Skip warmup runs before benchmarking.",
+                    "key": "run_bench_no_warmup_checkbox",
+                    "on_change": _make_saver("run_bench_no_warmup", "run_bench_no_warmup_checkbox"),
+                }
+                if "run_bench_no_warmup_checkbox" not in st.session_state:
+                    nw_kwargs["value"] = bool(config.get("run_bench_no_warmup", False))
+                st.checkbox(**nw_kwargs)  # type: ignore[arg-type]
+
+            with bench_chk_c2:
+                prog_kwargs: Dict[str, Any] = {
+                    "label": "Progress (--progress)",
+                    "help": "Print test progress indicators.",
+                    "key": "run_bench_progress_checkbox",
+                    "on_change": _make_saver("run_bench_progress", "run_bench_progress_checkbox"),
+                }
+                if "run_bench_progress_checkbox" not in st.session_state:
+                    prog_kwargs["value"] = bool(config.get("run_bench_progress", False))
+                st.checkbox(**prog_kwargs)  # type: ignore[arg-type]
+
+        # ------------------------------------------------------------------
+        # Section: Template
+        # ------------------------------------------------------------------
+        with st.expander("Template (server, cli)", expanded=True):
+            tmpl_c1, tmpl_c2, _ = st.columns(3)
+
+            with tmpl_c1:
+                st.markdown("<br>", unsafe_allow_html=True)
+                jinja_kwargs: Dict[str, Any] = {
+                    "label": "Jinja templates (--jinja)",
+                    "help": "Enable Jinja2 chat template rendering. Required for --reasoning.",
+                    "key": "run_jinja_checkbox",
+                    "on_change": _make_saver("run_jinja", "run_jinja_checkbox"),
+                }
+                if "run_jinja_checkbox" not in st.session_state:
+                    jinja_kwargs["value"] = bool(config.get("run_jinja", True))
+                jinja_enabled = st.checkbox(**jinja_kwargs)  # type: ignore[arg-type]
+                if "run_jinja_checkbox" in st.session_state:
+                    jinja_enabled = st.session_state["run_jinja_checkbox"]
+
+            with tmpl_c2:
+                reasoning_options = ["off", "on", "auto"]
+                reasoning_kwargs: Dict[str, Any] = {
+                    "label": "Reasoning (--reasoning)",
+                    "options": reasoning_options,
+                    "help": "Reasoning mode. Only emitted when Jinja is enabled. 'auto' is llama.cpp's default (omitted from command).",
+                    "key": "run_reasoning_select",
+                    "on_change": _make_saver("run_reasoning", "run_reasoning_select"),
+                    "disabled": not jinja_enabled,
+                }
+                if "run_reasoning_select" not in st.session_state:
+                    saved_reasoning = config.get("run_reasoning", "off")
+                    reasoning_kwargs["index"] = reasoning_options.index(saved_reasoning) \
+                        if saved_reasoning in reasoning_options else 0
+                st.selectbox(**reasoning_kwargs)  # type: ignore[arg-type]
+
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+def _collect_params(config: Dict[str, Any]) -> Dict[str, Any]:
+    """Collect current inference parameters from session state / config."""
+    return {
+        "ngl": int(st.session_state.get("run_ngl_input", config.get("run_ngl", 99))),
+        "ctx": int(st.session_state.get("run_ctx_input", config.get("run_ctx", 4096))),
+        "flash_attn": bool(st.session_state.get("run_flash_attn_checkbox", config.get("run_flash_attn", False))),
+        "fit_target": int(st.session_state.get("run_fit_target_input", config.get("run_fit_target", 0))),
+        "cache_type_k": str(st.session_state.get("run_cache_type_k_select", config.get("run_cache_type_k", "f16"))),
+        "cache_type_v": str(st.session_state.get("run_cache_type_v_select", config.get("run_cache_type_v", "f16"))),
+        "port": int(st.session_state.get("run_port_input", config.get("run_port", 8080))),
+        "host": str(st.session_state.get("run_host_input", config.get("run_host", "127.0.0.1"))),
+        "parallel": int(st.session_state.get("run_parallel_input", config.get("run_parallel", 1))),
+        "open_browser": bool(st.session_state.get("run_open_browser_checkbox", config.get("run_open_browser", True))),
+        "temp": float(st.session_state.get("run_temp_input", config.get("run_temp", 0.8))),
+        "top_k": int(st.session_state.get("run_top_k_input", config.get("run_top_k", 40))),
+        "top_p": float(st.session_state.get("run_top_p_input", config.get("run_top_p", 0.95))),
+        "min_p": float(st.session_state.get("run_min_p_input", config.get("run_min_p", 0.05))),
+        "presence_penalty": float(st.session_state.get("run_presence_penalty_input", config.get("run_presence_penalty", 0.0))),
+        "jinja": bool(st.session_state.get("run_jinja_checkbox", config.get("run_jinja", True))),
+        "reasoning": str(st.session_state.get("run_reasoning_select", config.get("run_reasoning", "off"))),
+        "bench_n_prompt": int(st.session_state.get("run_bench_n_prompt_input", config.get("run_bench_n_prompt", 512))),
+        "bench_n_gen": int(st.session_state.get("run_bench_n_gen_input", config.get("run_bench_n_gen", 128))),
+        "bench_batch_size": int(st.session_state.get("run_bench_batch_size_input", config.get("run_bench_batch_size", 2048))),
+        "bench_ubatch_size": int(st.session_state.get("run_bench_ubatch_size_input", config.get("run_bench_ubatch_size", 512))),
+        "bench_repetitions": int(st.session_state.get("run_bench_repetitions_input", config.get("run_bench_repetitions", 5))),
+        "bench_threads": int(st.session_state.get("run_bench_threads_input", config.get("run_bench_threads", 0))),
+        "bench_cache_type_k": str(st.session_state.get("run_bench_cache_type_k_select", config.get("run_bench_cache_type_k", "f16"))),
+        "bench_cache_type_v": str(st.session_state.get("run_bench_cache_type_v_select", config.get("run_bench_cache_type_v", "f16"))),
+        "bench_output": str(st.session_state.get("run_bench_output_select", config.get("run_bench_output", "md"))),
+        "bench_no_warmup": bool(st.session_state.get("run_bench_no_warmup_checkbox", config.get("run_bench_no_warmup", False))),
+        "bench_progress": bool(st.session_state.get("run_bench_progress_checkbox", config.get("run_bench_progress", False))),
+    }
+
+
+def _apply_preset(preset: Dict[str, Any], config: Dict[str, Any]) -> None:
+    """Load preset values into config and clear session state widgets so they re-render."""
+    key_map = {
+        "ngl": ("run_ngl", "run_ngl_input"),
+        "ctx": ("run_ctx", "run_ctx_input"),
+        "flash_attn": ("run_flash_attn", "run_flash_attn_checkbox"),
+        "fit_target": ("run_fit_target", "run_fit_target_input"),
+        "cache_type_k": ("run_cache_type_k", "run_cache_type_k_select"),
+        "cache_type_v": ("run_cache_type_v", "run_cache_type_v_select"),
+        "port": ("run_port", "run_port_input"),
+        "host": ("run_host", "run_host_input"),
+        "parallel": ("run_parallel", "run_parallel_input"),
+        "open_browser": ("run_open_browser", "run_open_browser_checkbox"),
+        "temp": ("run_temp", "run_temp_input"),
+        "top_k": ("run_top_k", "run_top_k_input"),
+        "top_p": ("run_top_p", "run_top_p_input"),
+        "min_p": ("run_min_p", "run_min_p_input"),
+        "presence_penalty": ("run_presence_penalty", "run_presence_penalty_input"),
+        "jinja": ("run_jinja", "run_jinja_checkbox"),
+        "reasoning": ("run_reasoning", "run_reasoning_select"),
+        "bench_n_prompt": ("run_bench_n_prompt", "run_bench_n_prompt_input"),
+        "bench_n_gen": ("run_bench_n_gen", "run_bench_n_gen_input"),
+        "bench_batch_size": ("run_bench_batch_size", "run_bench_batch_size_input"),
+        "bench_ubatch_size": ("run_bench_ubatch_size", "run_bench_ubatch_size_input"),
+        "bench_repetitions": ("run_bench_repetitions", "run_bench_repetitions_input"),
+        "bench_threads": ("run_bench_threads", "run_bench_threads_input"),
+        "bench_cache_type_k": ("run_bench_cache_type_k", "run_bench_cache_type_k_select"),
+        "bench_cache_type_v": ("run_bench_cache_type_v", "run_bench_cache_type_v_select"),
+        "bench_output": ("run_bench_output", "run_bench_output_select"),
+        "bench_no_warmup": ("run_bench_no_warmup", "run_bench_no_warmup_checkbox"),
+        "bench_progress": ("run_bench_progress", "run_bench_progress_checkbox"),
+    }
+    for param_key, (cfg_key, session_key) in key_map.items():
+        if param_key in preset:
+            config[cfg_key] = preset[param_key]
+            if session_key in st.session_state:
+                del st.session_state[session_key]
+    from ..gui_utils import save_config as _save_config
+    _save_config(config)
+
+
+def _reset_run_defaults(config: Dict[str, Any]) -> None:
+    """Reset all run_* keys to defaults and clear widget session state."""
+    from ..gui_utils import get_default_config, save_config as _save_config
+    defaults = get_default_config()
+    run_keys = [k for k in defaults if k.startswith("run_")]
+    for k in run_keys:
+        config[k] = defaults[k]
+    _save_config(config)
+    # Clear widget session state so they re-render with defaults
+    widget_keys = [
+        "run_ngl_input", "run_ctx_input", "run_flash_attn_checkbox",
+        "run_fit_target_input", "run_cache_type_k_select", "run_cache_type_v_select",
+        "run_port_input", "run_host_input", "run_parallel_input",
+        "run_open_browser_checkbox", "run_temp_input", "run_top_k_input",
+        "run_top_p_input", "run_min_p_input", "run_presence_penalty_input",
+        "run_jinja_checkbox", "run_reasoning_select",
+        "run_bench_n_prompt_input", "run_bench_n_gen_input",
+        "run_bench_batch_size_input", "run_bench_ubatch_size_input",
+        "run_bench_repetitions_input", "run_bench_threads_input",
+        "run_bench_cache_type_k_select", "run_bench_cache_type_v_select",
+        "run_bench_output_select", "run_bench_no_warmup_checkbox",
+        "run_bench_progress_checkbox",
+    ]
+    for k in widget_keys:
+        if k in st.session_state:
+            del st.session_state[k]
+
+
+def _get_binary_dir(converter: Any) -> Optional[Path]:
+    """Return the directory containing llama.cpp binaries."""
+    try:
+        return converter.llama_cpp_manager.bin_dir
+    except Exception:
+        return None
+
+
+def _find_binary(binary_dir: Optional[Path], name: str) -> str:
+    """Find a binary by name, returning its full path or just the name as fallback."""
+    if binary_dir is None:
+        return name
+    import platform as _platform
+    suffix = ".exe" if _platform.system() == "Windows" else ""
+    candidate = binary_dir / f"{name}{suffix}"
+    if candidate.exists():
+        return str(candidate)
+    return name

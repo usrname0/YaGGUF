@@ -8,6 +8,10 @@ import json
 import re
 import subprocess
 import platform
+import shutil
+import logging
+import tempfile
+import os
 from typing import Dict, Optional, Tuple, Any, Callable, List
 from colorama import Style
 from .theme import THEME as theme
@@ -26,7 +30,9 @@ except ImportError:
 __all__ = ['TKINTER_AVAILABLE', 'browse_folder', 'open_folder', 'strip_quotes',
            'save_config', 'load_config', 'make_config_saver', 'path_input_columns',
            'extract_repo_id_from_url', 'get_platform_path', 'CONFIG_FILE', 'HF_TOKEN_PATH',
-           'STREAMLIT_CONFIG_DIR', 'HF_CACHE_DIR', 'show_processing_overlay']
+           'STREAMLIT_CONFIG_DIR', 'HF_CACHE_DIR', 'show_processing_overlay',
+           'launch_in_terminal', 'get_presets_path', 'load_presets', 'save_presets',
+           'save_preset', 'delete_preset']
 
 
 # Config file location
@@ -134,6 +140,41 @@ def get_default_config() -> Dict[str, Any]:
         "use_custom_conversion_script": False,
         "custom_llama_cpp_repo": "",
 
+        # Run GGUF tab
+        "run_model_path": "",
+        "run_model_file": "",
+        "run_ngl": 99,
+        "run_ctx": 4096,
+        "run_flash_attn": False,
+        "run_fit_target": 0,
+        "run_cache_type_k": "f16",
+        "run_cache_type_v": "f16",
+        "run_port": 8080,
+        "run_host": "127.0.0.1",
+        "run_parallel": 1,
+        "run_open_browser": True,
+        "run_temp": 0.8,
+        "run_top_k": 40,
+        "run_top_p": 0.95,
+        "run_min_p": 0.05,
+        "run_presence_penalty": 0.0,
+        "run_max_tokens": -1,
+        "run_jinja": True,
+        "run_reasoning": "off",
+
+        # Bench-specific params
+        "run_bench_n_prompt": 512,
+        "run_bench_n_gen": 128,
+        "run_bench_batch_size": 2048,
+        "run_bench_ubatch_size": 512,
+        "run_bench_repetitions": 5,
+        "run_bench_threads": 0,
+        "run_bench_output": "md",
+        "run_bench_cache_type_k": "f16",
+        "run_bench_cache_type_v": "f16",
+        "run_bench_no_warmup": False,
+        "run_bench_progress": False,
+
     }
 
 
@@ -191,6 +232,114 @@ def reset_config() -> Dict[str, Any]:
     config = get_default_config()
     save_config(config)
     return config
+
+
+def launch_in_terminal(cmd_args: List[str], window_title: str = "YaGGUF") -> bool:
+    """
+    Launch a command in a new terminal window.
+
+    Args:
+        cmd_args: List of command arguments
+        window_title: Title for the new terminal window
+
+    Returns:
+        True on success, False on failure
+    """
+    system = platform.system()
+    project_root = Path(__file__).parent.parent
+
+    try:
+        if system == "Windows":
+            with tempfile.NamedTemporaryFile(mode='w', suffix='.bat', delete=False) as bat_file:
+                bat_path = bat_file.name
+                bat_file.write('@echo off\n')
+                bat_file.write(f'cd /d "{project_root}"\n')
+                cmd_line = ' '.join(f'"{arg}"' for arg in cmd_args)
+                bat_file.write(f'{cmd_line}\n')
+                bat_file.write('pause\n')
+                bat_file.write('del "%~f0"\n')
+            subprocess.Popen(
+                f'cmd /c start "{window_title}" "{bat_path}"',
+                creationflags=subprocess.CREATE_NO_WINDOW
+            )
+            return True
+
+        elif system == "Darwin":
+            cmd_str = " ".join(f'"{arg}"' for arg in cmd_args)
+            subprocess.Popen([
+                "osascript", "-e",
+                f'tell app "Terminal" to do script "cd {project_root} && {cmd_str}"'
+            ])
+            return True
+
+        else:
+            # Linux: try various terminal emulators
+            cmd_str = " ".join(f'"{arg}"' if " " in arg else arg for arg in cmd_args)
+            terminals = [
+                ("x-terminal-emulator", ["-e", "sh", "-c", f"cd {project_root} && {cmd_str}; read -p 'Press Enter to close...'"]),
+                ("gnome-terminal", ["--", "sh", "-c", f"cd {project_root} && {cmd_str}; read -p 'Press Enter to close...'"]),
+                ("konsole", ["--", "sh", "-c", f"cd {project_root} && {cmd_str}; read -p 'Press Enter to close...'"]),
+                ("xfce4-terminal", ["-x", "sh", "-c", f"cd {project_root} && {cmd_str}; read -p 'Press Enter to close...'"]),
+                ("mate-terminal", ["-e", "sh", "-c", f"cd {project_root} && {cmd_str}; read -p 'Press Enter to close...'"]),
+                ("xterm", ["-e", "sh", "-c", f"cd {project_root} && {cmd_str}; read -p 'Press Enter to close...'"]),
+            ]
+            for term, term_args in terminals:
+                if shutil.which(term):
+                    try:
+                        subprocess.Popen([term] + term_args)
+                        return True
+                    except Exception as e:
+                        logging.debug(f"Failed to launch terminal {term}: {e}")
+                        continue
+            return False
+
+    except Exception as e:
+        logging.error(f"Failed to launch terminal: {e}")
+        return False
+
+
+# Presets file location
+PRESETS_FILE = Path.home() / ".yagguf_presets.json"
+
+
+def get_presets_path() -> Path:
+    """Get the path to the presets file."""
+    return PRESETS_FILE
+
+
+def load_presets() -> Dict[str, Any]:
+    """Load presets from file, returning {} on missing or error."""
+    if PRESETS_FILE.exists():
+        try:
+            with open(PRESETS_FILE, 'r') as f:
+                return json.load(f)
+        except Exception as e:
+            print(f"{theme['warning']}Warning: Could not load presets: {e}{Style.RESET_ALL}", flush=True)
+    return {}
+
+
+def save_presets(presets: Dict[str, Any]) -> None:
+    """Write all presets to file."""
+    try:
+        with open(PRESETS_FILE, 'w') as f:
+            json.dump(presets, f, indent=2)
+    except Exception as e:
+        print(f"{theme['warning']}Warning: Could not save presets: {e}{Style.RESET_ALL}", flush=True)
+
+
+def save_preset(name: str, params: Dict[str, Any]) -> None:
+    """Upsert a single preset by name."""
+    presets = load_presets()
+    presets[name] = params
+    save_presets(presets)
+
+
+def delete_preset(name: str) -> None:
+    """Remove a preset by name."""
+    presets = load_presets()
+    if name in presets:
+        del presets[name]
+        save_presets(presets)
 
 
 def strip_quotes(path_str: str | None) -> str:

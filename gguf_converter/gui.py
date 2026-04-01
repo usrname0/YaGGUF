@@ -6,8 +6,6 @@ import streamlit as st
 import sys
 from pathlib import Path
 import multiprocessing
-import shutil
-import logging
 
 
 def get_python_executable():
@@ -37,9 +35,10 @@ try:
     from . import __version__
     from .converter import GGUFConverter
     from .gui_utils import (
-        load_config, save_config, reset_config, get_default_config
+        load_config, save_config, reset_config, get_default_config, launch_in_terminal
     )
     from .gui_tabs import (
+        render_run_gguf_tab,
         render_convert_tab,
         render_imatrix_settings_tab,
         render_imatrix_stats_tab,
@@ -55,9 +54,10 @@ except ImportError:
     from gguf_converter import __version__
     from gguf_converter.converter import GGUFConverter
     from gguf_converter.gui_utils import (
-        load_config, save_config, reset_config, get_default_config
+        load_config, save_config, reset_config, get_default_config, launch_in_terminal
     )
     from gguf_converter.gui_tabs import (
+        render_run_gguf_tab,
         render_convert_tab,
         render_imatrix_settings_tab,
         render_imatrix_stats_tab,
@@ -110,6 +110,14 @@ def main() -> None:
         st.session_state.model_path_input = st.session_state.pending_model_path
         del st.session_state.pending_model_path
 
+    # Handle run model path from folder browser (before widget creation)
+    if 'run_reset_count' not in st.session_state:
+        st.session_state.run_reset_count = 0
+    if 'pending_run_model_path' in st.session_state:
+        st.session_state.run_model_path_input = st.session_state.pending_run_model_path
+        st.session_state.run_reset_count += 1
+        del st.session_state.pending_run_model_path
+
     # Handle reset to defaults (before widget creation)
     if 'pending_reset_defaults' in st.session_state:
         defaults = get_default_config()
@@ -153,145 +161,46 @@ def main() -> None:
         # Test Models button (only shown when dev_mode is enabled)
         if config.get("dev_mode", False):
             if st.button("Test Models", use_container_width=True, help="Test all GGUF variants in the output directory interactively with llama-server"):
-                import subprocess
-                import platform
                 script_path = Path(__file__).parent.parent / "tests" / "manual_variant_testing.py"
-
-                # Get output directory from config
                 output_dir = config.get("output_dir", "")
-
-                # Get correct Python executable (venv if available)
                 python_exe = get_python_executable()
 
-                # Build command arguments
                 if output_dir and Path(output_dir).exists():
-                    # Run with output directory
                     cmd_args = [python_exe, str(script_path), str(output_dir)]
                     toast_msg = f"Testing variants in: {output_dir}"
                 elif output_dir:
-                    # Output dir set but doesn't exist
                     st.toast(f"Output directory not found: {output_dir}")
                     cmd_args = [python_exe, str(script_path), "--help"]
                     toast_msg = "Showing help (invalid output directory)"
                 else:
-                    # No output dir set, show help
                     st.toast("No output directory set. Showing help.")
                     cmd_args = [python_exe, str(script_path), "--help"]
                     toast_msg = "Showing help (no output directory)"
 
-                # Launch the script in a new terminal window
-                system = platform.system()
-
-                # Get project root directory (needed for all platforms)
-                project_root = Path(__file__).parent.parent
-
-                if system == "Windows":
-                    # Windows: Create a bat file to avoid quoting issues
-                    import tempfile
-                    import os
-
-                    # Create a temporary batch file that self-deletes after execution
-                    with tempfile.NamedTemporaryFile(mode='w', suffix='.bat', delete=False) as bat_file:
-                        bat_path = bat_file.name
-                        # Write commands to batch file
-                        bat_file.write('@echo off\n')
-                        bat_file.write(f'cd /d "{project_root}"\n')  # Change to project directory
-                        # Quote each argument that might have spaces
-                        cmd_line = ' '.join(f'"{arg}"' for arg in cmd_args)
-                        bat_file.write(f'{cmd_line}\n')
-                        bat_file.write('pause\n')
-                        bat_file.write('del "%~f0"\n')  # Self-delete the temp batch file
-
-                    # Launch the batch file in a new window
-                    subprocess.Popen(
-                        ['cmd', '/c', 'start', 'Test Model Variants', bat_path],
-                        creationflags=subprocess.CREATE_NEW_CONSOLE
-                    )
-                elif system == "Darwin":
-                    # macOS: use osascript to open new Terminal window
-                    cmd_str = " ".join(f'"{arg}"' for arg in cmd_args)
-                    subprocess.Popen([
-                        "osascript", "-e",
-                        f'tell app "Terminal" to do script "cd {project_root} && {cmd_str}"'
-                    ])
+                ok = launch_in_terminal(cmd_args, window_title="Test Model Variants")
+                if not ok:
+                    st.error("No compatible terminal emulator found. Please install gnome-terminal, xterm, or another terminal.")
                 else:
-                    # Linux: try various terminal emulators
-                    # x-terminal-emulator is Debian/Ubuntu's default terminal symlink
-                    # For multi-arg commands, wrap in sh -c
-                    cmd_str = " ".join(f'"{arg}"' if " " in arg else arg for arg in cmd_args)
-                    terminals = [
-                        ("x-terminal-emulator", ["-e", "sh", "-c", f"cd {project_root} && {cmd_str}; read -p 'Press Enter to close...'"]),
-                        ("gnome-terminal", ["--", "sh", "-c", f"cd {project_root} && {cmd_str}; read -p 'Press Enter to close...'"]),
-                        ("konsole", ["--", "sh", "-c", f"cd {project_root} && {cmd_str}; read -p 'Press Enter to close...'"]),
-                        ("xfce4-terminal", ["-x", "sh", "-c", f"cd {project_root} && {cmd_str}; read -p 'Press Enter to close...'"]),
-                        ("mate-terminal", ["-e", "sh", "-c", f"cd {project_root} && {cmd_str}; read -p 'Press Enter to close...'"]),
-                        ("xterm", ["-e", "sh", "-c", f"cd {project_root} && {cmd_str}; read -p 'Press Enter to close...'"]),
-                    ]
-                    launched = False
-                    for term, term_args in terminals:
-                        if shutil.which(term):
-                            try:
-                                subprocess.Popen([term] + term_args)
-                                launched = True
-                                break
-                            except Exception as e:
-                                logging.debug(f"Failed to launch terminal {term}: {e}")
-                                continue
-
-                    if not launched:
-                        st.error("No compatible terminal emulator found. Please install gnome-terminal, xterm, or another terminal.")
-                        return
-
-                st.toast(toast_msg)
+                    st.toast(toast_msg)
 
         # Dev Tests button (only shown when dev_mode is enabled)
         if config.get("dev_mode", False):
             if st.button("Dev Tests", use_container_width=True, help="Run the full test suite (pytest) in a new terminal window"):
-                import subprocess
-                import platform
-
-                system = platform.system()
+                import platform as _platform
                 project_root = Path(__file__).parent.parent
-
+                system = _platform.system()
                 if system == "Windows":
                     test_script = project_root / "scripts" / "run_tests.bat"
-                    subprocess.Popen(
-                        ['cmd', '/c', 'start', 'Dev Tests', str(test_script)],
-                        creationflags=subprocess.CREATE_NEW_CONSOLE
-                    )
-                elif system == "Darwin":
-                    test_script = project_root / "scripts" / "run_tests.sh"
-                    subprocess.Popen([
-                        "osascript", "-e",
-                        f'tell app "Terminal" to do script "cd {project_root} && ./scripts/run_tests.sh"'
-                    ])
+                    cmd_args = [str(test_script)]
                 else:
-                    # Linux: try various terminal emulators
                     test_script = project_root / "scripts" / "run_tests.sh"
-                    terminals = [
-                        ("x-terminal-emulator", ["-e", "bash", str(test_script)]),
-                        ("gnome-terminal", ["--", "bash", str(test_script)]),
-                        ("konsole", ["-e", "bash", str(test_script)]),
-                        ("xfce4-terminal", ["-e", "bash", str(test_script)]),
-                        ("mate-terminal", ["-e", "bash", str(test_script)]),
-                        ("xterm", ["-e", "bash", str(test_script)]),
-                    ]
-                    launched = False
-                    for term, term_args in terminals:
-                        if shutil.which(term):
-                            try:
-                                subprocess.Popen([term] + term_args)
-                                launched = True
-                                break
-                            except Exception as e:
-                                logging.debug(f"Failed to launch terminal {term}: {e}")
-                                continue
+                    cmd_args = ["bash", str(test_script)]
 
-                    if not launched:
-                        st.error("No compatible terminal emulator found. Please install gnome-terminal, xterm, or another terminal.")
-                        return
-
-                st.toast("Opening dev tests terminal...")
+                ok = launch_in_terminal(cmd_args, window_title="Dev Tests")
+                if not ok:
+                    st.error("No compatible terminal emulator found. Please install gnome-terminal, xterm, or another terminal.")
+                else:
+                    st.toast("Opening dev tests terminal...")
 
         def save_verbose():
             config["verbose"] = st.session_state.verbose_checkbox
@@ -337,7 +246,8 @@ def main() -> None:
             st.rerun()
 
     # Main content - tabs
-    tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8 = st.tabs([
+    tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8, tab9 = st.tabs([
+        "Run GGUF",
         "Convert & Quantize",
         "Imatrix Settings",
         "Imatrix Statistics",
@@ -349,27 +259,30 @@ def main() -> None:
     ])
 
     with tab1:
-        render_convert_tab(converter, config, verbose, num_threads)
+        render_run_gguf_tab(converter, config)
 
     with tab2:
-        render_imatrix_settings_tab(converter, config)
+        render_convert_tab(converter, config, verbose, num_threads)
 
     with tab3:
-        render_imatrix_stats_tab(converter, config)
+        render_imatrix_settings_tab(converter, config)
 
     with tab4:
-        render_downloader_tab(converter, config)
+        render_imatrix_stats_tab(converter, config)
 
     with tab5:
-        render_split_merge_tab(converter, config)
+        render_downloader_tab(converter, config)
 
     with tab6:
-        render_vram_calc_tab(converter, config)
+        render_split_merge_tab(converter, config)
 
     with tab7:
-        render_info_tab(converter, config)
+        render_vram_calc_tab(converter, config)
 
     with tab8:
+        render_info_tab(converter, config)
+
+    with tab9:
         render_update_tab(converter, config)
 
 
