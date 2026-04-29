@@ -28,7 +28,7 @@ except ImportError:
 
 # Export TKINTER_AVAILABLE for use in other modules
 __all__ = ['TKINTER_AVAILABLE', 'browse_folder', 'open_folder', 'strip_quotes',
-           'save_config', 'load_config', 'make_config_saver', 'path_input_columns',
+           'save_config', 'load_config', 'get_default_config', 'make_config_saver', 'path_input_columns',
            'extract_repo_id_from_url', 'get_platform_path', 'CONFIG_FILE', 'HF_TOKEN_PATH',
            'STREAMLIT_CONFIG_DIR', 'HF_CACHE_DIR', 'show_processing_overlay',
            'launch_in_terminal', 'get_presets_path', 'load_presets', 'save_presets',

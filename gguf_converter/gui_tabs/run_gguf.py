@@ -10,7 +10,7 @@ from typing import Dict, Any, List, Optional, TYPE_CHECKING
 from ..gui_utils import (
     strip_quotes, browse_folder, open_folder, save_config, path_input_columns,
     get_platform_path, detect_all_model_files, launch_in_terminal,
-    load_presets, save_preset, delete_preset,
+    load_presets, save_preset, delete_preset, get_default_config,
 )
 
 if TYPE_CHECKING:
@@ -95,12 +95,39 @@ def build_bench_cmd(binary_path: str, model_file: str, params: Dict[str, Any]) -
 
 
 # ---------------------------------------------------------------------------
+# Dialogs
+# ---------------------------------------------------------------------------
+
+@st.dialog("Save preset")
+def _save_preset_dialog(config: Dict[str, Any]) -> None:
+    name = st.text_input("Preset name", placeholder="My preset", key="run_preset_name_dialog")
+    c1, c2 = st.columns(2)
+    with c1:
+        if st.button("Save", use_container_width=True, type="primary"):
+            stripped = name.strip()
+            if stripped:
+                params = _collect_params(config)
+                save_preset(stripped, params)
+                st.toast(f"Preset '{stripped}' saved.")
+                st.rerun()
+            else:
+                st.warning("Enter a preset name.")
+    with c2:
+        if st.button("Cancel", use_container_width=True):
+            st.rerun()
+
+
+# ---------------------------------------------------------------------------
 # Tab render function
 # ---------------------------------------------------------------------------
 
 def render_run_gguf_tab(converter: "GGUFConverter", config: Dict[str, Any]) -> None:
     """Render the Run GGUF tab."""
     st.header("Run GGUF")
+
+    # Apply pending preset BEFORE any widgets render so session state keys can be set safely.
+    if "pending_preset_load" in st.session_state:
+        _apply_pending_preset(st.session_state.pop("pending_preset_load"), config)
 
     def _make_saver(cfg_key: str, session_key: str):
         def _save():
@@ -353,53 +380,37 @@ def render_run_gguf_tab(converter: "GGUFConverter", config: Dict[str, Any]) -> N
 
             preset_select = st.selectbox(
                 "Saved presets",
-                options=["(none)"] + preset_names,
+                options=["(default presets)"] + preset_names,
                 key="run_preset_select",
-            )
-
-            preset_name_input = st.text_input(
-                "Preset name",
-                key="run_preset_name_input",
-                placeholder="My preset",
             )
 
             btn_col1, btn_col2, btn_col3 = st.columns(3)
 
             with btn_col1:
-                if st.button("Save", key="run_preset_save_btn", use_container_width=True):
-                    name = preset_name_input.strip()
-                    if name:
-                        params = _collect_params(config)
-                        save_preset(name, params)
-                        st.toast(f"Preset '{name}' saved.")
-                    else:
-                        st.warning("Enter a preset name first.")
+                if st.button("Save as...", key="run_preset_save_btn", use_container_width=True):
+                    _save_preset_dialog(config)
 
             with btn_col2:
                 if st.button("Load", key="run_preset_load_btn", use_container_width=True):
-                    if preset_select != "(none)" and preset_select in presets:
-                        _apply_preset(presets[preset_select], config)
+                    if preset_select == "(default presets)":
+                        st.session_state.pending_preset_load = "__defaults__"
                         st.rerun()
-                    else:
-                        st.warning("Select a preset to load.")
+                    elif preset_select in presets:
+                        st.session_state.pending_preset_load = presets[preset_select]
+                        st.rerun()
 
             with btn_col3:
-                if st.button("Delete", key="run_preset_delete_btn", use_container_width=True):
-                    if preset_select != "(none)" and preset_select in presets:
+                is_builtin = preset_select == "(default presets)"
+                if st.button(
+                    "Delete",
+                    key="run_preset_delete_btn",
+                    use_container_width=True,
+                    disabled=is_builtin,
+                ):
+                    if preset_select in presets:
                         delete_preset(preset_select)
                         st.toast(f"Preset '{preset_select}' deleted.")
                         st.rerun()
-                    else:
-                        st.warning("Select a preset to delete.")
-
-            if st.button(
-                "Restore defaults",
-                key="run_restore_defaults_btn",
-                use_container_width=True,
-                help="Reset all Run GGUF parameters to defaults",
-            ):
-                _reset_run_defaults(config)
-                st.rerun()
 
         # ------------------------------------------------------------------
         # Section: Hardware (all modes)
@@ -1064,75 +1075,59 @@ def _collect_params(config: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
-def _apply_preset(preset: Dict[str, Any], config: Dict[str, Any]) -> None:
-    """Load preset values into config and clear session state widgets so they re-render."""
-    key_map = {
-        "mode": ("run_mode", "run_mode_radio"),
-        "ngl": ("run_ngl", "run_ngl_input"),
-        "ctx": ("run_ctx", "run_ctx_input"),
-        "flash_attn": ("run_flash_attn", "run_flash_attn_checkbox"),
-        "fit_target": ("run_fit_target", "run_fit_target_input"),
-        "cache_type_k": ("run_cache_type_k", "run_cache_type_k_select"),
-        "cache_type_v": ("run_cache_type_v", "run_cache_type_v_select"),
-        "port": ("run_port", "run_port_input"),
-        "host": ("run_host", "run_host_input"),
-        "parallel": ("run_parallel", "run_parallel_input"),
-        "open_browser": ("run_open_browser", "run_open_browser_checkbox"),
-        "temp": ("run_temp", "run_temp_input"),
-        "top_k": ("run_top_k", "run_top_k_input"),
-        "top_p": ("run_top_p", "run_top_p_input"),
-        "min_p": ("run_min_p", "run_min_p_input"),
-        "presence_penalty": ("run_presence_penalty", "run_presence_penalty_input"),
-        "jinja": ("run_jinja", "run_jinja_checkbox"),
-        "reasoning": ("run_reasoning", "run_reasoning_select"),
-        "bench_n_prompt": ("run_bench_n_prompt", "run_bench_n_prompt_input"),
-        "bench_n_gen": ("run_bench_n_gen", "run_bench_n_gen_input"),
-        "bench_batch_size": ("run_bench_batch_size", "run_bench_batch_size_input"),
-        "bench_ubatch_size": ("run_bench_ubatch_size", "run_bench_ubatch_size_input"),
-        "bench_repetitions": ("run_bench_repetitions", "run_bench_repetitions_input"),
-        "bench_threads": ("run_bench_threads", "run_bench_threads_input"),
-        "bench_cache_type_k": ("run_bench_cache_type_k", "run_bench_cache_type_k_select"),
-        "bench_cache_type_v": ("run_bench_cache_type_v", "run_bench_cache_type_v_select"),
-        "bench_output": ("run_bench_output", "run_bench_output_select"),
-        "bench_no_warmup": ("run_bench_no_warmup", "run_bench_no_warmup_checkbox"),
-        "bench_progress": ("run_bench_progress", "run_bench_progress_checkbox"),
-    }
-    for param_key, (cfg_key, session_key) in key_map.items():
+_PRESET_KEY_MAP: List[tuple] = [
+    ("mode",             "run_mode",             "run_mode_radio"),
+    ("ngl",              "run_ngl",              "run_ngl_input"),
+    ("ctx",              "run_ctx",              "run_ctx_input"),
+    ("flash_attn",       "run_flash_attn",       "run_flash_attn_checkbox"),
+    ("fit_target",       "run_fit_target",       "run_fit_target_input"),
+    ("cache_type_k",     "run_cache_type_k",     "run_cache_type_k_select"),
+    ("cache_type_v",     "run_cache_type_v",     "run_cache_type_v_select"),
+    ("port",             "run_port",             "run_port_input"),
+    ("host",             "run_host",             "run_host_input"),
+    ("parallel",         "run_parallel",         "run_parallel_input"),
+    ("open_browser",     "run_open_browser",     "run_open_browser_checkbox"),
+    ("temp",             "run_temp",             "run_temp_input"),
+    ("top_k",            "run_top_k",            "run_top_k_input"),
+    ("top_p",            "run_top_p",            "run_top_p_input"),
+    ("min_p",            "run_min_p",            "run_min_p_input"),
+    ("presence_penalty", "run_presence_penalty", "run_presence_penalty_input"),
+    ("jinja",            "run_jinja",            "run_jinja_checkbox"),
+    ("reasoning",        "run_reasoning",        "run_reasoning_select"),
+    ("bench_n_prompt",   "run_bench_n_prompt",   "run_bench_n_prompt_input"),
+    ("bench_n_gen",      "run_bench_n_gen",      "run_bench_n_gen_input"),
+    ("bench_batch_size", "run_bench_batch_size", "run_bench_batch_size_input"),
+    ("bench_ubatch_size","run_bench_ubatch_size","run_bench_ubatch_size_input"),
+    ("bench_repetitions","run_bench_repetitions","run_bench_repetitions_input"),
+    ("bench_threads",    "run_bench_threads",    "run_bench_threads_input"),
+    ("bench_cache_type_k","run_bench_cache_type_k","run_bench_cache_type_k_select"),
+    ("bench_cache_type_v","run_bench_cache_type_v","run_bench_cache_type_v_select"),
+    ("bench_output",     "run_bench_output",     "run_bench_output_select"),
+    ("bench_no_warmup",  "run_bench_no_warmup",  "run_bench_no_warmup_checkbox"),
+    ("bench_progress",   "run_bench_progress",   "run_bench_progress_checkbox"),
+]
+
+
+def _apply_pending_preset(pending: Any, config: Dict[str, Any]) -> None:
+    """Apply a preset (or defaults) to config and session state.
+
+    Must be called BEFORE any widgets render so session state keys can be set
+    directly (setting a key after its widget renders raises StreamlitAPIException).
+    """
+    if pending == "__defaults__":
+        defaults = get_default_config()
+        preset = {param_key: defaults[cfg_key]
+                  for param_key, cfg_key, _ in _PRESET_KEY_MAP
+                  if cfg_key in defaults}
+    else:
+        preset = pending
+
+    for param_key, cfg_key, session_key in _PRESET_KEY_MAP:
         if param_key in preset:
             config[cfg_key] = preset[param_key]
-            if session_key in st.session_state:
-                del st.session_state[session_key]
-    from ..gui_utils import save_config as _save_config
-    _save_config(config)
+            st.session_state[session_key] = preset[param_key]
 
-
-def _reset_run_defaults(config: Dict[str, Any]) -> None:
-    """Reset all run_* keys to defaults and clear widget session state."""
-    from ..gui_utils import get_default_config, save_config as _save_config
-    defaults = get_default_config()
-    run_keys = [k for k in defaults if k.startswith("run_")]
-    for k in run_keys:
-        config[k] = defaults[k]
-    _save_config(config)
-    widget_keys = [
-        "run_mode_radio",
-        "run_ngl_input", "run_flash_attn_checkbox",
-        "run_ctx_input", "run_fit_target_input",
-        "run_cache_type_k_select", "run_cache_type_v_select",
-        "run_port_input", "run_host_input", "run_parallel_input",
-        "run_open_browser_checkbox", "run_temp_input", "run_top_k_input",
-        "run_top_p_input", "run_min_p_input", "run_presence_penalty_input",
-        "run_jinja_checkbox", "run_reasoning_select",
-        "run_bench_n_prompt_input", "run_bench_n_gen_input",
-        "run_bench_batch_size_input", "run_bench_ubatch_size_input",
-        "run_bench_repetitions_input", "run_bench_threads_input",
-        "run_bench_cache_type_k_select", "run_bench_cache_type_v_select",
-        "run_bench_output_select", "run_bench_no_warmup_checkbox",
-        "run_bench_progress_checkbox",
-    ]
-    for k in widget_keys:
-        if k in st.session_state:
-            del st.session_state[k]
+    save_config(config)
 
 
 def _get_binary_dir(converter: Any) -> Optional[Path]:
