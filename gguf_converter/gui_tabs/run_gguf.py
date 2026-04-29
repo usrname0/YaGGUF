@@ -378,39 +378,38 @@ def render_run_gguf_tab(converter: "GGUFConverter", config: Dict[str, Any]) -> N
             presets = load_presets()
             preset_names = list(presets.keys())
 
-            preset_select = st.selectbox(
-                "Saved presets",
-                options=["(default presets)"] + preset_names,
-                key="run_preset_select",
-            )
+            if st.button("Save as...", key="run_preset_save_btn", use_container_width=True):
+                _save_preset_dialog(config)
 
-            btn_col1, btn_col2, btn_col3 = st.columns(3)
+            st.markdown("---")
 
-            with btn_col1:
-                if st.button("Save as...", key="run_preset_save_btn", use_container_width=True):
-                    _save_preset_dialog(config)
+            # Defaults row
+            dc1, dc2, dc3 = st.columns([4, 1, 1])
+            with dc1:
+                st.markdown("*(defaults)*")
+            with dc2:
+                if st.button("Load", key="run_preset_load_defaults", use_container_width=True):
+                    st.session_state.pending_preset_load = "__defaults__"
+                    st.rerun()
+            with dc3:
+                st.button("Delete", key="run_preset_delete_defaults", disabled=True, use_container_width=True)
 
-            with btn_col2:
-                if st.button("Load", key="run_preset_load_btn", use_container_width=True):
-                    if preset_select == "(default presets)":
-                        st.session_state.pending_preset_load = "__defaults__"
+            for i, name in enumerate(preset_names):
+                pc1, pc2, pc3 = st.columns([4, 1, 1])
+                with pc1:
+                    st.markdown(name)
+                with pc2:
+                    if st.button("Load", key=f"run_preset_load_{i}", use_container_width=True):
+                        st.session_state.pending_preset_load = presets[name]
                         st.rerun()
-                    elif preset_select in presets:
-                        st.session_state.pending_preset_load = presets[preset_select]
+                with pc3:
+                    if st.button("Delete", key=f"run_preset_delete_{i}", use_container_width=True):
+                        delete_preset(name)
+                        st.toast(f"Preset '{name}' deleted.")
                         st.rerun()
 
-            with btn_col3:
-                is_builtin = preset_select == "(default presets)"
-                if st.button(
-                    "Delete",
-                    key="run_preset_delete_btn",
-                    use_container_width=True,
-                    disabled=is_builtin,
-                ):
-                    if preset_select in presets:
-                        delete_preset(preset_select)
-                        st.toast(f"Preset '{preset_select}' deleted.")
-                        st.rerun()
+            if not preset_names:
+                st.caption("No saved presets yet.")
 
         # ------------------------------------------------------------------
         # Section: Hardware (all modes)
