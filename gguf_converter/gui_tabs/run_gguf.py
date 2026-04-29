@@ -23,12 +23,16 @@ if TYPE_CHECKING:
 
 def build_server_cmd(binary_path: str, model_file: str, params: Dict[str, Any]) -> List[str]:
     cmd = [binary_path, "-m", model_file]
-    cmd += ["-ngl", str(params["ngl"])]
-    cmd += ["-c", str(params["ctx"])]
-    if params.get("flash_attn"):
-        cmd += ["-fa"]
-    if params.get("fit_target", 0) > 0:
-        cmd += ["--fit-target", str(params["fit_target"])]
+    if params.get("auto_fit", True):
+        if params.get("fit_target", 0) > 0:
+            cmd += ["--fit-target", str(params["fit_target"])]
+        if params.get("fit_ctx", 0) > 0:
+            cmd += ["--fit-ctx", str(params["fit_ctx"])]
+    else:
+        cmd += ["-ngl", str(params["ngl"])]
+        cmd += ["-c", str(params["ctx"])]
+        if params.get("flash_attn"):
+            cmd += ["-fa", "on"]
     if params.get("cache_type_k", "f16") != "f16":
         cmd += ["-ctk", params["cache_type_k"]]
     if params.get("cache_type_v", "f16") != "f16":
@@ -50,12 +54,16 @@ def build_server_cmd(binary_path: str, model_file: str, params: Dict[str, Any]) 
 
 def build_cli_cmd(binary_path: str, model_file: str, params: Dict[str, Any]) -> List[str]:
     cmd = [binary_path, "-m", model_file]
-    cmd += ["-ngl", str(params["ngl"])]
-    cmd += ["-c", str(params["ctx"])]
-    if params.get("flash_attn"):
-        cmd += ["-fa"]
-    if params.get("fit_target", 0) > 0:
-        cmd += ["--fit-target", str(params["fit_target"])]
+    if params.get("auto_fit", True):
+        if params.get("fit_target", 0) > 0:
+            cmd += ["--fit-target", str(params["fit_target"])]
+        if params.get("fit_ctx", 0) > 0:
+            cmd += ["--fit-ctx", str(params["fit_ctx"])]
+    else:
+        cmd += ["-ngl", str(params["ngl"])]
+        cmd += ["-c", str(params["ctx"])]
+        if params.get("flash_attn"):
+            cmd += ["-fa", "on"]
     if params.get("cache_type_k", "f16") != "f16":
         cmd += ["-ctk", params["cache_type_k"]]
     if params.get("cache_type_v", "f16") != "f16":
@@ -75,7 +83,8 @@ def build_cli_cmd(binary_path: str, model_file: str, params: Dict[str, Any]) -> 
 
 def build_bench_cmd(binary_path: str, model_file: str, params: Dict[str, Any]) -> List[str]:
     cmd = [binary_path, "-m", model_file]
-    cmd += ["-ngl", str(params["ngl"])]
+    if not params.get("auto_fit", True):
+        cmd += ["-ngl", str(params["ngl"])]
     cmd += ["-p", str(params["bench_n_prompt"])]
     cmd += ["-n", str(params["bench_n_gen"])]
     cmd += ["-b", str(params["bench_batch_size"])]
@@ -284,7 +293,7 @@ def render_run_gguf_tab(converter: "GGUFConverter", config: Dict[str, Any]) -> N
         params = _collect_params(config)
         binary_dir = _get_binary_dir(converter)
 
-        if current_mode in ("llama-server", "llama-cli"):
+        if current_mode in ("llama-server", "llama-cli") and not params.get("auto_fit", True):
             if params.get("cache_type_v", "f16") != "f16" and not params.get("flash_attn"):
                 st.warning(
                     f"-ctv {params['cache_type_v']} requires Flash Attention (-fa). "
@@ -415,33 +424,101 @@ def render_run_gguf_tab(converter: "GGUFConverter", config: Dict[str, Any]) -> N
         # Section: Hardware (all modes)
         # ------------------------------------------------------------------
         with st.expander("Hardware", expanded=True):
-            hw_c1, hw_c2, _ = st.columns(3)
+            auto_fit_options = ["Auto", "Manual"]
+            def _save_auto_fit():
+                config["run_auto_fit"] = st.session_state.get("run_auto_fit_radio") == "Auto"
+                save_config(config)
 
-            with hw_c1:
-                ngl_kwargs: Dict[str, Any] = {
-                    "label": "GPU Layers (-ngl)",
-                    "min_value": 0,
-                    "max_value": 999,
-                    "step": 1,
-                    "help": "Number of layers to offload to GPU. 99 = all layers.",
-                    "key": "run_ngl_input",
-                    "on_change": _make_saver("run_ngl", "run_ngl_input"),
-                }
-                if "run_ngl_input" not in st.session_state:
-                    ngl_kwargs["value"] = int(config.get("run_ngl", 99))
-                st.number_input(**ngl_kwargs)  # type: ignore[arg-type]
+            auto_fit_kwargs: Dict[str, Any] = {
+                "label": "GPU configuration",
+                "options": auto_fit_options,
+                "horizontal": True,
+                "key": "run_auto_fit_radio",
+                "on_change": _save_auto_fit,
+                "help": (
+                    "**Auto**: llama.cpp auto-fits GPU layers, context, and flash attention "
+                    "to your hardware. Use --fit-target to control VRAM headroom.\n\n"
+                    "**Manual**: Explicitly set GPU layers, context size, and flash attention."
+                ),
+            }
+            if "run_auto_fit_radio" not in st.session_state:
+                saved_auto_fit = config.get("run_auto_fit", True)
+                auto_fit_kwargs["index"] = 0 if saved_auto_fit else 1
+            st.radio(**auto_fit_kwargs)  # type: ignore[arg-type]
+            current_auto_fit = st.session_state.get("run_auto_fit_radio", auto_fit_options[0]) == "Auto"
 
-            with hw_c2:
-                st.markdown("<br>", unsafe_allow_html=True)
-                fa_kwargs: Dict[str, Any] = {
-                    "label": "Flash Attention (-fa)",
-                    "help": "Enable flash attention for faster inference (requires compatible GPU).",
-                    "key": "run_flash_attn_checkbox",
-                    "on_change": _make_saver("run_flash_attn", "run_flash_attn_checkbox"),
-                }
-                if "run_flash_attn_checkbox" not in st.session_state:
-                    fa_kwargs["value"] = bool(config.get("run_flash_attn", False))
-                st.checkbox(**fa_kwargs)  # type: ignore[arg-type]
+            st.markdown("---")
+
+            if current_auto_fit:
+                hw_c1, hw_c2, _ = st.columns(3)
+
+                with hw_c1:
+                    fit_target_kwargs: Dict[str, Any] = {
+                        "label": "VRAM headroom (--fit-target, MiB)",
+                        "min_value": 0,
+                        "max_value": 4095,
+                        "step": 256,
+                        "help": (
+                            "Free VRAM to leave on each GPU (MiB) when auto-fitting. "
+                            "llama.cpp default: 1024 MiB. "
+                            "Lower values pack more onto GPU; raise if hitting OOM. "
+                            "0 = omit flag (use llama.cpp default). "
+                            "Capped at 4095 MiB due to a Windows overflow bug in older builds."
+                        ),
+                        "key": "run_fit_target_input",
+                        "on_change": _make_saver("run_fit_target", "run_fit_target_input"),
+                    }
+                    if "run_fit_target_input" not in st.session_state:
+                        fit_target_kwargs["value"] = int(config.get("run_fit_target", 1024))
+                    st.number_input(**fit_target_kwargs)  # type: ignore[arg-type]
+
+                with hw_c2:
+                    fit_ctx_kwargs: Dict[str, Any] = {
+                        "label": "Min context (--fit-ctx, tokens)",
+                        "min_value": 0,
+                        "max_value": 131072,
+                        "step": 512,
+                        "help": (
+                            "Minimum context size that --fit is allowed to set. "
+                            "llama.cpp default: 4096. "
+                            "0 = omit flag (use llama.cpp default). "
+                            "Raise this if you want auto-fit to guarantee a larger context."
+                        ),
+                        "key": "run_fit_ctx_input",
+                        "on_change": _make_saver("run_fit_ctx", "run_fit_ctx_input"),
+                    }
+                    if "run_fit_ctx_input" not in st.session_state:
+                        fit_ctx_kwargs["value"] = int(config.get("run_fit_ctx", 0))
+                    st.number_input(**fit_ctx_kwargs)  # type: ignore[arg-type]
+
+            else:
+                hw_c1, hw_c2, _ = st.columns(3)
+
+                with hw_c1:
+                    ngl_kwargs: Dict[str, Any] = {
+                        "label": "GPU Layers (-ngl)",
+                        "min_value": 0,
+                        "max_value": 999,
+                        "step": 1,
+                        "help": "Number of layers to offload to GPU. 99 = all layers.",
+                        "key": "run_ngl_input",
+                        "on_change": _make_saver("run_ngl", "run_ngl_input"),
+                    }
+                    if "run_ngl_input" not in st.session_state:
+                        ngl_kwargs["value"] = int(config.get("run_ngl", 99))
+                    st.number_input(**ngl_kwargs)  # type: ignore[arg-type]
+
+                with hw_c2:
+                    st.markdown("<br>", unsafe_allow_html=True)
+                    fa_kwargs: Dict[str, Any] = {
+                        "label": "Flash Attention (-fa on)",
+                        "help": "Enable flash attention for faster inference (requires compatible GPU).",
+                        "key": "run_flash_attn_checkbox",
+                        "on_change": _make_saver("run_flash_attn", "run_flash_attn_checkbox"),
+                    }
+                    if "run_flash_attn_checkbox" not in st.session_state:
+                        fa_kwargs["value"] = bool(config.get("run_flash_attn", False))
+                    st.checkbox(**fa_kwargs)  # type: ignore[arg-type]
 
         # ------------------------------------------------------------------
         # Mode-specific settings
@@ -450,9 +527,11 @@ def render_run_gguf_tab(converter: "GGUFConverter", config: Dict[str, Any]) -> N
 
         if current_mode == "llama-server":
             with st.expander("Server Settings", expanded=True):
-                r1c1, r1c2, _ = st.columns(3)
-
-                with r1c1:
+                if current_auto_fit:
+                    fit_ctx_val = int(st.session_state.get("run_fit_ctx_input", config.get("run_fit_ctx", 0)))
+                    min_ctx_str = f"{fit_ctx_val:,}" if fit_ctx_val > 0 else "4,096 (llama.cpp default)"
+                    st.caption(f"Context size: auto-configured by --fit (minimum: {min_ctx_str} tokens). Set in Hardware.")
+                else:
                     ctx_kwargs: Dict[str, Any] = {
                         "label": "Context Size (-c)",
                         "min_value": 512,
@@ -465,26 +544,6 @@ def render_run_gguf_tab(converter: "GGUFConverter", config: Dict[str, Any]) -> N
                     if "run_ctx_input" not in st.session_state:
                         ctx_kwargs["value"] = int(config.get("run_ctx", 4096))
                     st.number_input(**ctx_kwargs)  # type: ignore[arg-type]
-
-                with r1c2:
-                    fit_target_kwargs: Dict[str, Any] = {
-                        "label": "VRAM headroom (--fit-target, MiB)",
-                        "min_value": 0,
-                        "max_value": 4095,
-                        "step": 256,
-                        "help": (
-                            "Free VRAM to leave on each GPU (MiB) when auto-fitting. "
-                            "0 = omit flag (llama.cpp default: 1024 MiB). "
-                            "Lower values pack more onto GPU; raise if hitting OOM. "
-                            "Has no effect when -ngl is set (auto-fit requires omitting -ngl). "
-                            "Capped at 4095 MiB due to a Windows overflow bug in older llama.cpp builds."
-                        ),
-                        "key": "run_fit_target_input",
-                        "on_change": _make_saver("run_fit_target", "run_fit_target_input"),
-                    }
-                    if "run_fit_target_input" not in st.session_state:
-                        fit_target_kwargs["value"] = int(config.get("run_fit_target", 0))
-                    st.number_input(**fit_target_kwargs)  # type: ignore[arg-type]
 
                 r2c1, r2c2, _ = st.columns(3)
 
@@ -693,9 +752,11 @@ def render_run_gguf_tab(converter: "GGUFConverter", config: Dict[str, Any]) -> N
 
         elif current_mode == "llama-cli":
             with st.expander("CLI Settings", expanded=True):
-                r1c1, r1c2, _ = st.columns(3)
-
-                with r1c1:
+                if current_auto_fit:
+                    fit_ctx_val = int(st.session_state.get("run_fit_ctx_input", config.get("run_fit_ctx", 0)))
+                    min_ctx_str = f"{fit_ctx_val:,}" if fit_ctx_val > 0 else "4,096 (llama.cpp default)"
+                    st.caption(f"Context size: auto-configured by --fit (minimum: {min_ctx_str} tokens). Set in Hardware.")
+                else:
                     ctx_kwargs = {
                         "label": "Context Size (-c)",
                         "min_value": 512,
@@ -708,25 +769,6 @@ def render_run_gguf_tab(converter: "GGUFConverter", config: Dict[str, Any]) -> N
                     if "run_ctx_input" not in st.session_state:
                         ctx_kwargs["value"] = int(config.get("run_ctx", 4096))
                     st.number_input(**ctx_kwargs)  # type: ignore[arg-type]
-
-                with r1c2:
-                    fit_target_kwargs = {
-                        "label": "VRAM headroom (--fit-target, MiB)",
-                        "min_value": 0,
-                        "max_value": 4095,
-                        "step": 256,
-                        "help": (
-                            "Free VRAM to leave on each GPU (MiB) when auto-fitting. "
-                            "0 = omit flag (llama.cpp default: 1024 MiB). "
-                            "Has no effect when -ngl is set. "
-                            "Capped at 4095 MiB due to a Windows overflow bug in older llama.cpp builds."
-                        ),
-                        "key": "run_fit_target_input",
-                        "on_change": _make_saver("run_fit_target", "run_fit_target_input"),
-                    }
-                    if "run_fit_target_input" not in st.session_state:
-                        fit_target_kwargs["value"] = int(config.get("run_fit_target", 0))
-                    st.number_input(**fit_target_kwargs)  # type: ignore[arg-type]
 
                 r2c1, r2c2, _ = st.columns(3)
 
@@ -1041,12 +1083,16 @@ def render_run_gguf_tab(converter: "GGUFConverter", config: Dict[str, Any]) -> N
 
 def _collect_params(config: Dict[str, Any]) -> Dict[str, Any]:
     """Collect current inference parameters from session state / config."""
+    saved_auto_fit = config.get("run_auto_fit", True)
+    radio_val = st.session_state.get("run_auto_fit_radio", "Auto" if saved_auto_fit else "Manual")
     return {
         "mode": str(st.session_state.get("run_mode_radio", config.get("run_mode", "llama-server"))),
+        "auto_fit": radio_val == "Auto",
         "ngl": int(st.session_state.get("run_ngl_input", config.get("run_ngl", 99))),
         "ctx": int(st.session_state.get("run_ctx_input", config.get("run_ctx", 4096))),
         "flash_attn": bool(st.session_state.get("run_flash_attn_checkbox", config.get("run_flash_attn", False))),
-        "fit_target": int(st.session_state.get("run_fit_target_input", config.get("run_fit_target", 0))),
+        "fit_target": int(st.session_state.get("run_fit_target_input", config.get("run_fit_target", 1024))),
+        "fit_ctx": int(st.session_state.get("run_fit_ctx_input", config.get("run_fit_ctx", 0))),
         "cache_type_k": str(st.session_state.get("run_cache_type_k_select", config.get("run_cache_type_k", "f16"))),
         "cache_type_v": str(st.session_state.get("run_cache_type_v_select", config.get("run_cache_type_v", "f16"))),
         "port": int(st.session_state.get("run_port_input", config.get("run_port", 8080))),
@@ -1076,10 +1122,12 @@ def _collect_params(config: Dict[str, Any]) -> Dict[str, Any]:
 
 _PRESET_KEY_MAP: List[tuple] = [
     ("mode",             "run_mode",             "run_mode_radio"),
+    ("auto_fit",         "run_auto_fit",         "run_auto_fit_radio"),
     ("ngl",              "run_ngl",              "run_ngl_input"),
     ("ctx",              "run_ctx",              "run_ctx_input"),
     ("flash_attn",       "run_flash_attn",       "run_flash_attn_checkbox"),
     ("fit_target",       "run_fit_target",       "run_fit_target_input"),
+    ("fit_ctx",          "run_fit_ctx",          "run_fit_ctx_input"),
     ("cache_type_k",     "run_cache_type_k",     "run_cache_type_k_select"),
     ("cache_type_v",     "run_cache_type_v",     "run_cache_type_v_select"),
     ("port",             "run_port",             "run_port_input"),
@@ -1123,8 +1171,13 @@ def _apply_pending_preset(pending: Any, config: Dict[str, Any]) -> None:
 
     for param_key, cfg_key, session_key in _PRESET_KEY_MAP:
         if param_key in preset:
-            config[cfg_key] = preset[param_key]
-            st.session_state[session_key] = preset[param_key]
+            val = preset[param_key]
+            config[cfg_key] = val
+            # Radio widgets need their string option value, not the stored bool
+            if param_key == "auto_fit":
+                st.session_state[session_key] = "Auto" if val else "Manual"
+            else:
+                st.session_state[session_key] = val
 
     save_config(config)
 
