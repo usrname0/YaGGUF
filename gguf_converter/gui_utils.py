@@ -143,6 +143,7 @@ def get_default_config() -> Dict[str, Any]:
         # Run GGUF tab
         "run_model_path": "",
         "run_model_file": "",
+        "run_mode": "llama-server",
         "run_ngl": 99,
         "run_ctx": 4096,
         "run_flash_attn": False,
@@ -970,6 +971,64 @@ def detect_all_model_files(model_path: Path) -> Dict[str, Dict[str, Any]]:
                     'total_size_gb': total_size_gb,
                     'display_name': display_name
                 }
+
+    # Detect PyTorch checkpoint files (.ckpt, .pt, .pth) - always single files
+    for ext in ['ckpt', 'pt', 'pth']:
+        for file_path in model_path.glob(f"*.{ext}"):
+            key = f"{file_path.stem}_{ext}_single"
+            file_size_gb = file_path.stat().st_size / (1024**3)
+            detected_files[key] = {
+                'type': 'single',
+                'extension': 'pytorch',
+                'files': [file_path],
+                'primary_file': file_path,
+                'shard_count': 1,
+                'total_size_gb': file_size_gb,
+                'display_name': f"{file_path.name} ({file_size_gb:.2f} GB)"
+            }
+
+    # Detect PyTorch .bin files (single or sharded: name-00001-of-00009.bin)
+    bin_split_pattern = re.compile(r'^(.+)-(\d+)-of-(\d+)\.bin$')
+    bin_split_groups: Dict[str, Dict[str, Any]] = defaultdict(lambda: {
+        'files': [],
+        'shard_numbers': [],
+        'total_expected': 0
+    })
+    for file_path in model_path.glob("*.bin"):
+        m = bin_split_pattern.match(file_path.name)
+        if m:
+            base = m.group(1)
+            bin_split_groups[base]['files'].append(file_path)
+            bin_split_groups[base]['shard_numbers'].append(int(m.group(2)))
+            if not bin_split_groups[base]['total_expected']:
+                bin_split_groups[base]['total_expected'] = int(m.group(3))
+        else:
+            key = f"{file_path.stem}_bin_single"
+            file_size_gb = file_path.stat().st_size / (1024**3)
+            detected_files[key] = {
+                'type': 'single',
+                'extension': 'pytorch',
+                'files': [file_path],
+                'primary_file': file_path,
+                'shard_count': 1,
+                'total_size_gb': file_size_gb,
+                'display_name': f"{file_path.name} ({file_size_gb:.2f} GB)"
+            }
+    for base, info in bin_split_groups.items():
+        sorted_files = sorted(info['files'],
+                              key=lambda p: int(bin_split_pattern.match(p.name).group(2)))  # type: ignore[union-attr]
+        if set(range(1, info['total_expected'] + 1)) == set(info['shard_numbers']):
+            key = f"{base}_bin_split"
+            total_size_gb = sum(f.stat().st_size for f in sorted_files) / (1024**3)
+            detected_files[key] = {
+                'type': 'split',
+                'extension': 'pytorch',
+                'files': sorted_files,
+                'primary_file': sorted_files[0],
+                'shard_count': len(sorted_files),
+                'total_size_gb': total_size_gb,
+                'display_name': f"{base}.bin ({len(sorted_files)} shards, {total_size_gb:.2f} GB)"
+            }
 
     return detected_files
 

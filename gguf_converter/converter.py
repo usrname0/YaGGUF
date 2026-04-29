@@ -76,8 +76,10 @@ class GGUFConverter:
                 continue
 
             # Keep important error lines
+            stripped = line.strip()
             if any(keyword in line for keyword in [
                 'failed to',
+                'Failed to',
                 'error:',
                 'Error:',
                 'ERROR:',
@@ -88,9 +90,15 @@ class GGUFConverter:
                 'out of memory',
                 'cannot',
                 'unsupported',
-                'invalid'
+                'invalid',
+                'No such file or directory',
+                'Traceback (most recent call last)',
+                'raise ',
             ]):
-                relevant_lines.append(line.strip())
+                # Truncate very long lines (e.g. the model-type list in ValueError)
+                if len(stripped) > 300:
+                    stripped = stripped[:300] + '…'
+                relevant_lines.append(stripped)
 
         if relevant_lines:
             # Join with double newlines for better readability in error messages
@@ -203,17 +211,68 @@ class GGUFConverter:
             print(f"{theme['warning']}Proceeding with download anyway...{Style.RESET_ALL}")
 
         print(f"{theme['success']}Downloading {repo_id} from HuggingFace...{Style.RESET_ALL}\n")
-        model_path = snapshot_download(
-            repo_id=repo_id,
-            local_dir=output_dir / Path(repo_id).name,
-            revision=revision
-        )
+        try:
+            model_path = snapshot_download(
+                repo_id=repo_id,
+                local_dir=output_dir / Path(repo_id).name,
+                revision=revision
+            )
+        except ValueError as e:
+            if any(kw in str(e) for kw in ("too large", "hf_xet", "hf_transfer")):
+                model_path = self._install_hf_xet_and_retry(repo_id, output_dir, revision, e)
+            else:
+                raise
 
         # Brief pause to let progress bars finish flushing to terminal
         # (snapshot_download returns before all parallel progress bars complete)
         time.sleep(0.5)
 
         return Path(model_path)
+
+    def _install_hf_xet_and_retry(
+        self,
+        repo_id: str,
+        output_dir: Path,
+        revision: Optional[str],
+        original_error: Exception
+    ) -> str:
+        """Install hf_xet for Xet Storage repos and retry snapshot_download."""
+        print(f"\n{theme['warning']}This model uses Xet Storage (a new HuggingFace large-file format).{Style.RESET_ALL}")
+        print(f"{theme['info']}Installing hf_xet...{Style.RESET_ALL}")
+        try:
+            result = subprocess.run(
+                [sys.executable, "-m", "pip", "install", "hf_xet"],
+                capture_output=True, text=True, timeout=120
+            )
+            if result.returncode != 0:
+                raise RuntimeError(result.stderr.strip())
+
+            # huggingface_hub caches package availability at import time in _package_versions.
+            # Patch it directly so is_xet_available() returns True without a process restart.
+            # Also invalidate the import cache so the lazy `from hf_xet import ...` inside
+            # xet_get() finds the newly installed package.
+            import importlib
+            import importlib.metadata
+            importlib.invalidate_caches()
+            import huggingface_hub.utils._runtime as _hf_runtime
+            try:
+                _hf_runtime._package_versions["hf_xet"] = importlib.metadata.version("hf_xet")
+            except Exception:
+                pass
+
+            print(f"{theme['success']}hf_xet installed. Retrying download...{Style.RESET_ALL}\n")
+            return snapshot_download(
+                repo_id=repo_id,
+                local_dir=output_dir / Path(repo_id).name,
+                revision=revision
+            )
+        except Exception as install_err:
+            raise RuntimeError(
+                f"This model uses Xet Storage (a new HuggingFace format for large files).\n"
+                f"Install hf_xet and restart YaGGUF:\n\n"
+                f"  pip install hf_xet\n\n"
+                f"Install error: {install_err}"
+            ) from original_error
 
     @staticmethod
     def _get_shard_count(shard_files: List[Path]) -> Optional[int]:
@@ -358,8 +417,10 @@ class GGUFConverter:
         if result.returncode != 0:
             # Combine stdout and stderr since errors can be in either
             error_output = (result.stderr or '') + (result.stdout or '')
-            raw_error = error_output.strip() if error_output.strip() else 'Unknown error'
-            error_msg = self._clean_llama_error(raw_error)
+            if not error_output.strip():
+                # Verbose mode streams directly to terminal; nothing captured
+                raise RuntimeError("Conversion failed — see terminal output above for details.")
+            error_msg = self._clean_llama_error(error_output.strip())
             raise RuntimeError(f"Conversion failed:\n\n{error_msg}")
 
         if verbose and result.stdout:
@@ -1101,10 +1162,8 @@ class GGUFConverter:
             # Only validate source model directory when converting from source
             if model_path.is_dir():
                 if not (model_path / "config.json").exists():
-                    raise ValueError(
-                        f"Model path must be a HuggingFace model directory with config.json.\n"
-                        f"The directory '{model_path}' does not contain config.json."
-                    )
+                    print(f"{theme['warning']}Warning: config.json not found in {model_path}{Style.RESET_ALL}")
+                    print(f"{theme['warning']}Conversion may fail — convert_hf_to_gguf.py requires config.json for most models.{Style.RESET_ALL}")
             elif not model_path.is_file():
                 raise ValueError(f"Model path does not exist: {model_path}")
 
@@ -1134,7 +1193,7 @@ class GGUFConverter:
         if split_max_size:
             print(f"{theme['info']}Splitting files with max size per shard: {split_max_size}{Style.RESET_ALL}")
 
-        # Display safetensors file information if converting from safetensors
+        # Display model file information if converting from source
         if not using_custom_intermediate and model_path.is_dir():
             safetensors_files = list(model_path.glob("*.safetensors"))
             if safetensors_files:
@@ -1142,6 +1201,16 @@ class GGUFConverter:
                 print(f"{theme['success']}\nUsing safetensors files from: {model_path.name}{Style.RESET_ALL}")
                 print(f"{theme['info']}File count: {len(safetensors_files)}{Style.RESET_ALL}")
                 print(f"{theme['info']}Total size: {total_size:.2f} GB{Style.RESET_ALL}")
+            else:
+                pytorch_files = (list(model_path.glob("*.ckpt")) +
+                                 list(model_path.glob("*.pt")) +
+                                 list(model_path.glob("*.pth")) +
+                                 list(model_path.glob("*.bin")))
+                if pytorch_files:
+                    total_size = sum(f.stat().st_size for f in pytorch_files) / (1024**3)
+                    print(f"{theme['success']}\nUsing PyTorch checkpoint(s) from: {model_path.name}{Style.RESET_ALL}")
+                    for f in pytorch_files:
+                        print(f"{theme['info']}  {f.name} ({f.stat().st_size / (1024**3):.2f} GB){Style.RESET_ALL}")
 
         # Step 1: Convert to GGUF or use custom intermediate
         if using_custom_intermediate:

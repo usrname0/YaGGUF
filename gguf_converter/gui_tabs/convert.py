@@ -112,6 +112,7 @@ def render_convert_tab(
         intermediate_info_map = {}  # Maps option string to file info
         source_dtype = None
         config_missing = False
+        has_pytorch = False
 
         model_path_valid = bool(model_path_clean and Path(model_path_clean).exists())
 
@@ -124,13 +125,16 @@ def render_convert_tab(
         else:
             model_path_obj = Path(model_path_clean)
 
-            # Detect all model files (safetensors and GGUF) with proper shard grouping
+            # Detect all model files (safetensors, GGUF, PyTorch) with proper shard grouping
             all_detected = detect_all_model_files(model_path_obj)
 
-            # Filter for safetensors entries
+            # Filter by type
             safetensors_detected = {k: v for k, v in all_detected.items()
                                     if v['extension'] == 'safetensors'}
+            pytorch_detected = {k: v for k, v in all_detected.items()
+                                if v['extension'] == 'pytorch'}
             has_safetensors = len(safetensors_detected) > 0
+            has_pytorch = len(pytorch_detected) > 0
 
             # Detect source dtype if we have safetensors
             if has_safetensors:
@@ -166,6 +170,20 @@ def render_convert_tab(
 
                 intermediate_options.append(option_text)
                 # Don't add to intermediate_info_map - safetensors needs conversion, not direct use
+
+            # Add PyTorch checkpoint files (.ckpt, .pt, .pth, .bin) when no safetensors found
+            if has_pytorch and not has_safetensors:
+                total_files = sum(len(v['files']) for v in pytorch_detected.values())
+                total_size_gb = sum(v['total_size_gb'] for v in pytorch_detected.values())
+
+                if total_files == 1:
+                    primary = next(iter(pytorch_detected.values()))['primary_file']
+                    option_text = f"PyTorch checkpoint ({primary.name}, {total_size_gb:.2f} GB)"
+                else:
+                    option_text = f"PyTorch checkpoints ({total_files} files, {total_size_gb:.2f} GB)"
+
+                intermediate_options.append(option_text)
+                # Not added to intermediate_info_map - passes model dir to convert_hf_to_gguf.py
 
             # Add intermediate GGUF files
             # Sort by format type to keep consistent ordering
@@ -973,9 +991,24 @@ def render_convert_tab(
                 header = f"**Intermediate Formats** (source: `{source_dtype}`):"
             elif config_missing:
                 header = "**Intermediate Formats** (config.json is missing!)"
+            elif has_pytorch and not has_safetensors:
+                has_config = model_path_valid and (Path(model_path_clean) / "config.json").exists()
+                if has_config:
+                    header = "**Intermediate Formats** (PyTorch checkpoint detected):"
+                else:
+                    header = "**Intermediate Formats** (PyTorch checkpoint — no config.json!):"
             else:
                 header = "**Intermediate Formats:**"
             st.markdown(header)
+
+            if has_pytorch and not has_safetensors:
+                has_config = model_path_valid and (Path(model_path_clean) / "config.json").exists()
+                if not has_config:
+                    st.warning(
+                        "**config.json not found.** `convert_hf_to_gguf.py` requires it to "
+                        "determine the model architecture. Conversion will likely fail without it.\n\n"
+                        "You can still attempt conversion — the full error from llama.cpp will be shown."
+                    )
 
         # Override intermediate_type if using custom intermediate
         if using_custom_intermediate:

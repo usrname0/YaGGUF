@@ -102,15 +102,22 @@ def render_run_gguf_tab(converter: "GGUFConverter", config: Dict[str, Any]) -> N
     """Render the Run GGUF tab."""
     st.header("Run GGUF")
 
+    def _make_saver(cfg_key: str, session_key: str):
+        def _save():
+            val = st.session_state.get(session_key)
+            if val is not None:
+                config[cfg_key] = val
+                save_config(config)
+        return _save
+
     col1, col2 = st.columns(2)
 
     # ------------------------------------------------------------------
-    # Left column: model selection, presets, launch buttons
+    # Left column: model selection, mode radio, launch
     # ------------------------------------------------------------------
     with col1:
         st.subheader("Model")
 
-        # Model path input
         cols, has_browse = path_input_columns()
 
         with cols[0]:
@@ -163,7 +170,6 @@ def render_run_gguf_tab(converter: "GGUFConverter", config: Dict[str, Any]) -> N
                 else:
                     st.warning("Folder not found.")
 
-        # Detect GGUF files
         model_path_clean = strip_quotes(run_model_path_str)
         model_path = Path(model_path_clean) if model_path_clean else None
 
@@ -219,7 +225,6 @@ def render_run_gguf_tab(converter: "GGUFConverter", config: Dict[str, Any]) -> N
             disabled=no_files,
         )
 
-        # Resolve selected file path
         selected_display = st.session_state.get(current_select_key, "")
         selected_file_path: Optional[str] = None
         if not no_files and selected_display and selected_display in file_options:
@@ -229,123 +234,115 @@ def render_run_gguf_tab(converter: "GGUFConverter", config: Dict[str, Any]) -> N
                 selected_file_path = str(gguf_files[key]["primary_file"])
 
         # ------------------------------------------------------------------
-        # Launch buttons
+        # Mode radio
+        # ------------------------------------------------------------------
+        st.markdown("---")
+        mode_options = ["llama-server", "llama-cli", "llama-bench"]
+        mode_kwargs: Dict[str, Any] = {
+            "label": "Mode",
+            "options": mode_options,
+            "horizontal": True,
+            "key": "run_mode_radio",
+            "on_change": _make_saver("run_mode", "run_mode_radio"),
+        }
+        if "run_mode_radio" not in st.session_state:
+            saved_mode = config.get("run_mode", "llama-server")
+            mode_kwargs["index"] = mode_options.index(saved_mode) if saved_mode in mode_options else 0
+        st.radio(**mode_kwargs)  # type: ignore[arg-type]
+        current_mode = str(st.session_state.get("run_mode_radio", config.get("run_mode", "llama-server")))
+
+        # ------------------------------------------------------------------
+        # Launch
         # ------------------------------------------------------------------
         params = _collect_params(config)
         binary_dir = _get_binary_dir(converter)
 
-        if params.get("cache_type_v", "f16") != "f16" and not params.get("flash_attn"):
-            st.warning(
-                f"-ctv {params['cache_type_v']} requires Flash Attention (-fa). "
-                "Enable it in the Hardware section."
-            )
-
-        # llama-server
-        server_binary = _find_binary(binary_dir, "llama-server")
-        server_cmd = build_server_cmd(
-            server_binary, selected_file_path or "(no file selected)", params
-        ) if selected_file_path else []
+        if current_mode in ("llama-server", "llama-cli"):
+            if params.get("cache_type_v", "f16") != "f16" and not params.get("flash_attn"):
+                st.warning(
+                    f"-ctv {params['cache_type_v']} requires Flash Attention (-fa). "
+                    "Enable it in Hardware."
+                )
 
         st.subheader("Launch")
+        cmd: List[str] = []
 
-        if st.button(
-            "Launch llama-server",
-            key="run_launch_server_btn",
-            use_container_width=True,
-            disabled=not selected_file_path,
-            help="Start llama-server in a new terminal window",
-        ):
-            assert selected_file_path
-            ok = launch_in_terminal(
-                build_server_cmd(server_binary, selected_file_path, params),
-                window_title="llama-server",
-            )
-            if ok:
-                st.toast("llama-server launched.")
-                if config.get("run_open_browser", True):
-                    host = config.get("run_host", "127.0.0.1")
-                    port = config.get("run_port", 8080)
-                    webbrowser.open(f"http://{host}:{port}")
-            else:
-                st.error("Could not find a terminal emulator to launch llama-server.")
+        if current_mode == "llama-server":
+            binary = _find_binary(binary_dir, "llama-server")
+            if selected_file_path:
+                cmd = build_server_cmd(binary, selected_file_path, params)
+            if st.button(
+                "Launch llama-server",
+                key="run_launch_server_btn",
+                use_container_width=True,
+                disabled=not selected_file_path,
+                help="Start llama-server in a new terminal window",
+            ):
+                assert selected_file_path
+                ok = launch_in_terminal(
+                    build_server_cmd(binary, selected_file_path, params),
+                    window_title="llama-server",
+                )
+                if ok:
+                    st.toast("llama-server launched.")
+                    if config.get("run_open_browser", True):
+                        host = config.get("run_host", "127.0.0.1")
+                        port = config.get("run_port", 8080)
+                        webbrowser.open(f"http://{host}:{port}")
+                else:
+                    st.error("Could not find a terminal emulator to launch llama-server.")
 
-        if server_cmd:
-            st.code(" ".join(server_cmd), language="bash")
-        else:
-            st.caption("Select a GGUF file to see the command.")
+        elif current_mode == "llama-cli":
+            binary = _find_binary(binary_dir, "llama-cli")
+            if selected_file_path:
+                cmd = build_cli_cmd(binary, selected_file_path, params)
+            if st.button(
+                "Launch llama-cli",
+                key="run_launch_cli_btn",
+                use_container_width=True,
+                disabled=not selected_file_path,
+                help="Start an interactive chat session in a new terminal window",
+            ):
+                assert selected_file_path
+                ok = launch_in_terminal(
+                    build_cli_cmd(binary, selected_file_path, params),
+                    window_title="llama-cli",
+                )
+                if ok:
+                    st.toast("llama-cli launched.")
+                else:
+                    st.error("Could not find a terminal emulator to launch llama-cli.")
 
-        st.markdown("")
+        elif current_mode == "llama-bench":
+            binary = _find_binary(binary_dir, "llama-bench")
+            if selected_file_path:
+                cmd = build_bench_cmd(binary, selected_file_path, params)
+            if st.button(
+                "Launch llama-bench",
+                key="run_launch_bench_btn",
+                use_container_width=True,
+                disabled=not selected_file_path,
+                help="Run benchmarks in a new terminal window",
+            ):
+                assert selected_file_path
+                ok = launch_in_terminal(
+                    build_bench_cmd(binary, selected_file_path, params),
+                    window_title="llama-bench",
+                )
+                if ok:
+                    st.toast("llama-bench launched.")
+                else:
+                    st.error("Could not find a terminal emulator to launch llama-bench.")
 
-        # llama-cli
-        cli_binary = _find_binary(binary_dir, "llama-cli")
-        cli_cmd = build_cli_cmd(
-            cli_binary, selected_file_path or "(no file selected)", params
-        ) if selected_file_path else []
-
-        if st.button(
-            "Launch llama-cli",
-            key="run_launch_cli_btn",
-            use_container_width=True,
-            disabled=not selected_file_path,
-            help="Start an interactive chat session in a new terminal window",
-        ):
-            assert selected_file_path
-            ok = launch_in_terminal(
-                build_cli_cmd(cli_binary, selected_file_path, params),
-                window_title="llama-cli",
-            )
-            if ok:
-                st.toast("llama-cli launched.")
-            else:
-                st.error("Could not find a terminal emulator to launch llama-cli.")
-
-        if cli_cmd:
-            st.code(" ".join(cli_cmd), language="bash")
-        else:
-            st.caption("Select a GGUF file to see the command.")
-
-        st.markdown("")
-
-        # llama-bench
-        bench_binary = _find_binary(binary_dir, "llama-bench")
-        bench_cmd = build_bench_cmd(
-            bench_binary, selected_file_path or "(no file selected)", params
-        ) if selected_file_path else []
-
-        if st.button(
-            "Launch llama-bench",
-            key="run_launch_bench_btn",
-            use_container_width=True,
-            disabled=not selected_file_path,
-            help="Run benchmarks in a new terminal window",
-        ):
-            assert selected_file_path
-            ok = launch_in_terminal(
-                build_bench_cmd(bench_binary, selected_file_path, params),
-                window_title="llama-bench",
-            )
-            if ok:
-                st.toast("llama-bench launched.")
-            else:
-                st.error("Could not find a terminal emulator to launch llama-bench.")
-
-        if bench_cmd:
-            st.code(" ".join(bench_cmd), language="bash")
+        if cmd:
+            st.code(" ".join(cmd), language="bash")
         else:
             st.caption("Select a GGUF file to see the command.")
 
     # ------------------------------------------------------------------
-    # Right column: parameters in 3 sub-columns
+    # Right column: presets, hardware, mode-specific settings
     # ------------------------------------------------------------------
     with col2:
-
-        def _make_saver(cfg_key: str, session_key: str):
-            def _save():
-                val = st.session_state.get(session_key)
-                if val is not None:
-                    config[cfg_key] = val
-                    save_config(config)
-            return _save
 
         # ------------------------------------------------------------------
         # Presets
@@ -405,10 +402,10 @@ def render_run_gguf_tab(converter: "GGUFConverter", config: Dict[str, Any]) -> N
                 st.rerun()
 
         # ------------------------------------------------------------------
-        # Section: Hardware
+        # Section: Hardware (all modes)
         # ------------------------------------------------------------------
-        with st.expander("Hardware (server, cli, bench)", expanded=True):
-            hw_c1, hw_c2, hw_c3 = st.columns(3)
+        with st.expander("Hardware", expanded=True):
+            hw_c1, hw_c2, _ = st.columns(3)
 
             with hw_c1:
                 ngl_kwargs: Dict[str, Any] = {
@@ -425,20 +422,6 @@ def render_run_gguf_tab(converter: "GGUFConverter", config: Dict[str, Any]) -> N
                 st.number_input(**ngl_kwargs)  # type: ignore[arg-type]
 
             with hw_c2:
-                ctx_kwargs: Dict[str, Any] = {
-                    "label": "Context Size (-c)",
-                    "min_value": 512,
-                    "max_value": 131072,
-                    "step": 512,
-                    "help": "Context window size in tokens.",
-                    "key": "run_ctx_input",
-                    "on_change": _make_saver("run_ctx", "run_ctx_input"),
-                }
-                if "run_ctx_input" not in st.session_state:
-                    ctx_kwargs["value"] = int(config.get("run_ctx", 4096))
-                st.number_input(**ctx_kwargs)  # type: ignore[arg-type]
-
-            with hw_c3:
                 st.markdown("<br>", unsafe_allow_html=True)
                 fa_kwargs: Dict[str, Any] = {
                     "label": "Flash Attention (-fa)",
@@ -450,400 +433,596 @@ def render_run_gguf_tab(converter: "GGUFConverter", config: Dict[str, Any]) -> N
                     fa_kwargs["value"] = bool(config.get("run_flash_attn", False))
                 st.checkbox(**fa_kwargs)  # type: ignore[arg-type]
 
-            hw_c4, hw_c5, hw_c6 = st.columns(3)
-            cache_type_options = ["f16", "q8_0", "q4_0", "q4_1", "iq4_nl", "bf16"]
-
-            with hw_c4:
-                fit_target_kwargs: Dict[str, Any] = {
-                    "label": "VRAM headroom (--fit-target, MiB)",
-                    "min_value": 0,
-                    "max_value": 4095,
-                    "step": 256,
-                    "help": (
-                        "Free VRAM to leave on each GPU (MiB) when auto-fitting. "
-                        "0 = omit flag (llama.cpp default: 1024 MiB). "
-                        "Lower values pack more onto GPU; raise if hitting OOM. "
-                        "Has no effect when -ngl is set (auto-fit requires omitting -ngl). "
-                        "Capped at 4095 MiB due to a Windows overflow bug in older llama.cpp builds."
-                    ),
-                    "key": "run_fit_target_input",
-                    "on_change": _make_saver("run_fit_target", "run_fit_target_input"),
-                }
-                if "run_fit_target_input" not in st.session_state:
-                    fit_target_kwargs["value"] = int(config.get("run_fit_target", 0))
-                st.number_input(**fit_target_kwargs)  # type: ignore[arg-type]
-
-            with hw_c5:
-                ctk_kwargs: Dict[str, Any] = {
-                    "label": "KV cache K type (-ctk)",
-                    "options": cache_type_options,
-                    "help": "Quantize the KV cache keys. q8_0 halves memory vs f16 with minimal quality loss.",
-                    "key": "run_cache_type_k_select",
-                    "on_change": _make_saver("run_cache_type_k", "run_cache_type_k_select"),
-                }
-                saved_ctk = config.get("run_cache_type_k", "f16")
-                if "run_cache_type_k_select" not in st.session_state:
-                    ctk_kwargs["index"] = cache_type_options.index(saved_ctk) \
-                        if saved_ctk in cache_type_options else 0
-                st.selectbox(**ctk_kwargs)  # type: ignore[arg-type]
-
-            with hw_c6:
-                ctv_kwargs: Dict[str, Any] = {
-                    "label": "KV cache V type (-ctv)",
-                    "options": cache_type_options,
-                    "help": (
-                        "Quantize the KV cache values. q8_0 halves memory vs f16 with minimal quality loss. "
-                        "Quantized V types require Flash Attention (-fa) — a warning will appear if mismatched."
-                    ),
-                    "key": "run_cache_type_v_select",
-                    "on_change": _make_saver("run_cache_type_v", "run_cache_type_v_select"),
-                }
-                saved_ctv = config.get("run_cache_type_v", "f16")
-                if "run_cache_type_v_select" not in st.session_state:
-                    ctv_kwargs["index"] = cache_type_options.index(saved_ctv) \
-                        if saved_ctv in cache_type_options else 0
-                st.selectbox(**ctv_kwargs)  # type: ignore[arg-type]
-
         # ------------------------------------------------------------------
-        # Section: Server
+        # Mode-specific settings
         # ------------------------------------------------------------------
-        with st.expander("Server (llama-server)", expanded=True):
-            sv_c1, sv_c2, sv_c3 = st.columns(3)
+        cache_type_options = ["f16", "q8_0", "q4_0", "q4_1", "iq4_nl", "bf16"]
 
-            with sv_c1:
-                port_kwargs: Dict[str, Any] = {
-                    "label": "Port (--port)",
-                    "min_value": 1,
-                    "max_value": 65535,
-                    "step": 1,
-                    "help": "Port for llama-server to listen on.",
-                    "key": "run_port_input",
-                    "on_change": _make_saver("run_port", "run_port_input"),
+        if current_mode == "llama-server":
+            with st.expander("Server Settings", expanded=True):
+                r1c1, r1c2, _ = st.columns(3)
+
+                with r1c1:
+                    ctx_kwargs: Dict[str, Any] = {
+                        "label": "Context Size (-c)",
+                        "min_value": 512,
+                        "max_value": 131072,
+                        "step": 512,
+                        "help": "Context window size in tokens.",
+                        "key": "run_ctx_input",
+                        "on_change": _make_saver("run_ctx", "run_ctx_input"),
+                    }
+                    if "run_ctx_input" not in st.session_state:
+                        ctx_kwargs["value"] = int(config.get("run_ctx", 4096))
+                    st.number_input(**ctx_kwargs)  # type: ignore[arg-type]
+
+                with r1c2:
+                    fit_target_kwargs: Dict[str, Any] = {
+                        "label": "VRAM headroom (--fit-target, MiB)",
+                        "min_value": 0,
+                        "max_value": 4095,
+                        "step": 256,
+                        "help": (
+                            "Free VRAM to leave on each GPU (MiB) when auto-fitting. "
+                            "0 = omit flag (llama.cpp default: 1024 MiB). "
+                            "Lower values pack more onto GPU; raise if hitting OOM. "
+                            "Has no effect when -ngl is set (auto-fit requires omitting -ngl). "
+                            "Capped at 4095 MiB due to a Windows overflow bug in older llama.cpp builds."
+                        ),
+                        "key": "run_fit_target_input",
+                        "on_change": _make_saver("run_fit_target", "run_fit_target_input"),
+                    }
+                    if "run_fit_target_input" not in st.session_state:
+                        fit_target_kwargs["value"] = int(config.get("run_fit_target", 0))
+                    st.number_input(**fit_target_kwargs)  # type: ignore[arg-type]
+
+                r2c1, r2c2, _ = st.columns(3)
+
+                with r2c1:
+                    ctk_kwargs: Dict[str, Any] = {
+                        "label": "KV cache K type (-ctk)",
+                        "options": cache_type_options,
+                        "help": "Quantize the KV cache keys. q8_0 halves memory vs f16 with minimal quality loss.",
+                        "key": "run_cache_type_k_select",
+                        "on_change": _make_saver("run_cache_type_k", "run_cache_type_k_select"),
+                    }
+                    saved_ctk = config.get("run_cache_type_k", "f16")
+                    if "run_cache_type_k_select" not in st.session_state:
+                        ctk_kwargs["index"] = cache_type_options.index(saved_ctk) \
+                            if saved_ctk in cache_type_options else 0
+                    st.selectbox(**ctk_kwargs)  # type: ignore[arg-type]
+
+                with r2c2:
+                    ctv_kwargs: Dict[str, Any] = {
+                        "label": "KV cache V type (-ctv)",
+                        "options": cache_type_options,
+                        "help": (
+                            "Quantize the KV cache values. q8_0 halves memory vs f16 with minimal quality loss. "
+                            "Quantized V types require Flash Attention (-fa)."
+                        ),
+                        "key": "run_cache_type_v_select",
+                        "on_change": _make_saver("run_cache_type_v", "run_cache_type_v_select"),
+                    }
+                    saved_ctv = config.get("run_cache_type_v", "f16")
+                    if "run_cache_type_v_select" not in st.session_state:
+                        ctv_kwargs["index"] = cache_type_options.index(saved_ctv) \
+                            if saved_ctv in cache_type_options else 0
+                    st.selectbox(**ctv_kwargs)  # type: ignore[arg-type]
+
+                st.markdown("---")
+
+                r3c1, r3c2, r3c3 = st.columns(3)
+
+                with r3c1:
+                    port_kwargs: Dict[str, Any] = {
+                        "label": "Port (--port)",
+                        "min_value": 1,
+                        "max_value": 65535,
+                        "step": 1,
+                        "help": "Port for llama-server to listen on.",
+                        "key": "run_port_input",
+                        "on_change": _make_saver("run_port", "run_port_input"),
+                    }
+                    if "run_port_input" not in st.session_state:
+                        port_kwargs["value"] = int(config.get("run_port", 8080))
+                    st.number_input(**port_kwargs)  # type: ignore[arg-type]
+
+                with r3c2:
+                    host_kwargs: Dict[str, Any] = {
+                        "label": "Host (--host)",
+                        "help": "Host address for llama-server. Use 0.0.0.0 to expose on LAN.",
+                        "key": "run_host_input",
+                        "on_change": _make_saver("run_host", "run_host_input"),
+                    }
+                    if "run_host_input" not in st.session_state:
+                        host_kwargs["value"] = config.get("run_host", "127.0.0.1")
+                    st.text_input(**host_kwargs)  # type: ignore[arg-type]
+
+                with r3c3:
+                    parallel_kwargs: Dict[str, Any] = {
+                        "label": "Parallel slots (-np)",
+                        "min_value": 1,
+                        "max_value": 64,
+                        "step": 1,
+                        "help": (
+                            "Number of parallel inference slots for llama-server. "
+                            "KV cache is shared across all slots, so effective per-slot context = "
+                            "context size ÷ slots. Use 1 for lowest latency (single user). "
+                            "Increase only if serving multiple concurrent users."
+                        ),
+                        "key": "run_parallel_input",
+                        "on_change": _make_saver("run_parallel", "run_parallel_input"),
+                    }
+                    if "run_parallel_input" not in st.session_state:
+                        parallel_kwargs["value"] = int(config.get("run_parallel", 1))
+                    st.number_input(**parallel_kwargs)  # type: ignore[arg-type]
+
+                browser_kwargs: Dict[str, Any] = {
+                    "label": "Open browser on launch",
+                    "help": "Automatically open the browser when launching llama-server.",
+                    "key": "run_open_browser_checkbox",
+                    "on_change": _make_saver("run_open_browser", "run_open_browser_checkbox"),
                 }
-                if "run_port_input" not in st.session_state:
-                    port_kwargs["value"] = int(config.get("run_port", 8080))
-                st.number_input(**port_kwargs)  # type: ignore[arg-type]
+                if "run_open_browser_checkbox" not in st.session_state:
+                    browser_kwargs["value"] = bool(config.get("run_open_browser", True))
+                st.checkbox(**browser_kwargs)  # type: ignore[arg-type]
 
-            with sv_c2:
-                host_kwargs: Dict[str, Any] = {
-                    "label": "Host (--host)",
-                    "help": "Host address for llama-server. Use 0.0.0.0 to expose on LAN.",
-                    "key": "run_host_input",
-                    "on_change": _make_saver("run_host", "run_host_input"),
-                }
-                if "run_host_input" not in st.session_state:
-                    host_kwargs["value"] = config.get("run_host", "127.0.0.1")
-                st.text_input(**host_kwargs)  # type: ignore[arg-type]
+                st.markdown("---")
 
-            with sv_c3:
-                parallel_kwargs: Dict[str, Any] = {
-                    "label": "Parallel slots (-np)",
-                    "min_value": 1,
-                    "max_value": 64,
-                    "step": 1,
-                    "help": (
-                        "Number of parallel inference slots for llama-server. "
-                        "KV cache is shared across all slots, so effective per-slot context = "
-                        "context size ÷ slots. Use 1 for lowest latency (single user). "
-                        "Increase only if serving multiple concurrent users."
-                    ),
-                    "key": "run_parallel_input",
-                    "on_change": _make_saver("run_parallel", "run_parallel_input"),
-                }
-                if "run_parallel_input" not in st.session_state:
-                    parallel_kwargs["value"] = int(config.get("run_parallel", 1))
-                st.number_input(**parallel_kwargs)  # type: ignore[arg-type]
+                r4c1, r4c2, r4c3 = st.columns(3)
 
-            st.markdown("")
-            browser_kwargs: Dict[str, Any] = {
-                "label": "Open browser on launch",
-                "help": "Automatically open the browser when launching llama-server.",
-                "key": "run_open_browser_checkbox",
-                "on_change": _make_saver("run_open_browser", "run_open_browser_checkbox"),
-            }
-            if "run_open_browser_checkbox" not in st.session_state:
-                browser_kwargs["value"] = bool(config.get("run_open_browser", True))
-            st.checkbox(**browser_kwargs)  # type: ignore[arg-type]
+                with r4c1:
+                    temp_kwargs: Dict[str, Any] = {
+                        "label": "Temp (--temp)",
+                        "min_value": 0.0,
+                        "max_value": 5.0,
+                        "step": 0.05,
+                        "format": "%.2f",
+                        "help": "Sampling temperature.",
+                        "key": "run_temp_input",
+                        "on_change": _make_saver("run_temp", "run_temp_input"),
+                    }
+                    if "run_temp_input" not in st.session_state:
+                        temp_kwargs["value"] = float(config.get("run_temp", 0.8))
+                    st.number_input(**temp_kwargs)  # type: ignore[arg-type]
 
-        # ------------------------------------------------------------------
-        # Section: Generation
-        # ------------------------------------------------------------------
-        with st.expander("Generation (server, cli)", expanded=True):
-            gen_c1, gen_c2, gen_c3 = st.columns(3)
+                with r4c2:
+                    topk_kwargs: Dict[str, Any] = {
+                        "label": "Top-K (--top-k)",
+                        "min_value": 0,
+                        "max_value": 1000,
+                        "step": 1,
+                        "help": "Top-K sampling. 0 = disabled.",
+                        "key": "run_top_k_input",
+                        "on_change": _make_saver("run_top_k", "run_top_k_input"),
+                    }
+                    if "run_top_k_input" not in st.session_state:
+                        topk_kwargs["value"] = int(config.get("run_top_k", 40))
+                    st.number_input(**topk_kwargs)  # type: ignore[arg-type]
 
-            with gen_c1:
-                temp_kwargs: Dict[str, Any] = {
-                    "label": "Temp (--temp)",
-                    "min_value": 0.0,
-                    "max_value": 5.0,
-                    "step": 0.05,
-                    "format": "%.2f",
-                    "help": "Sampling temperature.",
-                    "key": "run_temp_input",
-                    "on_change": _make_saver("run_temp", "run_temp_input"),
-                }
-                if "run_temp_input" not in st.session_state:
-                    temp_kwargs["value"] = float(config.get("run_temp", 0.8))
-                st.number_input(**temp_kwargs)  # type: ignore[arg-type]
+                with r4c3:
+                    topp_kwargs: Dict[str, Any] = {
+                        "label": "Top-P (--top-p)",
+                        "min_value": 0.0,
+                        "max_value": 1.0,
+                        "step": 0.01,
+                        "format": "%.2f",
+                        "help": "Top-P (nucleus) sampling.",
+                        "key": "run_top_p_input",
+                        "on_change": _make_saver("run_top_p", "run_top_p_input"),
+                    }
+                    if "run_top_p_input" not in st.session_state:
+                        topp_kwargs["value"] = float(config.get("run_top_p", 0.95))
+                    st.number_input(**topp_kwargs)  # type: ignore[arg-type]
 
-            with gen_c2:
-                topk_kwargs: Dict[str, Any] = {
-                    "label": "Top-K (--top-k)",
-                    "min_value": 0,
-                    "max_value": 1000,
-                    "step": 1,
-                    "help": "Top-K sampling. 0 = disabled.",
-                    "key": "run_top_k_input",
-                    "on_change": _make_saver("run_top_k", "run_top_k_input"),
-                }
-                if "run_top_k_input" not in st.session_state:
-                    topk_kwargs["value"] = int(config.get("run_top_k", 40))
-                st.number_input(**topk_kwargs)  # type: ignore[arg-type]
+                r5c1, r5c2, _ = st.columns(3)
 
-            with gen_c3:
-                topp_kwargs: Dict[str, Any] = {
-                    "label": "Top-P (--top-p)",
-                    "min_value": 0.0,
-                    "max_value": 1.0,
-                    "step": 0.01,
-                    "format": "%.2f",
-                    "help": "Top-P (nucleus) sampling.",
-                    "key": "run_top_p_input",
-                    "on_change": _make_saver("run_top_p", "run_top_p_input"),
-                }
-                if "run_top_p_input" not in st.session_state:
-                    topp_kwargs["value"] = float(config.get("run_top_p", 0.95))
-                st.number_input(**topp_kwargs)  # type: ignore[arg-type]
+                with r5c1:
+                    minp_kwargs: Dict[str, Any] = {
+                        "label": "Min-P (--min-p)",
+                        "min_value": 0.0,
+                        "max_value": 1.0,
+                        "step": 0.01,
+                        "format": "%.2f",
+                        "help": "Min-P sampling threshold.",
+                        "key": "run_min_p_input",
+                        "on_change": _make_saver("run_min_p", "run_min_p_input"),
+                    }
+                    if "run_min_p_input" not in st.session_state:
+                        minp_kwargs["value"] = float(config.get("run_min_p", 0.05))
+                    st.number_input(**minp_kwargs)  # type: ignore[arg-type]
 
-            gen_c4, gen_c5, _ = st.columns(3)
+                with r5c2:
+                    pp_kwargs: Dict[str, Any] = {
+                        "label": "Presence (--presence-penalty)",
+                        "min_value": -2.0,
+                        "max_value": 2.0,
+                        "step": 0.05,
+                        "format": "%.2f",
+                        "help": "Presence penalty for repetition reduction.",
+                        "key": "run_presence_penalty_input",
+                        "on_change": _make_saver("run_presence_penalty", "run_presence_penalty_input"),
+                    }
+                    if "run_presence_penalty_input" not in st.session_state:
+                        pp_kwargs["value"] = float(config.get("run_presence_penalty", 0.0))
+                    st.number_input(**pp_kwargs)  # type: ignore[arg-type]
 
-            with gen_c4:
-                minp_kwargs: Dict[str, Any] = {
-                    "label": "Min-P (--min-p)",
-                    "min_value": 0.0,
-                    "max_value": 1.0,
-                    "step": 0.01,
-                    "format": "%.2f",
-                    "help": "Min-P sampling threshold.",
-                    "key": "run_min_p_input",
-                    "on_change": _make_saver("run_min_p", "run_min_p_input"),
-                }
-                if "run_min_p_input" not in st.session_state:
-                    minp_kwargs["value"] = float(config.get("run_min_p", 0.05))
-                st.number_input(**minp_kwargs)  # type: ignore[arg-type]
+                st.markdown("---")
 
-            with gen_c5:
-                pp_kwargs: Dict[str, Any] = {
-                    "label": "Presence (--presence-penalty)",
-                    "min_value": -2.0,
-                    "max_value": 2.0,
-                    "step": 0.05,
-                    "format": "%.2f",
-                    "help": "Presence penalty for repetition reduction.",
-                    "key": "run_presence_penalty_input",
-                    "on_change": _make_saver("run_presence_penalty", "run_presence_penalty_input"),
-                }
-                if "run_presence_penalty_input" not in st.session_state:
-                    pp_kwargs["value"] = float(config.get("run_presence_penalty", 0.0))
-                st.number_input(**pp_kwargs)  # type: ignore[arg-type]
+                r6c1, r6c2, _ = st.columns(3)
 
-        # ------------------------------------------------------------------
-        # Section: Bench
-        # ------------------------------------------------------------------
-        with st.expander("Bench (llama-bench)", expanded=False):
-            bench_c1, bench_c2, bench_c3 = st.columns(3)
+                with r6c1:
+                    st.markdown("<br>", unsafe_allow_html=True)
+                    jinja_kwargs: Dict[str, Any] = {
+                        "label": "Jinja templates (--jinja)",
+                        "help": "Enable Jinja2 chat template rendering. Required for --reasoning.",
+                        "key": "run_jinja_checkbox",
+                        "on_change": _make_saver("run_jinja", "run_jinja_checkbox"),
+                    }
+                    if "run_jinja_checkbox" not in st.session_state:
+                        jinja_kwargs["value"] = bool(config.get("run_jinja", True))
+                    jinja_enabled = st.checkbox(**jinja_kwargs)  # type: ignore[arg-type]
+                    if "run_jinja_checkbox" in st.session_state:
+                        jinja_enabled = st.session_state["run_jinja_checkbox"]
 
-            with bench_c1:
-                bp_kwargs: Dict[str, Any] = {
-                    "label": "Prompt tokens (-p)",
-                    "min_value": 0,
-                    "max_value": 65536,
-                    "step": 64,
-                    "help": "Number of prompt tokens to process.",
-                    "key": "run_bench_n_prompt_input",
-                    "on_change": _make_saver("run_bench_n_prompt", "run_bench_n_prompt_input"),
-                }
-                if "run_bench_n_prompt_input" not in st.session_state:
-                    bp_kwargs["value"] = int(config.get("run_bench_n_prompt", 512))
-                st.number_input(**bp_kwargs)  # type: ignore[arg-type]
+                with r6c2:
+                    reasoning_options = ["off", "on", "auto"]
+                    reasoning_kwargs: Dict[str, Any] = {
+                        "label": "Reasoning (--reasoning)",
+                        "options": reasoning_options,
+                        "help": "Reasoning mode. Only emitted when Jinja is enabled. 'auto' is llama.cpp's default (omitted from command).",
+                        "key": "run_reasoning_select",
+                        "on_change": _make_saver("run_reasoning", "run_reasoning_select"),
+                        "disabled": not jinja_enabled,
+                    }
+                    if "run_reasoning_select" not in st.session_state:
+                        saved_reasoning = config.get("run_reasoning", "off")
+                        reasoning_kwargs["index"] = reasoning_options.index(saved_reasoning) \
+                            if saved_reasoning in reasoning_options else 0
+                    st.selectbox(**reasoning_kwargs)  # type: ignore[arg-type]
 
-            with bench_c2:
-                bg_kwargs: Dict[str, Any] = {
-                    "label": "Gen tokens (-n)",
-                    "min_value": 0,
-                    "max_value": 65536,
-                    "step": 16,
-                    "help": "Number of tokens to generate.",
-                    "key": "run_bench_n_gen_input",
-                    "on_change": _make_saver("run_bench_n_gen", "run_bench_n_gen_input"),
-                }
-                if "run_bench_n_gen_input" not in st.session_state:
-                    bg_kwargs["value"] = int(config.get("run_bench_n_gen", 128))
-                st.number_input(**bg_kwargs)  # type: ignore[arg-type]
+        elif current_mode == "llama-cli":
+            with st.expander("CLI Settings", expanded=True):
+                r1c1, r1c2, _ = st.columns(3)
 
-            with bench_c3:
-                br_kwargs: Dict[str, Any] = {
-                    "label": "Repetitions (-r)",
-                    "min_value": 1,
-                    "max_value": 50,
-                    "step": 1,
-                    "help": "Number of times to repeat each test.",
-                    "key": "run_bench_repetitions_input",
-                    "on_change": _make_saver("run_bench_repetitions", "run_bench_repetitions_input"),
-                }
-                if "run_bench_repetitions_input" not in st.session_state:
-                    br_kwargs["value"] = int(config.get("run_bench_repetitions", 5))
-                st.number_input(**br_kwargs)  # type: ignore[arg-type]
+                with r1c1:
+                    ctx_kwargs = {
+                        "label": "Context Size (-c)",
+                        "min_value": 512,
+                        "max_value": 131072,
+                        "step": 512,
+                        "help": "Context window size in tokens.",
+                        "key": "run_ctx_input",
+                        "on_change": _make_saver("run_ctx", "run_ctx_input"),
+                    }
+                    if "run_ctx_input" not in st.session_state:
+                        ctx_kwargs["value"] = int(config.get("run_ctx", 4096))
+                    st.number_input(**ctx_kwargs)  # type: ignore[arg-type]
 
-            bench_c4, bench_c5, bench_c6 = st.columns(3)
+                with r1c2:
+                    fit_target_kwargs = {
+                        "label": "VRAM headroom (--fit-target, MiB)",
+                        "min_value": 0,
+                        "max_value": 4095,
+                        "step": 256,
+                        "help": (
+                            "Free VRAM to leave on each GPU (MiB) when auto-fitting. "
+                            "0 = omit flag (llama.cpp default: 1024 MiB). "
+                            "Has no effect when -ngl is set. "
+                            "Capped at 4095 MiB due to a Windows overflow bug in older llama.cpp builds."
+                        ),
+                        "key": "run_fit_target_input",
+                        "on_change": _make_saver("run_fit_target", "run_fit_target_input"),
+                    }
+                    if "run_fit_target_input" not in st.session_state:
+                        fit_target_kwargs["value"] = int(config.get("run_fit_target", 0))
+                    st.number_input(**fit_target_kwargs)  # type: ignore[arg-type]
 
-            with bench_c4:
-                bb_kwargs: Dict[str, Any] = {
-                    "label": "Batch size (-b)",
-                    "min_value": 1,
-                    "max_value": 65536,
-                    "step": 64,
-                    "help": "Batch size for prompt processing.",
-                    "key": "run_bench_batch_size_input",
-                    "on_change": _make_saver("run_bench_batch_size", "run_bench_batch_size_input"),
-                }
-                if "run_bench_batch_size_input" not in st.session_state:
-                    bb_kwargs["value"] = int(config.get("run_bench_batch_size", 2048))
-                st.number_input(**bb_kwargs)  # type: ignore[arg-type]
+                r2c1, r2c2, _ = st.columns(3)
 
-            with bench_c5:
-                bub_kwargs: Dict[str, Any] = {
-                    "label": "Ubatch size (-ub)",
-                    "min_value": 1,
-                    "max_value": 65536,
-                    "step": 64,
-                    "help": "Micro-batch size for prompt processing.",
-                    "key": "run_bench_ubatch_size_input",
-                    "on_change": _make_saver("run_bench_ubatch_size", "run_bench_ubatch_size_input"),
-                }
-                if "run_bench_ubatch_size_input" not in st.session_state:
-                    bub_kwargs["value"] = int(config.get("run_bench_ubatch_size", 512))
-                st.number_input(**bub_kwargs)  # type: ignore[arg-type]
+                with r2c1:
+                    ctk_kwargs = {
+                        "label": "KV cache K type (-ctk)",
+                        "options": cache_type_options,
+                        "help": "Quantize the KV cache keys. q8_0 halves memory vs f16 with minimal quality loss.",
+                        "key": "run_cache_type_k_select",
+                        "on_change": _make_saver("run_cache_type_k", "run_cache_type_k_select"),
+                    }
+                    saved_ctk = config.get("run_cache_type_k", "f16")
+                    if "run_cache_type_k_select" not in st.session_state:
+                        ctk_kwargs["index"] = cache_type_options.index(saved_ctk) \
+                            if saved_ctk in cache_type_options else 0
+                    st.selectbox(**ctk_kwargs)  # type: ignore[arg-type]
 
-            with bench_c6:
-                bt_kwargs: Dict[str, Any] = {
-                    "label": "Threads (-t)",
-                    "min_value": 0,
-                    "max_value": 256,
-                    "step": 1,
-                    "help": "CPU threads. 0 = use llama-bench default.",
-                    "key": "run_bench_threads_input",
-                    "on_change": _make_saver("run_bench_threads", "run_bench_threads_input"),
-                }
-                if "run_bench_threads_input" not in st.session_state:
-                    bt_kwargs["value"] = int(config.get("run_bench_threads", 0))
-                st.number_input(**bt_kwargs)  # type: ignore[arg-type]
+                with r2c2:
+                    ctv_kwargs = {
+                        "label": "KV cache V type (-ctv)",
+                        "options": cache_type_options,
+                        "help": (
+                            "Quantize the KV cache values. q8_0 halves memory vs f16 with minimal quality loss. "
+                            "Quantized V types require Flash Attention (-fa)."
+                        ),
+                        "key": "run_cache_type_v_select",
+                        "on_change": _make_saver("run_cache_type_v", "run_cache_type_v_select"),
+                    }
+                    saved_ctv = config.get("run_cache_type_v", "f16")
+                    if "run_cache_type_v_select" not in st.session_state:
+                        ctv_kwargs["index"] = cache_type_options.index(saved_ctv) \
+                            if saved_ctv in cache_type_options else 0
+                    st.selectbox(**ctv_kwargs)  # type: ignore[arg-type]
 
-            bench_c7, bench_c8, bench_c9 = st.columns(3)
-            cache_type_options = ["f16", "q8_0", "q4_0", "q4_1", "iq4_nl", "bf16"]
+                st.markdown("---")
 
-            with bench_c7:
-                ctk_kwargs: Dict[str, Any] = {
-                    "label": "Cache type K (-ctk)",
-                    "options": cache_type_options,
-                    "help": "KV cache type for keys. Useful for benchmarking KV quantization.",
-                    "key": "run_bench_cache_type_k_select",
-                    "on_change": _make_saver("run_bench_cache_type_k", "run_bench_cache_type_k_select"),
-                }
-                saved_ctk = config.get("run_bench_cache_type_k", "f16")
-                if "run_bench_cache_type_k_select" not in st.session_state:
-                    ctk_kwargs["index"] = cache_type_options.index(saved_ctk) \
-                        if saved_ctk in cache_type_options else 0
-                st.selectbox(**ctk_kwargs)  # type: ignore[arg-type]
+                r3c1, r3c2, r3c3 = st.columns(3)
 
-            with bench_c8:
-                ctv_kwargs: Dict[str, Any] = {
-                    "label": "Cache type V (-ctv)",
-                    "options": cache_type_options,
-                    "help": "KV cache type for values.",
-                    "key": "run_bench_cache_type_v_select",
-                    "on_change": _make_saver("run_bench_cache_type_v", "run_bench_cache_type_v_select"),
-                }
-                saved_ctv = config.get("run_bench_cache_type_v", "f16")
-                if "run_bench_cache_type_v_select" not in st.session_state:
-                    ctv_kwargs["index"] = cache_type_options.index(saved_ctv) \
-                        if saved_ctv in cache_type_options else 0
-                st.selectbox(**ctv_kwargs)  # type: ignore[arg-type]
+                with r3c1:
+                    temp_kwargs = {
+                        "label": "Temp (--temp)",
+                        "min_value": 0.0,
+                        "max_value": 5.0,
+                        "step": 0.05,
+                        "format": "%.2f",
+                        "help": "Sampling temperature.",
+                        "key": "run_temp_input",
+                        "on_change": _make_saver("run_temp", "run_temp_input"),
+                    }
+                    if "run_temp_input" not in st.session_state:
+                        temp_kwargs["value"] = float(config.get("run_temp", 0.8))
+                    st.number_input(**temp_kwargs)  # type: ignore[arg-type]
 
-            with bench_c9:
-                output_options = ["md", "csv", "json", "jsonl", "sql"]
-                bo_kwargs: Dict[str, Any] = {
-                    "label": "Output format (-o)",
-                    "options": output_options,
-                    "help": "Output format for benchmark results.",
-                    "key": "run_bench_output_select",
-                    "on_change": _make_saver("run_bench_output", "run_bench_output_select"),
-                }
-                saved_bo = config.get("run_bench_output", "md")
-                if "run_bench_output_select" not in st.session_state:
-                    bo_kwargs["index"] = output_options.index(saved_bo) \
-                        if saved_bo in output_options else 0
-                st.selectbox(**bo_kwargs)  # type: ignore[arg-type]
+                with r3c2:
+                    topk_kwargs = {
+                        "label": "Top-K (--top-k)",
+                        "min_value": 0,
+                        "max_value": 1000,
+                        "step": 1,
+                        "help": "Top-K sampling. 0 = disabled.",
+                        "key": "run_top_k_input",
+                        "on_change": _make_saver("run_top_k", "run_top_k_input"),
+                    }
+                    if "run_top_k_input" not in st.session_state:
+                        topk_kwargs["value"] = int(config.get("run_top_k", 40))
+                    st.number_input(**topk_kwargs)  # type: ignore[arg-type]
 
-            bench_chk_c1, bench_chk_c2, _ = st.columns(3)
+                with r3c3:
+                    topp_kwargs = {
+                        "label": "Top-P (--top-p)",
+                        "min_value": 0.0,
+                        "max_value": 1.0,
+                        "step": 0.01,
+                        "format": "%.2f",
+                        "help": "Top-P (nucleus) sampling.",
+                        "key": "run_top_p_input",
+                        "on_change": _make_saver("run_top_p", "run_top_p_input"),
+                    }
+                    if "run_top_p_input" not in st.session_state:
+                        topp_kwargs["value"] = float(config.get("run_top_p", 0.95))
+                    st.number_input(**topp_kwargs)  # type: ignore[arg-type]
 
-            with bench_chk_c1:
-                nw_kwargs: Dict[str, Any] = {
-                    "label": "No warmup (--no-warmup)",
-                    "help": "Skip warmup runs before benchmarking.",
-                    "key": "run_bench_no_warmup_checkbox",
-                    "on_change": _make_saver("run_bench_no_warmup", "run_bench_no_warmup_checkbox"),
-                }
-                if "run_bench_no_warmup_checkbox" not in st.session_state:
-                    nw_kwargs["value"] = bool(config.get("run_bench_no_warmup", False))
-                st.checkbox(**nw_kwargs)  # type: ignore[arg-type]
+                r4c1, r4c2, _ = st.columns(3)
 
-            with bench_chk_c2:
-                prog_kwargs: Dict[str, Any] = {
-                    "label": "Progress (--progress)",
-                    "help": "Print test progress indicators.",
-                    "key": "run_bench_progress_checkbox",
-                    "on_change": _make_saver("run_bench_progress", "run_bench_progress_checkbox"),
-                }
-                if "run_bench_progress_checkbox" not in st.session_state:
-                    prog_kwargs["value"] = bool(config.get("run_bench_progress", False))
-                st.checkbox(**prog_kwargs)  # type: ignore[arg-type]
+                with r4c1:
+                    minp_kwargs = {
+                        "label": "Min-P (--min-p)",
+                        "min_value": 0.0,
+                        "max_value": 1.0,
+                        "step": 0.01,
+                        "format": "%.2f",
+                        "help": "Min-P sampling threshold.",
+                        "key": "run_min_p_input",
+                        "on_change": _make_saver("run_min_p", "run_min_p_input"),
+                    }
+                    if "run_min_p_input" not in st.session_state:
+                        minp_kwargs["value"] = float(config.get("run_min_p", 0.05))
+                    st.number_input(**minp_kwargs)  # type: ignore[arg-type]
 
-        # ------------------------------------------------------------------
-        # Section: Template
-        # ------------------------------------------------------------------
-        with st.expander("Template (server, cli)", expanded=True):
-            tmpl_c1, tmpl_c2, _ = st.columns(3)
+                with r4c2:
+                    pp_kwargs = {
+                        "label": "Presence (--presence-penalty)",
+                        "min_value": -2.0,
+                        "max_value": 2.0,
+                        "step": 0.05,
+                        "format": "%.2f",
+                        "help": "Presence penalty for repetition reduction.",
+                        "key": "run_presence_penalty_input",
+                        "on_change": _make_saver("run_presence_penalty", "run_presence_penalty_input"),
+                    }
+                    if "run_presence_penalty_input" not in st.session_state:
+                        pp_kwargs["value"] = float(config.get("run_presence_penalty", 0.0))
+                    st.number_input(**pp_kwargs)  # type: ignore[arg-type]
 
-            with tmpl_c1:
-                st.markdown("<br>", unsafe_allow_html=True)
-                jinja_kwargs: Dict[str, Any] = {
-                    "label": "Jinja templates (--jinja)",
-                    "help": "Enable Jinja2 chat template rendering. Required for --reasoning.",
-                    "key": "run_jinja_checkbox",
-                    "on_change": _make_saver("run_jinja", "run_jinja_checkbox"),
-                }
-                if "run_jinja_checkbox" not in st.session_state:
-                    jinja_kwargs["value"] = bool(config.get("run_jinja", True))
-                jinja_enabled = st.checkbox(**jinja_kwargs)  # type: ignore[arg-type]
-                if "run_jinja_checkbox" in st.session_state:
-                    jinja_enabled = st.session_state["run_jinja_checkbox"]
+                st.markdown("---")
 
-            with tmpl_c2:
-                reasoning_options = ["off", "on", "auto"]
-                reasoning_kwargs: Dict[str, Any] = {
-                    "label": "Reasoning (--reasoning)",
-                    "options": reasoning_options,
-                    "help": "Reasoning mode. Only emitted when Jinja is enabled. 'auto' is llama.cpp's default (omitted from command).",
-                    "key": "run_reasoning_select",
-                    "on_change": _make_saver("run_reasoning", "run_reasoning_select"),
-                    "disabled": not jinja_enabled,
-                }
-                if "run_reasoning_select" not in st.session_state:
-                    saved_reasoning = config.get("run_reasoning", "off")
-                    reasoning_kwargs["index"] = reasoning_options.index(saved_reasoning) \
-                        if saved_reasoning in reasoning_options else 0
-                st.selectbox(**reasoning_kwargs)  # type: ignore[arg-type]
+                r5c1, r5c2, _ = st.columns(3)
+
+                with r5c1:
+                    st.markdown("<br>", unsafe_allow_html=True)
+                    jinja_kwargs = {
+                        "label": "Jinja templates (--jinja)",
+                        "help": "Enable Jinja2 chat template rendering. Required for --reasoning.",
+                        "key": "run_jinja_checkbox",
+                        "on_change": _make_saver("run_jinja", "run_jinja_checkbox"),
+                    }
+                    if "run_jinja_checkbox" not in st.session_state:
+                        jinja_kwargs["value"] = bool(config.get("run_jinja", True))
+                    jinja_enabled = st.checkbox(**jinja_kwargs)  # type: ignore[arg-type]
+                    if "run_jinja_checkbox" in st.session_state:
+                        jinja_enabled = st.session_state["run_jinja_checkbox"]
+
+                with r5c2:
+                    reasoning_options = ["off", "on", "auto"]
+                    reasoning_kwargs = {
+                        "label": "Reasoning (--reasoning)",
+                        "options": reasoning_options,
+                        "help": "Reasoning mode. Only emitted when Jinja is enabled. 'auto' is llama.cpp's default (omitted from command).",
+                        "key": "run_reasoning_select",
+                        "on_change": _make_saver("run_reasoning", "run_reasoning_select"),
+                        "disabled": not jinja_enabled,
+                    }
+                    if "run_reasoning_select" not in st.session_state:
+                        saved_reasoning = config.get("run_reasoning", "off")
+                        reasoning_kwargs["index"] = reasoning_options.index(saved_reasoning) \
+                            if saved_reasoning in reasoning_options else 0
+                    st.selectbox(**reasoning_kwargs)  # type: ignore[arg-type]
+
+        elif current_mode == "llama-bench":
+            with st.expander("Bench Settings", expanded=True):
+                b1c1, b1c2, b1c3 = st.columns(3)
+
+                with b1c1:
+                    bp_kwargs: Dict[str, Any] = {
+                        "label": "Prompt tokens (-p)",
+                        "min_value": 0,
+                        "max_value": 65536,
+                        "step": 64,
+                        "help": "Number of prompt tokens to process.",
+                        "key": "run_bench_n_prompt_input",
+                        "on_change": _make_saver("run_bench_n_prompt", "run_bench_n_prompt_input"),
+                    }
+                    if "run_bench_n_prompt_input" not in st.session_state:
+                        bp_kwargs["value"] = int(config.get("run_bench_n_prompt", 512))
+                    st.number_input(**bp_kwargs)  # type: ignore[arg-type]
+
+                with b1c2:
+                    bg_kwargs: Dict[str, Any] = {
+                        "label": "Gen tokens (-n)",
+                        "min_value": 0,
+                        "max_value": 65536,
+                        "step": 16,
+                        "help": "Number of tokens to generate.",
+                        "key": "run_bench_n_gen_input",
+                        "on_change": _make_saver("run_bench_n_gen", "run_bench_n_gen_input"),
+                    }
+                    if "run_bench_n_gen_input" not in st.session_state:
+                        bg_kwargs["value"] = int(config.get("run_bench_n_gen", 128))
+                    st.number_input(**bg_kwargs)  # type: ignore[arg-type]
+
+                with b1c3:
+                    br_kwargs: Dict[str, Any] = {
+                        "label": "Repetitions (-r)",
+                        "min_value": 1,
+                        "max_value": 50,
+                        "step": 1,
+                        "help": "Number of times to repeat each test.",
+                        "key": "run_bench_repetitions_input",
+                        "on_change": _make_saver("run_bench_repetitions", "run_bench_repetitions_input"),
+                    }
+                    if "run_bench_repetitions_input" not in st.session_state:
+                        br_kwargs["value"] = int(config.get("run_bench_repetitions", 5))
+                    st.number_input(**br_kwargs)  # type: ignore[arg-type]
+
+                b2c1, b2c2, b2c3 = st.columns(3)
+
+                with b2c1:
+                    bb_kwargs: Dict[str, Any] = {
+                        "label": "Batch size (-b)",
+                        "min_value": 1,
+                        "max_value": 65536,
+                        "step": 64,
+                        "help": "Batch size for prompt processing.",
+                        "key": "run_bench_batch_size_input",
+                        "on_change": _make_saver("run_bench_batch_size", "run_bench_batch_size_input"),
+                    }
+                    if "run_bench_batch_size_input" not in st.session_state:
+                        bb_kwargs["value"] = int(config.get("run_bench_batch_size", 2048))
+                    st.number_input(**bb_kwargs)  # type: ignore[arg-type]
+
+                with b2c2:
+                    bub_kwargs: Dict[str, Any] = {
+                        "label": "Ubatch size (-ub)",
+                        "min_value": 1,
+                        "max_value": 65536,
+                        "step": 64,
+                        "help": "Micro-batch size for prompt processing.",
+                        "key": "run_bench_ubatch_size_input",
+                        "on_change": _make_saver("run_bench_ubatch_size", "run_bench_ubatch_size_input"),
+                    }
+                    if "run_bench_ubatch_size_input" not in st.session_state:
+                        bub_kwargs["value"] = int(config.get("run_bench_ubatch_size", 512))
+                    st.number_input(**bub_kwargs)  # type: ignore[arg-type]
+
+                with b2c3:
+                    bt_kwargs: Dict[str, Any] = {
+                        "label": "Threads (-t)",
+                        "min_value": 0,
+                        "max_value": 256,
+                        "step": 1,
+                        "help": "CPU threads. 0 = use llama-bench default.",
+                        "key": "run_bench_threads_input",
+                        "on_change": _make_saver("run_bench_threads", "run_bench_threads_input"),
+                    }
+                    if "run_bench_threads_input" not in st.session_state:
+                        bt_kwargs["value"] = int(config.get("run_bench_threads", 0))
+                    st.number_input(**bt_kwargs)  # type: ignore[arg-type]
+
+                b3c1, b3c2, b3c3 = st.columns(3)
+
+                with b3c1:
+                    ctk_kwargs = {
+                        "label": "Cache type K (-ctk)",
+                        "options": cache_type_options,
+                        "help": "KV cache type for keys. Useful for benchmarking KV quantization.",
+                        "key": "run_bench_cache_type_k_select",
+                        "on_change": _make_saver("run_bench_cache_type_k", "run_bench_cache_type_k_select"),
+                    }
+                    saved_ctk = config.get("run_bench_cache_type_k", "f16")
+                    if "run_bench_cache_type_k_select" not in st.session_state:
+                        ctk_kwargs["index"] = cache_type_options.index(saved_ctk) \
+                            if saved_ctk in cache_type_options else 0
+                    st.selectbox(**ctk_kwargs)  # type: ignore[arg-type]
+
+                with b3c2:
+                    ctv_kwargs = {
+                        "label": "Cache type V (-ctv)",
+                        "options": cache_type_options,
+                        "help": "KV cache type for values.",
+                        "key": "run_bench_cache_type_v_select",
+                        "on_change": _make_saver("run_bench_cache_type_v", "run_bench_cache_type_v_select"),
+                    }
+                    saved_ctv = config.get("run_bench_cache_type_v", "f16")
+                    if "run_bench_cache_type_v_select" not in st.session_state:
+                        ctv_kwargs["index"] = cache_type_options.index(saved_ctv) \
+                            if saved_ctv in cache_type_options else 0
+                    st.selectbox(**ctv_kwargs)  # type: ignore[arg-type]
+
+                with b3c3:
+                    output_options = ["md", "csv", "json", "jsonl", "sql"]
+                    bo_kwargs: Dict[str, Any] = {
+                        "label": "Output format (-o)",
+                        "options": output_options,
+                        "help": "Output format for benchmark results.",
+                        "key": "run_bench_output_select",
+                        "on_change": _make_saver("run_bench_output", "run_bench_output_select"),
+                    }
+                    saved_bo = config.get("run_bench_output", "md")
+                    if "run_bench_output_select" not in st.session_state:
+                        bo_kwargs["index"] = output_options.index(saved_bo) \
+                            if saved_bo in output_options else 0
+                    st.selectbox(**bo_kwargs)  # type: ignore[arg-type]
+
+                b4c1, b4c2, _ = st.columns(3)
+
+                with b4c1:
+                    nw_kwargs: Dict[str, Any] = {
+                        "label": "No warmup (--no-warmup)",
+                        "help": "Skip warmup runs before benchmarking.",
+                        "key": "run_bench_no_warmup_checkbox",
+                        "on_change": _make_saver("run_bench_no_warmup", "run_bench_no_warmup_checkbox"),
+                    }
+                    if "run_bench_no_warmup_checkbox" not in st.session_state:
+                        nw_kwargs["value"] = bool(config.get("run_bench_no_warmup", False))
+                    st.checkbox(**nw_kwargs)  # type: ignore[arg-type]
+
+                with b4c2:
+                    prog_kwargs: Dict[str, Any] = {
+                        "label": "Progress (--progress)",
+                        "help": "Print test progress indicators.",
+                        "key": "run_bench_progress_checkbox",
+                        "on_change": _make_saver("run_bench_progress", "run_bench_progress_checkbox"),
+                    }
+                    if "run_bench_progress_checkbox" not in st.session_state:
+                        prog_kwargs["value"] = bool(config.get("run_bench_progress", False))
+                    st.checkbox(**prog_kwargs)  # type: ignore[arg-type]
 
 
 # ---------------------------------------------------------------------------
@@ -853,6 +1032,7 @@ def render_run_gguf_tab(converter: "GGUFConverter", config: Dict[str, Any]) -> N
 def _collect_params(config: Dict[str, Any]) -> Dict[str, Any]:
     """Collect current inference parameters from session state / config."""
     return {
+        "mode": str(st.session_state.get("run_mode_radio", config.get("run_mode", "llama-server"))),
         "ngl": int(st.session_state.get("run_ngl_input", config.get("run_ngl", 99))),
         "ctx": int(st.session_state.get("run_ctx_input", config.get("run_ctx", 4096))),
         "flash_attn": bool(st.session_state.get("run_flash_attn_checkbox", config.get("run_flash_attn", False))),
@@ -887,6 +1067,7 @@ def _collect_params(config: Dict[str, Any]) -> Dict[str, Any]:
 def _apply_preset(preset: Dict[str, Any], config: Dict[str, Any]) -> None:
     """Load preset values into config and clear session state widgets so they re-render."""
     key_map = {
+        "mode": ("run_mode", "run_mode_radio"),
         "ngl": ("run_ngl", "run_ngl_input"),
         "ctx": ("run_ctx", "run_ctx_input"),
         "flash_attn": ("run_flash_attn", "run_flash_attn_checkbox"),
@@ -933,10 +1114,11 @@ def _reset_run_defaults(config: Dict[str, Any]) -> None:
     for k in run_keys:
         config[k] = defaults[k]
     _save_config(config)
-    # Clear widget session state so they re-render with defaults
     widget_keys = [
-        "run_ngl_input", "run_ctx_input", "run_flash_attn_checkbox",
-        "run_fit_target_input", "run_cache_type_k_select", "run_cache_type_v_select",
+        "run_mode_radio",
+        "run_ngl_input", "run_flash_attn_checkbox",
+        "run_ctx_input", "run_fit_target_input",
+        "run_cache_type_k_select", "run_cache_type_v_select",
         "run_port_input", "run_host_input", "run_parallel_input",
         "run_open_browser_checkbox", "run_temp_input", "run_top_k_input",
         "run_top_p_input", "run_min_p_input", "run_presence_penalty_input",
