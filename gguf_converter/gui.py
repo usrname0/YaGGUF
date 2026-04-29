@@ -86,7 +86,7 @@ def main() -> None:
         </style>
     """, unsafe_allow_html=True)
 
-    st.title("YaGGUF - Yet Another GGUF Converter")
+    st.title("YaGGUF - Yet Another GGUF GUI")
 
     # Initialize converter with custom settings if specified
     if 'converter' not in st.session_state:

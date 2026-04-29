@@ -1,3 +1,3 @@
 """
-Tests for YaGGUF - Yet Another GGUF Converter
+Tests for YaGGUF - Yet Another GGUF GUI
 """

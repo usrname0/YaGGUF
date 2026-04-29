@@ -1,4 +1,4 @@
-# YaGGUF - Yet Another GGUF Converter
+# YaGGUF - Yet Another GGUF GUI
 
 There are simultaneously too many and not enough GGUF converters in the world.
 
