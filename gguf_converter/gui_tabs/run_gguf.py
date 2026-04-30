@@ -314,13 +314,15 @@ def render_run_gguf_tab(converter: "GGUFConverter", config: Dict[str, Any]) -> N
                     radio_val = st.session_state.get("run_auto_fit_radio")
                     if radio_val is not None:
                         cur_auto_fit = radio_val == "Auto"
-                    show_apply = not cur_auto_fit and fit_ngl is not None and fit_ctx_val is not None
-                    if show_apply:
+                    if fit_ngl is not None and fit_ctx_val is not None:
                         res_col, btn_col = st.columns([3, 1])
                         with res_col:
                             st.success(f"Fitted params: `{result['stdout']}`")
                         with btn_col:
-                            if st.button("Apply", key="run_fit_apply_btn", use_container_width=True):
+                            apply_disabled = cur_auto_fit
+                            apply_label = "(Auto)" if cur_auto_fit else "Apply"
+                            apply_help = "Switch to Manual mode to apply these values manually." if cur_auto_fit else None
+                            if st.button(apply_label, key="run_fit_apply_btn", use_container_width=True, disabled=apply_disabled, help=apply_help):
                                 st.session_state["pending_fit_apply"] = (fit_ngl, fit_ctx_val)
                                 st.rerun()
                     else:
