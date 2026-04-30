@@ -3,7 +3,7 @@ torchvision>=0.15.0
 torchaudio>=2.0.0
 
 streamlit>=1.40.0,<2.0.0 # GUI
-huggingface-hub>=1.0.0,<2.0.0
+huggingface-hub>=0.34.0,<2.0.0
 hf_xet>=0.1.0  # Xet Storage support for large HuggingFace repos
 colorama>=0.4.6,<1.0.0 # Colored terminal output
 

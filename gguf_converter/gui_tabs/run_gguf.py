@@ -3,9 +3,10 @@ Run GGUF tab — launch llama-server, llama-cli, or llama-bench against a local 
 """
 
 import streamlit as st
+import subprocess
 import webbrowser
 from pathlib import Path
-from typing import Dict, Any, List, Optional, TYPE_CHECKING
+from typing import Dict, Any, List, Optional, Tuple, TYPE_CHECKING
 
 from ..gui_utils import (
     strip_quotes, browse_folder, open_folder, save_config, path_input_columns,
@@ -138,6 +139,14 @@ def render_run_gguf_tab(converter: "GGUFConverter", config: Dict[str, Any]) -> N
     if "pending_preset_load" in st.session_state:
         _apply_pending_preset(st.session_state.pop("pending_preset_load"), config)
 
+    if "pending_fit_apply" in st.session_state:
+        ngl_apply, ctx_apply = st.session_state.pop("pending_fit_apply")
+        st.session_state["run_ngl_input"] = ngl_apply
+        st.session_state["run_ctx_input"] = ctx_apply
+        config["run_ngl"] = ngl_apply
+        config["run_ctx"] = ctx_apply
+        save_config(config)
+
     def _make_saver(cfg_key: str, session_key: str):
         def _save():
             val = st.session_state.get(session_key)
@@ -269,6 +278,63 @@ def render_run_gguf_tab(converter: "GGUFConverter", config: Dict[str, Any]) -> N
             if key and key in gguf_files:
                 selected_file_path = str(gguf_files[key]["primary_file"])
 
+        binary_dir = _get_binary_dir(converter)
+
+        # ------------------------------------------------------------------
+        # Fit estimator
+        # ------------------------------------------------------------------
+        with st.expander("Hardware fit estimate", expanded=False):
+            # Clear stale result when model changes
+            if "run_fit_calc_result" in st.session_state:
+                if st.session_state["run_fit_calc_result"].get("model") != selected_file_path:
+                    del st.session_state["run_fit_calc_result"]
+
+            if st.button(
+                "Estimate fit for selected model",
+                key="run_fit_calc_btn",
+                use_container_width=True,
+                disabled=not selected_file_path,
+                help="Run llama-fit-params to calculate optimal -ngl and -c values for your hardware.",
+            ):
+                cur_fit_target = int(st.session_state.get("run_fit_target_input", config.get("run_fit_target", 1024)))
+                cur_fit_ctx = int(st.session_state.get("run_fit_ctx_input", config.get("run_fit_ctx", 0)))
+                with st.spinner("Calculating fit…"):
+                    stdout, stderr, rc = _run_fit_params(
+                        binary_dir, selected_file_path, cur_fit_target, cur_fit_ctx  # type: ignore[arg-type]
+                    )
+                st.session_state["run_fit_calc_result"] = {
+                    "stdout": stdout, "stderr": stderr, "rc": rc, "model": selected_file_path,
+                }
+
+            if "run_fit_calc_result" in st.session_state:
+                result = st.session_state["run_fit_calc_result"]
+                if result["rc"] == 0 and result["stdout"]:
+                    fit_ngl, fit_ctx_val = _parse_fit_output(result["stdout"])
+                    cur_auto_fit = config.get("run_auto_fit", True)
+                    radio_val = st.session_state.get("run_auto_fit_radio")
+                    if radio_val is not None:
+                        cur_auto_fit = radio_val == "Auto"
+                    show_apply = not cur_auto_fit and fit_ngl is not None and fit_ctx_val is not None
+                    if show_apply:
+                        res_col, btn_col = st.columns([3, 1])
+                        with res_col:
+                            st.success(f"Fitted params: `{result['stdout']}`")
+                        with btn_col:
+                            if st.button("Apply", key="run_fit_apply_btn", use_container_width=True):
+                                st.session_state["pending_fit_apply"] = (fit_ngl, fit_ctx_val)
+                                st.rerun()
+                    else:
+                        st.success(f"Fitted params: `{result['stdout']}`")
+                    with st.expander("Memory breakdown", expanded=False):
+                        st.code(result["stderr"], language=None)
+                else:
+                    st.error("llama-fit-params failed.")
+                    if result["stderr"]:
+                        st.code(result["stderr"], language=None)
+
+            if not selected_file_path:
+                st.caption("Select a GGUF file above to enable.")
+
         # ------------------------------------------------------------------
         # Mode radio
         # ------------------------------------------------------------------
@@ -291,7 +357,6 @@ def render_run_gguf_tab(converter: "GGUFConverter", config: Dict[str, Any]) -> N
         # Launch
         # ------------------------------------------------------------------
         params = _collect_params(config)
-        binary_dir = _get_binary_dir(converter)
 
         if current_mode in ("llama-server", "llama-cli") and not params.get("auto_fit", True):
             if params.get("cache_type_v", "f16") != "f16" and not params.get("flash_attn"):
@@ -497,10 +562,10 @@ def render_run_gguf_tab(converter: "GGUFConverter", config: Dict[str, Any]) -> N
                 with hw_c1:
                     ngl_kwargs: Dict[str, Any] = {
                         "label": "GPU Layers (-ngl)",
-                        "min_value": 0,
+                        "min_value": -1,
                         "max_value": 999,
                         "step": 1,
-                        "help": "Number of layers to offload to GPU. 99 = all layers.",
+                        "help": "Number of layers to offload to GPU. -1 = all layers (OOM if model doesn't fit). 0 = CPU only.",
                         "key": "run_ngl_input",
                         "on_change": _make_saver("run_ngl", "run_ngl_input"),
                     }
@@ -1200,3 +1265,39 @@ def _find_binary(binary_dir: Optional[Path], name: str) -> str:
     if candidate.exists():
         return str(candidate)
     return name
+
+
+def _run_fit_params(
+    binary_dir: Optional[Path],
+    model_path: str,
+    fit_target: int,
+    fit_ctx: int,
+) -> Tuple[str, str, int]:
+    """Run llama-fit-params and return (stdout, stderr, returncode)."""
+    binary = _find_binary(binary_dir, "llama-fit-params")
+    cmd = [binary, "-m", model_path]
+    if fit_target > 0:
+        cmd += ["--fit-target", str(fit_target)]
+    if fit_ctx > 0:
+        cmd += ["--fit-ctx", str(fit_ctx)]
+    result = subprocess.run(cmd, capture_output=True, text=True)
+    return result.stdout.strip(), result.stderr.strip(), result.returncode
+
+
+def _parse_fit_output(stdout: str) -> Tuple[Optional[int], Optional[int]]:
+    """Parse '-c 40192 -ngl -1' style fit output into (ngl, ctx)."""
+    ngl: Optional[int] = None
+    ctx: Optional[int] = None
+    parts = stdout.split()
+    for i, part in enumerate(parts):
+        if part == "-ngl" and i + 1 < len(parts):
+            try:
+                ngl = int(parts[i + 1])
+            except ValueError:
+                pass
+        elif part == "-c" and i + 1 < len(parts):
+            try:
+                ctx = int(parts[i + 1])
+            except ValueError:
+                pass
+    return ngl, ctx

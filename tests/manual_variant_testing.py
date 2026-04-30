@@ -8,7 +8,7 @@ python manual_variant_testing.py E:\\LLM\\lmstudio-community\\Qwen3-VL-4B-Instru
 import subprocess
 import sys
 from pathlib import Path
-from typing import Optional
+from typing import Any, Dict, Optional
 import time
 import shutil
 import socket
@@ -66,7 +66,13 @@ def monitor_server_output(pipe, output_queue, ready_event, completion_event=None
         output_queue.put(None)
 
 
-def test_gguf_file(gguf_path: Path, server_path: Path, mmproj_path: Optional[Path] = None, port: int = 8080) -> None:
+def test_gguf_file(
+    gguf_path: Path,
+    server_path: Path,
+    mmproj_path: Optional[Path] = None,
+    port: int = 8080,
+    config: Optional[Dict[str, Any]] = None,
+) -> None:
     """
     Load a GGUF file in llama-server and wait for user testing
 
@@ -75,21 +81,30 @@ def test_gguf_file(gguf_path: Path, server_path: Path, mmproj_path: Optional[Pat
         server_path: Path to llama-server executable
         mmproj_path: Path to mmproj file for multimodal models (optional)
         port: Port for the server (default 8080)
+        config: YaGGUF config dict; uses Run GGUF hardware settings when provided
     """
     print(f"\n{theme['info']}{'='*70}{Style.RESET_ALL}")
     print(f"{theme['info']}Testing: {gguf_path.name}{Style.RESET_ALL}")
     print(f"{theme['metadata']}Size: {gguf_path.stat().st_size / (1024**3):.2f} GB{Style.RESET_ALL}")
     print(f"{theme['info']}{'='*70}{Style.RESET_ALL}")
 
-    # Build llama-server command
-    cmd = [
-        str(server_path),
-        "-m", str(gguf_path),
-        "--port", str(port),
-        "--host", "127.0.0.1",
-        "-c", "4096",  # Context size
-        "-ngl", "99",  # GPU layers (will use what's available)
-    ]
+    # Build llama-server command using Run GGUF hardware settings from config
+    cmd = [str(server_path), "-m", str(gguf_path), "--port", str(port), "--host", "127.0.0.1"]
+
+    auto_fit = config.get("run_auto_fit", True) if config else True
+    if auto_fit:
+        fit_target = int(config.get("run_fit_target", 1024)) if config else 1024
+        fit_ctx = int(config.get("run_fit_ctx", 0)) if config else 0
+        if fit_target > 0:
+            cmd += ["--fit-target", str(fit_target)]
+        if fit_ctx > 0:
+            cmd += ["--fit-ctx", str(fit_ctx)]
+    else:
+        ngl = int(config.get("run_ngl", 99)) if config else 99
+        ctx = int(config.get("run_ctx", 4096)) if config else 4096
+        cmd += ["-ngl", str(ngl), "-c", str(ctx)]
+        if config and config.get("run_flash_attn", False):
+            cmd += ["-fa", "on"]
 
     # Add mmproj if available (for vision-language models)
     if mmproj_path and mmproj_path.exists():
@@ -261,22 +276,21 @@ def get_yagguf_server_path() -> Optional[Path]:
 
         config = load_config()
 
-        # Check if using custom binaries
-        custom_binaries = None
-        custom_repo = None
-
-        if config.get("use_custom_binaries", False):
-            custom_binaries = config.get("custom_binaries_folder", "")
-            if custom_binaries:
-                print(f"{theme['info']}Found custom binaries config: {custom_binaries}{Style.RESET_ALL}")
-
-        if config.get("use_custom_conversion_script", False):
-            custom_repo = config.get("custom_llama_cpp_repo", "")
+        # Mirror the same logic gui.py uses when initializing the converter:
+        # None  → use YaGGUF auto-downloaded binaries
+        # ""    → use system PATH (use_custom_binaries=True, blank path)
+        # "/path" → use that specific folder
+        custom_binaries = (
+            config.get("custom_binaries_folder", "")
+            if config.get("use_custom_binaries", False)
+            else None
+        )
+        if custom_binaries is not None:
+            label = custom_binaries if custom_binaries else "system PATH"
+            print(f"{theme['info']}Using custom binaries: {label}{Style.RESET_ALL}")
 
         # Initialize LlamaCppManager with custom settings
-        manager = LlamaCppManager(
-            custom_binaries_folder=custom_binaries if custom_binaries else None
-        )
+        manager = LlamaCppManager(custom_binaries_folder=custom_binaries)
 
         # Get llama-server path
         try:
@@ -353,6 +367,13 @@ This script will:
     if not model_dir.exists() or not model_dir.is_dir():
         print(f"\n{theme['error']}Error: Directory not found or is not a directory: {model_dir}{Style.RESET_ALL}")
         return 1
+
+    # Load YaGGUF config for run settings (hardware mode, ngl, ctx, etc.)
+    try:
+        from gguf_converter.gui_utils import load_config
+        run_config: Optional[Dict[str, Any]] = load_config()
+    except Exception:
+        run_config = None
 
     # Find llama-server executable if not provided
     if not server_path:
@@ -504,7 +525,7 @@ This script will:
     try:
         for i, gguf_file in enumerate(gguf_files, 1):
             print(f"\n{theme['info']}[{i}/{len(gguf_files)}]{Style.RESET_ALL}", end=" ")
-            test_gguf_file(gguf_file, server_path, mmproj_path, port)
+            test_gguf_file(gguf_file, server_path, mmproj_path, port, run_config)
     except KeyboardInterrupt:
         print(f"\n\n{theme['warning']}Testing interrupted by user.{Style.RESET_ALL}")
         return 1
