@@ -4,13 +4,12 @@ REM Quick launcher for the GUI on Windows
 REM Check if venv exists
 if not exist venv (
     echo ========================================
-    echo Virtual Environment Not Found
+    echo Installing YaGGUF
     echo ========================================
     echo.
-    echo This is your first time running the GUI.
-    echo We need to set up the environment first.
+    echo No existing installation was found. A fresh environment will be created.
     echo.
-    echo Press any key to run setup now, or Ctrl+C to cancel...
+    echo Press any key to continue, or Ctrl+C to cancel...
     pause >nul
     echo.
     call scripts\setup_windows.bat

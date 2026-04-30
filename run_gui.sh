@@ -4,13 +4,12 @@
 # Check if venv exists
 if [ ! -d "venv" ]; then
     echo "========================================"
-    echo "Virtual Environment Not Found"
+    echo "Installing YaGGUF"
     echo "========================================"
     echo ""
-    echo "This is your first time running the GUI."
-    echo "We need to set up the environment first."
+    echo "No existing installation was found. A fresh environment will be created."
     echo ""
-    printf "Press Enter to run setup now, or Ctrl+C to cancel..."
+    printf "Press Enter to continue, or Ctrl+C to cancel..."
     read _
     echo ""
     bash scripts/setup_linux.sh

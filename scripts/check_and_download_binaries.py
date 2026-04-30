@@ -97,6 +97,30 @@ def ensure_llama_cpp_repo(llama_cpp_manager: Any) -> bool:
     return True
 
 
+def select_gpu_backend(manager: Any) -> str:
+    """Prompt the user to select a GPU backend. Returns the backend value string."""
+    backends = manager.get_available_gpu_backends()
+    if len(backends) == 1:
+        return backends[0][1]
+
+    print("Select GPU backend for llama.cpp binaries:")
+    for i, (label, _) in enumerate(backends, 1):
+        print(f"  {i}. {label}")
+    print()
+
+    while True:
+        try:
+            choice = input("Enter number [1]: ").strip()
+            if not choice:
+                return backends[0][1]
+            idx = int(choice) - 1
+            if 0 <= idx < len(backends):
+                return backends[idx][1]
+            print(f"Please enter a number between 1 and {len(backends)}")
+        except (ValueError, EOFError):
+            return backends[0][1]
+
+
 def main() -> int:
     """Check binary version and update if needed"""
     print("Checking llama.cpp binaries and conversion scripts...")
@@ -109,12 +133,15 @@ def main() -> int:
         print(f"Binaries up to date (version {manager.LLAMA_CPP_VERSION})")
     else:
         print("Binaries not installed")
+        print()
+        gpu_backend = select_gpu_backend(manager)
+        print()
         print("Downloading llama.cpp binaries...")
         print("This may take a few minutes...")
         print()
 
         try:
-            manager.update_binaries(force=True)
+            manager.update_binaries(force=True, gpu_backend=gpu_backend)
             print()
             print("Binaries updated successfully!")
         except Exception as e:
