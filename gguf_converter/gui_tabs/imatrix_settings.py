@@ -367,8 +367,8 @@ def render_imatrix_settings_tab(converter: "GGUFConverter", config: Dict[str, An
             # GPU offloading
             # Enabled if using custom binaries, or if YaGGUF's own binaries use a GPU backend
             using_custom_binaries = config.get("use_custom_binaries", False)
-            gpu_backend = config.get("gpu_backend", "cpu")
-            gpu_disabled = not using_custom_binaries and gpu_backend == "cpu"
+            bin_info = converter.llama_cpp_manager._read_bin_info()
+            gpu_disabled = not using_custom_binaries and bin_info.get("gpu_backend", "cpu") == "cpu"
 
             # Auto-save callback for num_gpu_layers
             def save_num_gpu_layers():

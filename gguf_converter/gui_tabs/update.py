@@ -183,22 +183,16 @@ def render_update_tab(converter: "GGUFConverter", config: Dict[str, Any]) -> Non
         if len(available_backends) > 1:
             backend_labels = [label for label, _ in available_backends]
             backend_values = [value for _, value in available_backends]
-            saved_backend = config.get("gpu_backend", "cpu")
-            saved_index = backend_values.index(saved_backend) if saved_backend in backend_values else 0
-
-            def save_gpu_backend():
-                selected_label = st.session_state.gpu_backend_selector
-                selected_value = backend_values[backend_labels.index(selected_label)]
-                config["gpu_backend"] = selected_value
-                from ..gui_utils import save_config
-                save_config(config)
+            bin_info = st.session_state.converter.llama_cpp_manager._read_bin_info()
+            installed_backend = bin_info.get("gpu_backend")
+            saved_backend = installed_backend if installed_backend and installed_backend in backend_values else backend_values[0][1]
+            saved_index = backend_values.index(saved_backend)
 
             st.radio(
                 "GPU Backend",
                 options=backend_labels,
                 index=saved_index,
                 key="gpu_backend_selector",
-                on_change=save_gpu_backend,
                 help="Select the GPU backend for llama.cpp. Takes effect when downloading binaries. CPU works everywhere; CUDA/Vulkan require compatible hardware."
             )
             selected_backend = backend_values[backend_labels.index(st.session_state.get("gpu_backend_selector", backend_labels[saved_index]))]

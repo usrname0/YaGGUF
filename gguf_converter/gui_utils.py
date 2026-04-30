@@ -134,7 +134,7 @@ def get_default_config() -> Dict[str, Any]:
         # Custom binaries
         "use_custom_binaries": False,
         "custom_binaries_folder": "",
-        "gpu_backend": "cpu",  # Backend for auto-downloaded binaries: "cpu", "cuda-cu12.2.0", "vulkan"
+
 
         # Custom conversion script
         "use_custom_conversion_script": False,
