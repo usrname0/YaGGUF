@@ -36,7 +36,7 @@ def check_git_available() -> bool:
         return False
 
 
-def ensure_llama_cpp_repo(llama_cpp_manager: Any) -> bool:
+def ensure_llama_cpp_repo(llama_cpp_manager: LlamaCppManager) -> bool:
     """
     Ensure llama.cpp repository exists (clone if missing)
     Does NOT auto-update - use Update tab in GUI for updates
