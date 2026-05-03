@@ -830,10 +830,10 @@ def _render_ctx_section(config: Dict[str, Any], current_auto_fit: bool) -> None:
     else:
         ctx_kwargs: Dict[str, Any] = {
             "label": "Context Size (-c)",
-            "min_value": 512,
+            "min_value": 0,
             "max_value": 131072,
             "step": 512,
-            "help": "Context window size in tokens.",
+            "help": "Context window size in tokens. 0 = use the model's native context length from its metadata.",
             "key": "run_ctx_input",
             "on_change": make_config_saver(config, "run_ctx", "run_ctx_input"),
         }

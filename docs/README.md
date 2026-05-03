@@ -1,5 +1,11 @@
 # YaGGUF Screenshots
 
+## Run GGUF
+![Run GGUF](convert_and_quantize.png)
+
+## Run GGUF Expanded Options
+![Run GGUF Expanded Options](convert_and_quantize.png)
+
 ## Convert & Quantize
 ![Convert and Quantize](convert_and_quantize.png)
 
@@ -23,9 +29,6 @@
 
 ## Resplit Shards
 ![Resplit](resplit.png)
-
-## VRAM Calc
-![VRAM Calc](vram_calc.png)
 
 ## llama.cpp Custom Installation
 ![llama.cpp Custom](llama_cpp_custom.png)
