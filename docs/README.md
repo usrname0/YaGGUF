@@ -1,43 +1,43 @@
 # YaGGUF Screenshots
 
 ## Run GGUF
-![Run GGUF](convert_and_quantize.png)
+![Run GGUF](./screenshots/run_gguf.png)
 
 ## Run GGUF Expanded Options
-![Run GGUF Expanded Options](convert_and_quantize.png)
+![Run GGUF Expanded Options](./screenshots/run_gguf_expanded.png)
 
 ## Convert & Quantize
-![Convert and Quantize](convert_and_quantize.png)
+![Convert and Quantize](./screenshots/convert_and_quantize.png)
 
 ## Convert & Quantize Expanded Options
-![Convert and Quantize Expanded Options](convert_and_quantize_expanded.png)
+![Convert and Quantize Expanded Options](./screenshots/convert_and_quantize_expanded.png)
 
 ## Quantize Existing Intermediates
-![Quantize Existing Intermediates](quantize_existing_intermediate.png)
+![Quantize Existing Intermediates](./screenshots/quantize_existing_intermediate.png)
 
 ## Imatrix Settings
-![Imatrix Settings](imatrix_settings.png)
+![Imatrix Settings](./screenshots/imatrix_settings.png)
 
 ## Imatrix Statistics
-![Imatrix Statistics](imatrix_statistics.png)
+![Imatrix Statistics](./screenshots/imatrix_statistics.png)
 
 ## HuggingFace Downloader
-![HuggingFace Downloader](huggingface_downloader.png)
+![HuggingFace Downloader](./screenshots/huggingface_downloader.png)
 
 ## Split/Merge Shards
-![Merge Split](merge_split.png)
+![Merge Split](./screenshots/merge_split.png)
 
 ## Resplit Shards
-![Resplit](resplit.png)
+![Resplit](./screenshots/resplit.png)
 
 ## llama.cpp Custom Installation
-![llama.cpp Custom](llama_cpp_custom.png)
+![llama.cpp Custom](./screenshots/llama_cpp_custom.png)
 
 ## Update Tab
-![Updater](updater.png)
+![Updater](./screenshots/updater.png)
 
 ## Terminal Example 1
-![Terminal 1](terminal1.png)
+![Terminal 1](./screenshots/terminal1.png)
 
 ## Terminal Example 2
-![Terminal 2](terminal2.png)
+![Terminal 2](./screenshots/terminal2.png)

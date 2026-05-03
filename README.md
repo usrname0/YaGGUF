@@ -2,7 +2,7 @@
 
 There are simultaneously too many and not enough GGUF converters in the world.
 
- ![convert and quantize](./docs/convert_and_quantize.png)
+ ![convert and quantize](./docs/screenshots/convert_and_quantize.png)
 [More screenshots](./docs/)
 
 ## Features
