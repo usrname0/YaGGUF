@@ -350,7 +350,7 @@ def launch_in_terminal(
                 cmd_str = " ".join(f'"{arg}"' if " " in arg else arg for arg in cmd_args)
                 sh_file.write(f'cd "{project_root}"\n')
                 sh_file.write(f'{cmd_str}\n')
-                sh_file.write("read -p 'Press Enter to close...'\n")
+                sh_file.write("printf 'Press Enter to close...'; read _\n")
                 sh_file.write(f'rm -f "{sh_path}"\n')
             os.chmod(sh_path, 0o755)
             terminals = [

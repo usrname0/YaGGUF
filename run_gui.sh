@@ -18,7 +18,7 @@ if [ ! -d "venv" ]; then
         GPU_BACKEND="cpu"
     else
         echo "Select GPU backend for llama.cpp binaries:"
-        echo "  1. CPU only (recommended)"
+        echo "  1. CPU only (default)"
         echo "  2. CUDA 12.4 (NVIDIA)"
         echo "  3. CUDA 13.1 (NVIDIA)"
         echo "  4. Vulkan (NVIDIA/AMD/Intel)"
