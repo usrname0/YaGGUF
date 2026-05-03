@@ -5,7 +5,7 @@ This module re-exports all tab render functions from individual modules
 to maintain backward compatibility with the main GUI.
 """
 
-from .run_gguf import render_run_gguf_tab
+from .run_gguf import render_run_gguf_tab, RUN_GGUF_KEY_MAP
 from .convert import render_convert_tab
 from .imatrix_settings import render_imatrix_settings_tab
 from .imatrix_stats import render_imatrix_stats_tab
@@ -16,6 +16,7 @@ from .update import render_update_tab
 
 __all__ = [
     'render_run_gguf_tab',
+    'RUN_GGUF_KEY_MAP',
     'render_convert_tab',
     'render_imatrix_settings_tab',
     'render_imatrix_stats_tab',

@@ -45,7 +45,8 @@ try:
         render_downloader_tab,
         render_split_merge_tab,
         render_info_tab,
-        render_update_tab
+        render_update_tab,
+        RUN_GGUF_KEY_MAP,
     )
 except ImportError:
     # Add parent directory for direct execution
@@ -63,7 +64,8 @@ except ImportError:
         render_downloader_tab,
         render_split_merge_tab,
         render_info_tab,
-        render_update_tab
+        render_update_tab,
+        RUN_GGUF_KEY_MAP,
     )
 
 
@@ -108,14 +110,6 @@ def main() -> None:
         st.session_state.model_path_input = st.session_state.pending_model_path
         del st.session_state.pending_model_path
 
-    # Handle run model path from folder browser (before widget creation)
-    if 'run_reset_count' not in st.session_state:
-        st.session_state.run_reset_count = 0
-    if 'pending_run_model_path' in st.session_state:
-        st.session_state.run_model_path_input = st.session_state.pending_run_model_path
-        st.session_state.run_reset_count += 1
-        del st.session_state.pending_run_model_path
-
     # Handle reset to defaults (before widget creation)
     if 'pending_reset_defaults' in st.session_state:
         defaults = get_default_config()
@@ -146,7 +140,7 @@ def main() -> None:
             max_value=max_workers,
             value=int(config.get("num_threads") or default_threads),
             step=1,
-            help=f"Number of threads for llama.cpp. Default = max - 1 to keep system responsive)",
+            help=f"Number of threads for llama.cpp. Default = max - 1 to keep system responsive.",
             key="num_threads_input",
             on_change=save_num_threads
         )
@@ -240,6 +234,10 @@ def main() -> None:
                 st.session_state.split_merge_operation_mode = "Split"
             if "split_merge_max_shard_size_input" in st.session_state:
                 st.session_state.split_merge_max_shard_size_input = 2.0
+            # Reset all Run GGUF tab session state keys so widgets re-read from config
+            for _, _, session_key in RUN_GGUF_KEY_MAP:
+                if session_key in st.session_state:
+                    del st.session_state[session_key]
             st.session_state.pending_reset_defaults = True
             st.rerun()
 

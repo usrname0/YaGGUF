@@ -510,8 +510,8 @@ def render_convert_tab(
                 elif file_mode == "Single files":
                     st.info("Intermediate will be a single file.\n\nQuantized outputs will then be a single file.")
 
-        # Vision / Multimodal settings
-        with st.expander("Vision / Multimodal Settings"):
+        # Multimodal settings (vision and audio projectors)
+        with st.expander("Multimodal Settings"):
 
             mmproj_precision_options = ["F16 (recommended)", "F32", "BF16", "Q8_0"]
 
@@ -530,7 +530,7 @@ def render_convert_tab(
                     options=mmproj_precision_options,
                     index=mmproj_precision_options.index(saved_mmproj_precision) if saved_mmproj_precision in mmproj_precision_options else 0,
                     horizontal=True,
-                    help="Precision for vision projector file. F16 recommended for best compatibility (BF16 has known CUDA issues). Only applies to vision/multimodal models." if not using_custom_intermediate else "Disabled when using custom intermediate.",
+                    help="Precision for multimodal projector file (vision or audio). F16 recommended for best compatibility (BF16 has known CUDA issues). Only applies to multimodal models." if not using_custom_intermediate else "Disabled when using custom intermediate.",
                     key="mmproj_precision_radio",
                     on_change=save_mmproj_precision,
                     disabled=using_custom_intermediate
@@ -1125,7 +1125,7 @@ def render_convert_tab(
         trad_checkboxes = {}
         for idx, (qtype, tooltip) in enumerate(trad_quants.items()):
             with trad_cols[idx % 3]:
-                checkbox_value = config.get("other_quants", {}).get(qtype, qtype == "Q8_0" if qtype == "Q8_0" else False)
+                checkbox_value = config.get("other_quants", {}).get(qtype, False)
                 widget_key = f"trad_{qtype}"
 
                 trad_checkboxes[qtype] = st.checkbox(
@@ -1376,7 +1376,7 @@ def render_convert_tab(
                     output_tensor_type_param = None if output_tensor_type in ["Same as quant type (default)", "Unquantized"] else output_tensor_type
 
                     # Handle token embedding type selection
-                    token_embedding_type_param = None if token_embedding_type in ["Same as quant type (default)", "Unquantized"] else token_embedding_type
+                    token_embedding_type_param = None if token_embedding_type == "Same as quant type (default)" else token_embedding_type
 
                     # Get custom intermediate parameters if selected
                     custom_intermediate_path = None

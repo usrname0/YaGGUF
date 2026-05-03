@@ -48,58 +48,97 @@ class TestMistralFormat:
         assert ModelQuirks.uses_mistral_format(tmp_path) is False
 
 
-class TestVisionModel:
-    """Tests for Vision/Multimodal model detection"""
+class TestMultimodalModel:
+    """Tests for multimodal model detection (vision and audio)"""
 
     def test_detects_vision_config(self, tmp_path):
-        """Should detect vision model if vision_config is present"""
-        config = {
-            "vision_config": {"hidden_size": 1024}
-        }
+        config = {"vision_config": {"hidden_size": 1024}}
         (tmp_path / "config.json").write_text(json.dumps(config))
-        assert ModelQuirks.is_vision_model(tmp_path) is True
+        assert ModelQuirks.is_multimodal_model(tmp_path) is True
 
     def test_detects_image_processor(self, tmp_path):
-        """Should detect vision model if image_processor_type is present"""
-        config = {
-            "image_processor_type": "SiglipImageProcessor"
-        }
+        config = {"image_processor_type": "SiglipImageProcessor"}
         (tmp_path / "config.json").write_text(json.dumps(config))
-        assert ModelQuirks.is_vision_model(tmp_path) is True
+        assert ModelQuirks.is_multimodal_model(tmp_path) is True
 
     def test_detects_vision_architectures(self, tmp_path):
-        """Should detect known vision architectures"""
         architectures = [
             "LlavaForConditionalGeneration",
             "Qwen2VLForConditionalGeneration",
             "Gemma3ForConditionalGeneration",
-            "Pixtral"
+            "Pixtral",
         ]
-        
         for arch in architectures:
             config = {"architectures": [arch]}
-            config_file = tmp_path / "config.json"
-            config_file.write_text(json.dumps(config))
-            assert ModelQuirks.is_vision_model(tmp_path) is True
+            (tmp_path / "config.json").write_text(json.dumps(config))
+            assert ModelQuirks.is_multimodal_model(tmp_path) is True
+
+    def test_detects_audio_config(self, tmp_path):
+        config = {"audio_config": {"hidden_size": 1024}}
+        (tmp_path / "config.json").write_text(json.dumps(config))
+        assert ModelQuirks.is_multimodal_model(tmp_path) is True
+
+    def test_detects_audio_processor(self, tmp_path):
+        config = {"audio_processor_type": "WhisperFeatureExtractor"}
+        (tmp_path / "config.json").write_text(json.dumps(config))
+        assert ModelQuirks.is_multimodal_model(tmp_path) is True
+
+    def test_detects_audio_architectures(self, tmp_path):
+        architectures = [
+            "Qwen2AudioForConditionalGeneration",
+            "UltravoxModel",
+            "Qwen2_5OmniModel",
+        ]
+        for arch in architectures:
+            config = {"architectures": [arch]}
+            (tmp_path / "config.json").write_text(json.dumps(config))
+            assert ModelQuirks.is_multimodal_model(tmp_path) is True
 
     def test_detects_model_type_keywords(self, tmp_path):
-        """Should detect keywords in model_type"""
-        types = ["smolvlm", "pixtral-vision", "my-vision-model"]
-        
+        types = ["smolvlm", "pixtral-vision", "my-vision-model", "qwen2-audio", "my-asr-model", "omni-chat"]
         for mtype in types:
             config = {"model_type": mtype}
-            config_file = tmp_path / "config.json"
-            config_file.write_text(json.dumps(config))
-            assert ModelQuirks.is_vision_model(tmp_path) is True
+            (tmp_path / "config.json").write_text(json.dumps(config))
+            assert ModelQuirks.is_multimodal_model(tmp_path) is True
 
     def test_negative_detection(self, tmp_path):
-        """Should return False for text-only models"""
         config = {
             "model_type": "llama",
-            "architectures": ["LlamaForCausalLM"]
+            "architectures": ["LlamaForCausalLM"],
         }
         (tmp_path / "config.json").write_text(json.dumps(config))
-        assert ModelQuirks.is_vision_model(tmp_path) is False
+        assert ModelQuirks.is_multimodal_model(tmp_path) is False
+
+    def test_is_vision_model_alias(self, tmp_path):
+        """is_vision_model is a deprecated alias for is_multimodal_model"""
+        config = {"vision_config": {"hidden_size": 1024}}
+        (tmp_path / "config.json").write_text(json.dumps(config))
+        assert ModelQuirks.is_vision_model(tmp_path) == ModelQuirks.is_multimodal_model(tmp_path)
+
+
+class TestProjectorOnlyModel:
+    """Tests for projector-only model detection (e.g. Ultravox)"""
+
+    def test_detects_ultravox(self, tmp_path):
+        config = {"architectures": ["UltravoxModel"]}
+        (tmp_path / "config.json").write_text(json.dumps(config))
+        assert ModelQuirks.is_projector_only_model(tmp_path) is True
+
+    def test_negative_for_full_model(self, tmp_path):
+        config = {"architectures": ["LlamaForCausalLM"]}
+        (tmp_path / "config.json").write_text(json.dumps(config))
+        assert ModelQuirks.is_projector_only_model(tmp_path) is False
+
+    def test_negative_for_standard_multimodal(self, tmp_path):
+        config = {"architectures": ["Qwen2AudioForConditionalGeneration"]}
+        (tmp_path / "config.json").write_text(json.dumps(config))
+        assert ModelQuirks.is_projector_only_model(tmp_path) is False
+
+    def test_projector_only_implies_multimodal(self, tmp_path):
+        """Projector-only models should also be detected as multimodal"""
+        config = {"architectures": ["UltravoxModel"]}
+        (tmp_path / "config.json").write_text(json.dumps(config))
+        assert ModelQuirks.is_multimodal_model(tmp_path) is True
 
 
 class TestSentenceTransformers:

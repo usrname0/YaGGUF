@@ -115,18 +115,19 @@ class ModelQuirks:
             return False
 
     @staticmethod
-    def is_vision_model(model_path: Path) -> bool:
+    def is_multimodal_model(model_path: Path) -> bool:
         """
-        Check if the model is a vision/multimodal model requiring --mmproj flag
+        Check if the model is a multimodal model requiring --mmproj flag
 
-        Vision models have vision encoders for processing images/video alongside text.
-        Examples: Gemma 3, Qwen2-VL, Pixtral, LLaVA, InternVL, etc.
+        Multimodal models have encoders for processing non-text inputs (images, video, audio)
+        alongside text. Both vision and audio projectors use the same --mmproj flag in llama.cpp.
+        Examples: Gemma 3, Qwen2-VL, Pixtral, LLaVA, InternVL, Qwen2-Audio, Ultravox, etc.
 
         Args:
             model_path: Path to the model directory
 
         Returns:
-            True if this is a vision/multimodal model
+            True if this is a multimodal model needing an mmproj file
         """
         config_file = model_path / "config.json"
         if not config_file.exists():
@@ -136,13 +137,18 @@ class ModelQuirks:
             with open(config_file, 'r', encoding='utf-8') as f:
                 config = json.load(f)
 
-            # Check for vision-specific config keys
+            # Vision-specific config keys
             has_vision_config = "vision_config" in config
             has_image_processor = "image_processor_type" in config
 
-            # Check for vision model architectures
+            # Audio-specific config keys
+            has_audio_config = "audio_config" in config
+            has_audio_processor = "audio_processor_type" in config
+
+            # Known multimodal architectures (vision + audio)
             architectures = config.get("architectures", [])
-            vision_architectures = [
+            multimodal_architectures = [
+                # Vision
                 "LlavaForConditionalGeneration",
                 "Qwen2VLForConditionalGeneration",
                 "Gemma3ForConditionalGeneration",
@@ -150,15 +156,62 @@ class ModelQuirks:
                 "Pixtral",
                 "MoondreamForConditionalGeneration",
                 "SmolVLM",
+                # Audio
+                "Qwen2AudioForConditionalGeneration",
+                "UltravoxModel",
+                # Combined audio+vision
+                "Qwen2_5OmniModel",
+                "Qwen3OmniForConditionalGeneration",
             ]
 
-            has_vision_arch = any(arch in str(architectures) for arch in vision_architectures)
+            has_multimodal_arch = any(arch in str(architectures) for arch in multimodal_architectures)
 
-            # Check model_type for vision variants
+            # model_type keywords covering vision and audio variants
             model_type = config.get("model_type", "")
-            is_vision_type = any(keyword in model_type.lower() for keyword in ["vision", "vlm", "pixtral"])
+            is_multimodal_type = any(
+                keyword in model_type.lower()
+                for keyword in ["vision", "vlm", "pixtral", "audio", "asr", "omni"]
+            )
 
-            return has_vision_config or has_image_processor or has_vision_arch or is_vision_type
+            return (
+                has_vision_config or has_image_processor
+                or has_audio_config or has_audio_processor
+                or has_multimodal_arch or is_multimodal_type
+            )
+        except Exception:
+            return False
+
+    @staticmethod
+    def is_vision_model(model_path: Path) -> bool:
+        """Deprecated alias for is_multimodal_model."""
+        return ModelQuirks.is_multimodal_model(model_path)
+
+    @staticmethod
+    def is_projector_only_model(model_path: Path) -> bool:
+        """
+        Check if the model repo contains only an encoder/projector — no text decoder.
+
+        These models cannot be converted to a text GGUF. The only valid conversion is
+        --mmproj, which produces the audio/vision projector file. The text model (e.g.
+        Llama 3.2 1B for Ultravox) lives in a separate repo and must be converted
+        independently.
+
+        Affected models:
+        - Ultravox: audio encoder only; raises NotImplementedError without --mmproj
+        """
+        config_file = model_path / "config.json"
+        if not config_file.exists():
+            return False
+
+        try:
+            with open(config_file, 'r', encoding='utf-8') as f:
+                config = json.load(f)
+
+            architectures = config.get("architectures", [])
+            projector_only_architectures = [
+                "UltravoxModel",
+            ]
+            return any(arch in str(architectures) for arch in projector_only_architectures)
         except Exception:
             return False
 
@@ -206,10 +259,10 @@ class ModelQuirks:
 
         Args:
             model_path: Path to the model directory
-            include_mmproj: If True, include --mmproj flag for vision models.
-                           For vision models, you typically need TWO conversions:
+            include_mmproj: If True, include --mmproj flag for multimodal models.
+                           For multimodal models, you typically need TWO conversions:
                            1. Without --mmproj to get the text model (for imatrix/quantization)
-                           2. With --mmproj to get the vision projector
+                           2. With --mmproj to get the projector (vision or audio)
 
         Returns:
             List of additional command-line flags to pass to convert_hf_to_gguf.py
@@ -220,9 +273,9 @@ class ModelQuirks:
         if ModelQuirks.uses_mistral_format(model_path):
             flags.append("--mistral-format")
 
-        # Vision/multimodal models need --mmproj to export the vision projector
+        # Multimodal models need --mmproj to export the projector (vision or audio)
         # But only when explicitly requested (for the second conversion pass)
-        if ModelQuirks.is_vision_model(model_path) and include_mmproj:
+        if ModelQuirks.is_multimodal_model(model_path) and include_mmproj:
             flags.append("--mmproj")
 
         # Sentence-transformers models with dense modules
@@ -246,11 +299,15 @@ class ModelQuirks:
             else:
                 print(f"{theme['info']}Detected Mistral-format model, using --mistral-format flag{Style.RESET_ALL}")
 
-        if ModelQuirks.is_vision_model(model_path):
-            print(f"{theme['info']}\nDetected vision/multimodal model{Style.RESET_ALL}")
+        if ModelQuirks.is_projector_only_model(model_path):
+            print(f"{theme['info']}\nDetected projector-only model (no text decoder in this repo){Style.RESET_ALL}")
+            print(f"{theme['info']}Only the multimodal projector (mmproj-*.gguf) will be generated.{Style.RESET_ALL}")
+            print(f"{theme['info']}You will need a separate text model GGUF to use it with llama-server.{Style.RESET_ALL}")
+        elif ModelQuirks.is_multimodal_model(model_path):
+            print(f"{theme['info']}\nDetected multimodal model{Style.RESET_ALL}")
             print(f"{theme['info']}Requires two components:{Style.RESET_ALL}")
             print(f"{theme['info']}  1. Text model (for imatrix/quantization){Style.RESET_ALL}")
-            print(f"{theme['info']}  2. Vision projector (mmproj-*.gguf){Style.RESET_ALL}")
+            print(f"{theme['info']}  2. Multimodal projector (mmproj-*.gguf){Style.RESET_ALL}")
 
         if ModelQuirks.is_sentence_transformers_model(model_path):
             print(f"{theme['info']}\nDetected sentence-transformers model with dense modules{Style.RESET_ALL}")

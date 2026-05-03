@@ -18,6 +18,7 @@ There are simultaneously too many and not enough GGUF converters in the world.
 
 ### Advanced Features
 
+- **Run GGUF** - Launch llama-server, llama-cli, or llama-bench directly against any GGUF file, with hardware auto-fit, preset management, and inline command preview
 - **Single or split files mode** - Generate single or split files for intermediates and quants
 - **Split/Merge Shards** - Split, merge, or resplit GGUF and safetensors files with custom shard sizes
 - **Importance Matrix** - Generate or reuse imatrix files for better low-bit quantization (IQ2, IQ3)
@@ -27,7 +28,6 @@ There are simultaneously too many and not enough GGUF converters in the world.
 - **Model quirks detection** - Handles Mistral format, pre-quantized models, and architecture-specific flags
 - **Vision/Multimodal models** - Automatic detection and two-step conversion (text model + `mmproj-*.gguf`)
 - **Sentence-transformers** - Auto-detect and include dense modules for embedding models
-- **VRAM Calculator** - Estimate VRAM usage and recommended GPU layers (-ngl) for GGUF models
 
 ## Quantization Types
 

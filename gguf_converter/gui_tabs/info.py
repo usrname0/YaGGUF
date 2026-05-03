@@ -21,6 +21,7 @@ def render_info_tab(converter: "GGUFConverter", config: Dict[str, Any]) -> None:
     Intended for anyone who prefers a GUI or wants a quant without going down the whole rabbithole.
 
     **Features:**
+    - **Run GGUF** - Launch llama-server, llama-cli, or llama-bench directly against any GGUF file
     - **Convert & Quantize** - HuggingFace models to GGUF with multiple quantization formats at once
     - **All quantization types** - Full support for llama.cpp quantization types
     - **Vision/Multimodal models** - Automatic detection and two-step conversion (text model + vision projector)
@@ -33,22 +34,20 @@ def render_info_tab(converter: "GGUFConverter", config: Dict[str, Any]) -> None:
     - **Imatrix Statistics** - Analyze importance matrix files to view statistics
     - **HuggingFace Downloader** - Download models and their supporting files
     - **Split/Merge Shards** - Split and merge GGUF and safetensors files with custom shard sizes
-    - **VRAM Calculator** - Estimate VRAM usage and recommended GPU layers (-ngl) for GGUF models
     - **Cross-platform** - Windows & Linux support (Mac should work too, but untested)
     - **Auto-downloads binaries** - Pre-compiled llama.cpp binaries (CPU)
     - **Customization** - Can use other llama.cpp binaries if desired
     - **Persistent settings** - Automatically saves your preferences
 
     **Tabs:**
-    1. **Convert & Quantize** - Main conversion interface with imatrix options
-    2. **Imatrix Settings** - Configure calibration data and processing settings
-    3. **Imatrix Statistics** - Analyze existing imatrix files
-    4. **HuggingFace Downloader** - Download models from HuggingFace
-    5. **Split/Merge Shards** - Split and merge GGUF and safetensors files
-    6. **VRAM Calculator** - Estimate VRAM usage and GPU layers for GGUF models
+    1. **Run GGUF** - Launch llama-server, llama-cli, or llama-bench against a GGUF file
+    2. **Convert & Quantize** - Main conversion interface with imatrix options
+    3. **Imatrix Settings** - Configure calibration data and processing settings
+    4. **Imatrix Statistics** - Analyze existing imatrix files
+    5. **HuggingFace Downloader** - Download models from HuggingFace
+    6. **Split/Merge Shards** - Split and merge GGUF and safetensors files
     7. **Info** - This tab
-    8. **llama.cpp** - Customize llama.cpp setup
-    9. **Update** - Update YaGGUF, llama.cpp and dependencies
+    8. **Update** - Update YaGGUF, llama.cpp and dependencies
 
     **Settings:**
     - Your settings are automatically saved as you change them
@@ -117,15 +116,14 @@ def render_info_tab(converter: "GGUFConverter", config: Dict[str, Any]) -> None:
             )
 
             st.markdown(f"""
-            Enables extra tools that are unsupported but might be useful for advanced users:
+            Enables extra tools that are not supported but might be useful for advanced users:
             - **Test Models** - Test all GGUF variants in the output directory interactively with llama-server
                 - Launches a new terminal window, hit enter in the terminal to load the next model
-                - Custom binary with gpu enabled is recommended but not required
             - **Dev Tests** - Run the full test suite (pytest) in a new terminal window
                 - First checksum test run will be "SKIPPED" because there's no checksum to compare against yet
             ---
             **External files:**
-            - YaGUFF config: `{CONFIG_FILE}`
+            - YaGGUF config: `{CONFIG_FILE}`
             - Streamlit config: `{STREAMLIT_CONFIG_DIR}`
             - HuggingFace data: `{HF_CACHE_DIR}`
             """)

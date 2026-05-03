@@ -485,10 +485,10 @@ class GGUFConverter:
             Tuple of (mmproj_path, was_newly_generated):
             - (path, True) if mmproj was newly generated
             - (path, False) if mmproj already existed and generation was skipped
-            - (None, False) if not a vision model
+            - (None, False) if not a multimodal model
         """
-        # Only generate for vision models
-        if not ModelQuirks.is_vision_model(model_path):
+        # Only generate for multimodal models
+        if not ModelQuirks.is_multimodal_model(model_path):
             return None, False
 
         # Build mmproj output path using model name and mmproj precision
@@ -1211,6 +1211,27 @@ class GGUFConverter:
                     print(f"{theme['success']}\nUsing PyTorch checkpoint(s) from: {model_path.name}{Style.RESET_ALL}")
                     for f in pytorch_files:
                         print(f"{theme['info']}  {f.name} ({f.stat().st_size / (1024**3):.2f} GB){Style.RESET_ALL}")
+
+        # Projector-only models (e.g. Ultravox) have no text decoder — skip conversion,
+        # imatrix, and quantization; just generate the mmproj file.
+        if not using_custom_intermediate and ModelQuirks.is_projector_only_model(model_path):
+            ModelQuirks.print_model_detection(model_path)
+            returned_mmproj, mmproj_newly_generated = self._generate_mmproj(
+                model_path=model_path,
+                output_dir=output_dir,
+                mmproj_precision=mmproj_precision,
+                overwrite_mmproj=overwrite_mmproj,
+                verbose=verbose
+            )
+            if returned_mmproj:
+                if mmproj_newly_generated:
+                    print(f"{theme['success']}Projector created: {returned_mmproj.name}{Style.RESET_ALL}")
+                    print(f"{theme['info']}Use with a compatible text model GGUF via --mmproj {returned_mmproj.name}{Style.RESET_ALL}")
+                    return [returned_mmproj], []
+                else:
+                    print(f"{theme['success']}Projector already exists: {returned_mmproj.name}{Style.RESET_ALL}")
+                    return [], [returned_mmproj]
+            return [], []
 
         # Step 1: Convert to GGUF or use custom intermediate
         if using_custom_intermediate:

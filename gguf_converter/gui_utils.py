@@ -12,6 +12,7 @@ import shutil
 import logging
 import tempfile
 import os
+from datetime import datetime
 from typing import Dict, Optional, Tuple, Any, Callable, List
 from colorama import Style
 from .theme import THEME as theme
@@ -26,7 +27,6 @@ except ImportError:
     tk = None
     filedialog = None
 
-# Export TKINTER_AVAILABLE for use in other modules
 __all__ = ['TKINTER_AVAILABLE', 'browse_folder', 'open_folder', 'strip_quotes',
            'save_config', 'load_config', 'get_default_config', 'make_config_saver', 'path_input_columns',
            'extract_repo_id_from_url', 'get_platform_path', 'CONFIG_FILE', 'HF_TOKEN_PATH',
@@ -109,10 +109,6 @@ def get_default_config() -> Dict[str, Any]:
         "repo_id": "",
         "download_dir": "",
 
-        # Merge tab (deprecated - now in Split/Merge tab)
-        "merge_input_dir": "",
-        "merge_output_dir": "",
-
         # Split/Merge tab
         "split_merge_input_dir": "",
         "split_merge_selected_file": None,
@@ -134,7 +130,6 @@ def get_default_config() -> Dict[str, Any]:
         # Custom binaries
         "use_custom_binaries": False,
         "custom_binaries_folder": "",
-
 
         # Custom conversion script
         "use_custom_conversion_script": False,
@@ -161,9 +156,10 @@ def get_default_config() -> Dict[str, Any]:
         "run_top_p": 0.95,
         "run_min_p": 0.05,
         "run_presence_penalty": 0.0,
-        "run_max_tokens": -1,
         "run_jinja": True,
         "run_reasoning": "off",
+
+        "run_mmproj_enabled": True,
 
         # Bench-specific params
         "run_bench_n_prompt": 512,
@@ -207,22 +203,7 @@ def save_config(config: Dict[str, Any]) -> None:
 
 
 def make_config_saver(config: Dict[str, Any], config_key: str, session_key: str) -> Callable[[], None]:
-    """
-    Factory function to create config save callbacks for Streamlit widgets
-
-    Args:
-        config: Config dictionary to update
-        config_key: Key in config dict to update
-        session_key: Key in st.session_state to read from
-
-    Returns:
-        Callback function that saves the value from session state to config
-
-    Example:
-        st.checkbox("Enable feature",
-                    key="my_feature_checkbox",
-                    on_change=make_config_saver(config, "my_feature", "my_feature_checkbox"))
-    """
+    """Return an on_change callback that writes session_key's value into config and saves."""
     def save() -> None:
         if session_key in st.session_state:
             config[config_key] = st.session_state[session_key]
@@ -237,19 +218,94 @@ def reset_config() -> Dict[str, Any]:
     return config
 
 
-def launch_in_terminal(cmd_args: List[str], window_title: str = "YaGGUF") -> bool:
+def launch_in_terminal(
+    cmd_args: List[str],
+    window_title: str = "YaGGUF",
+    announce_title: Optional[str] = None,
+    announce_subtitle: Optional[str] = None,
+) -> bool:
     """
     Launch a command in a new terminal window.
 
     Args:
         cmd_args: List of command arguments
         window_title: Title for the new terminal window
+        announce_title: Optional banner title (e.g. "llama-server")
+        announce_subtitle: Optional banner subtitle (e.g. model filename)
 
     Returns:
         True on success, False on failure
     """
+    import sys as _sys
+
     system = platform.system()
     project_root = Path(__file__).parent.parent
+    python_exe = _sys.executable
+
+    def _banner_text_lines() -> List[str]:
+        """Return the centered text lines for the banner (no separators)."""
+        if not announce_title:
+            return []
+        width = 80
+        ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        lines = [announce_title.upper().center(width)]
+        if announce_subtitle:
+            lines.append(announce_subtitle.center(width))
+        lines.append(ts.center(width))
+        return lines
+
+    def _write_windows_banner(f: Any) -> None:
+        """Write a Python one-liner to the .bat file that prints the banner via colorama.
+        Uses single-quoted Python strings so they're safe inside cmd's outer "..." quoting.
+        The run command is passed via env var to avoid quoting issues inside cmd's "..." context.
+        """
+        text_lines = _banner_text_lines()
+        if not text_lines:
+            return
+        # Escape single quotes for Python single-quoted string literals (cmd passes \ through)
+        def _sq(s: str) -> str:
+            return s.replace("'", "\\'")
+        py_parts = [
+            "import os",
+            "from colorama import init,Fore,Style",
+            "init()",
+            "c=Fore.WHITE+Style.DIM",
+            "r=Style.RESET_ALL",
+            "print(c+'='*80+r)",
+        ]
+        for line in text_lines:
+            py_parts.append(f"print(c+'{_sq(line)}'+r)")
+        py_parts += [
+            "print(c+'='*80+r)",
+            "cmd=os.environ.get('YAGGUF_CMD','')",
+            "print(Fore.CYAN+cmd+r)",
+            "print()",
+        ]
+        # set "VAR=value" is safe for paths: backslashes are literal, no " allowed in Windows paths
+        f.write(f'set "YAGGUF_CMD={" ".join(cmd_args)}"\n')
+        f.write(f'"{python_exe}" -c "{";".join(py_parts)}"\n')
+
+    def _write_unix_banner(f: Any) -> None:
+        """Write a Python heredoc block to a .sh file that prints the banner via colorama."""
+        text_lines = _banner_text_lines()
+        if not text_lines:
+            return
+        # Escape double quotes for Python double-quoted string literals inside the heredoc
+        def _dq(s: str) -> str:
+            return s.replace('"', '\\"')
+        f.write(f'"{python_exe}" - << \'PYEOF\'\n')
+        f.write('from colorama import init,Fore,Style\n')
+        f.write('init()\n')
+        f.write('c=Fore.WHITE+Style.DIM\n')
+        f.write('r=Style.RESET_ALL\n')
+        f.write('print(c+"="*80+r)\n')
+        for line in text_lines:
+            f.write(f'print(c+"{_dq(line)}"+r)\n')
+        f.write('print(c+"="*80+r)\n')
+        # repr() produces a safe Python literal for any path/arg content; heredoc has no shell expansion
+        f.write(f'print(Fore.CYAN+{repr(" ".join(cmd_args))}+r)\n')
+        f.write('print()\n')
+        f.write('PYEOF\n')
 
     try:
         if system == "Windows":
@@ -257,6 +313,7 @@ def launch_in_terminal(cmd_args: List[str], window_title: str = "YaGGUF") -> boo
                 bat_path = bat_file.name
                 bat_file.write('@echo off\n')
                 bat_file.write(f'cd /d "{project_root}"\n')
+                _write_windows_banner(bat_file)
                 cmd_line = ' '.join(f'"{arg}"' for arg in cmd_args)
                 bat_file.write(f'{cmd_line}\n')
                 bat_file.write('pause\n')
@@ -268,23 +325,41 @@ def launch_in_terminal(cmd_args: List[str], window_title: str = "YaGGUF") -> boo
             return True
 
         elif system == "Darwin":
-            cmd_str = " ".join(f'"{arg}"' for arg in cmd_args)
+            with tempfile.NamedTemporaryFile(mode='w', suffix='.sh', delete=False) as sh_file:
+                sh_path = sh_file.name
+                sh_file.write('#!/bin/sh\n')
+                _write_unix_banner(sh_file)
+                cmd_str = " ".join(f'"{arg}"' for arg in cmd_args)
+                sh_file.write(f'cd "{project_root}"\n')
+                sh_file.write(f'{cmd_str}\n')
+                sh_file.write("printf 'Press Enter to close...'; read _\n")
+                sh_file.write(f'rm -f "{sh_path}"\n')
+            os.chmod(sh_path, 0o755)
             subprocess.Popen([
                 "osascript", "-e",
-                f'tell app "Terminal" to do script "cd {project_root} && {cmd_str}"'
+                f'tell app "Terminal" to do script "sh \\"{sh_path}\\""'
             ])
             return True
 
         else:
             # Linux: try various terminal emulators
-            cmd_str = " ".join(f'"{arg}"' if " " in arg else arg for arg in cmd_args)
+            with tempfile.NamedTemporaryFile(mode='w', suffix='.sh', delete=False) as sh_file:
+                sh_path = sh_file.name
+                sh_file.write('#!/bin/sh\n')
+                _write_unix_banner(sh_file)
+                cmd_str = " ".join(f'"{arg}"' if " " in arg else arg for arg in cmd_args)
+                sh_file.write(f'cd "{project_root}"\n')
+                sh_file.write(f'{cmd_str}\n')
+                sh_file.write("read -p 'Press Enter to close...'\n")
+                sh_file.write(f'rm -f "{sh_path}"\n')
+            os.chmod(sh_path, 0o755)
             terminals = [
-                ("x-terminal-emulator", ["-e", "sh", "-c", f"cd {project_root} && {cmd_str}; read -p 'Press Enter to close...'"]),
-                ("gnome-terminal", ["--", "sh", "-c", f"cd {project_root} && {cmd_str}; read -p 'Press Enter to close...'"]),
-                ("konsole", ["--", "sh", "-c", f"cd {project_root} && {cmd_str}; read -p 'Press Enter to close...'"]),
-                ("xfce4-terminal", ["-x", "sh", "-c", f"cd {project_root} && {cmd_str}; read -p 'Press Enter to close...'"]),
-                ("mate-terminal", ["-e", "sh", "-c", f"cd {project_root} && {cmd_str}; read -p 'Press Enter to close...'"]),
-                ("xterm", ["-e", "sh", "-c", f"cd {project_root} && {cmd_str}; read -p 'Press Enter to close...'"]),
+                ("x-terminal-emulator", ["-e", sh_path]),
+                ("gnome-terminal", ["--", sh_path]),
+                ("konsole", ["--", sh_path]),
+                ("xfce4-terminal", ["-x", sh_path]),
+                ("mate-terminal", ["-e", sh_path]),
+                ("xterm", ["-e", sh_path]),
             ]
             for term, term_args in terminals:
                 if shutil.which(term):
