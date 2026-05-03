@@ -260,7 +260,7 @@ def render_update_tab(converter: "GGUFConverter", config: Dict[str, Any]) -> Non
     # Custom binaries row — checkbox left, path right (same row = guaranteed alignment)
     col_cbin_check, col_cbin_path = st.columns(2)
     with col_cbin_check:
-        st.markdown("**Custom Binaries** — use your own compiled llama.cpp with GPU support (CUDA/ROCm/Metal/Vulkan) for imatrix generation.")
+        st.markdown("**Custom Binaries** — use your own compiled llama.cpp")
 
         def save_use_custom_binaries():
             config["use_custom_binaries"] = st.session_state.use_custom_binaries_checkbox_update

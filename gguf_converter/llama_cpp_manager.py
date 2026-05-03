@@ -186,7 +186,7 @@ class LlamaCppManager:
         os_name = self.platform_info['os']
         if os_name == 'win':
             return [
-                ("CPU (recommended)", "cpu"),
+                ("CPU", "cpu"),
                 ("CUDA 12.4 (Nvidia)", "cuda-12.4"),
                 ("CUDA 13.1 (Nvidia)", "cuda-13.1"),
                 ("Vulkan (Nvidia/AMD/Intel)", "vulkan"),
@@ -196,7 +196,13 @@ class LlamaCppManager:
         elif os_name == 'macos':
             return [("CPU + Metal (built-in)", "cpu")]
         else:  # ubuntu/linux
-            return [("CPU", "cpu")]
+            return [
+                ("CPU", "cpu"),
+                ("CUDA 12.4 (Nvidia)", "cuda-12.4"),
+                ("CUDA 13.1 (Nvidia)", "cuda-13.1"),
+                ("Vulkan (Nvidia/AMD/Intel)", "vulkan"),
+                ("HIP / ROCm (AMD)", "hip-radeon"),
+            ]
 
     def update_binaries(self, force: bool = False, version: Optional[str] = None, gpu_backend: str = "cpu") -> Path:
         """
