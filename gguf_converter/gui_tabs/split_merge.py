@@ -858,10 +858,7 @@ def copy_auxiliary_files(input_dir: Path, output_dir: Path) -> List[Path]:
                 copied_files.append(dest_path)
 
     if copied_files:
-        print(f"{THEME['success']}Copied {len(copied_files)} auxiliary file(s){Style.RESET_ALL}")
-        for copied_file in copied_files:
-            print(f"{THEME['info']}  - {copied_file.name}{Style.RESET_ALL}")
-        print()  # Empty line after list
+        print(f"{THEME['success']}Copied {len(copied_files)} auxiliary file(s){Style.RESET_ALL}\n")
     else:
         print(f"{THEME['info']}No auxiliary files found to copy{Style.RESET_ALL}\n")
 
@@ -1089,7 +1086,7 @@ def merge_safetensors_shards(shard_files: List[Path], output_file: Path):
     print(f"{THEME['success']}Successfully merged: {output_file.name}{Style.RESET_ALL}\n")
 
 
-def split_safetensors_file(input_file: Path, output_dir: Path, max_shard_size_gb: float) -> List[Path]:
+def split_safetensors_file(input_file: Path, output_dir: Path, max_shard_size_gb: float, output_base_name: Optional[str] = None) -> List[Path]:
     """
     Split a safetensors file into shards.
 
@@ -1097,6 +1094,7 @@ def split_safetensors_file(input_file: Path, output_dir: Path, max_shard_size_gb
         input_file: Path to the safetensors file to split
         output_dir: Directory where split files will be saved
         max_shard_size_gb: Maximum size per shard in GB
+        output_base_name: Optional base name for output files (defaults to input file stem)
 
     Returns:
         List of created shard files
@@ -1150,7 +1148,7 @@ def split_safetensors_file(input_file: Path, output_dir: Path, max_shard_size_gb
         shards.append(current_shard)
 
     # Write shards
-    base_name = input_file.stem
+    base_name = output_base_name if output_base_name else input_file.stem
     output_files = []
 
     for i, shard_tensors in enumerate(shards, start=1):
@@ -1202,9 +1200,9 @@ def resplit_safetensors_shards(shard_files: List[Path], output_dir: Path, max_sh
                 print(f"{THEME['warning']}  - {shard.name}{Style.RESET_ALL}")
                 shard.unlink()
 
-        # Step 2: Split the merged file with new size
+        # Step 2: Split the merged file with new size (use original base name, not temp name)
         print(f"{THEME['info']}Step 2: Splitting with new shard size...{Style.RESET_ALL}")
-        output_files = split_safetensors_file(temp_merged_file, output_dir, max_shard_size_gb)
+        output_files = split_safetensors_file(temp_merged_file, output_dir, max_shard_size_gb, output_base_name=base_name)
 
         # Step 3: Clean up temp file
         print(f"{THEME['info']}Cleaning up temporary file...{Style.RESET_ALL}")
