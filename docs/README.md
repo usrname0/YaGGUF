@@ -30,9 +30,6 @@
 ## Resplit Shards
 ![Resplit](./screenshots/resplit.png)
 
-## llama.cpp Custom Installation
-![llama.cpp Custom](./screenshots/llama_cpp_custom.png)
-
 ## Update Tab
 ![Updater](./screenshots/updater.png)
 
