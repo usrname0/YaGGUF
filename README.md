@@ -1,6 +1,6 @@
 # YaGGUF - Yet Another GGUF GUI
 
-There are simultaneously too many and not enough GGUF converters in the world.
+There are simultaneously too many and not enough GGUF GUIs in the world.
 
  ![convert and quantize](./docs/screenshots/convert_and_quantize.png)
 [More screenshots](./docs/)
@@ -8,6 +8,7 @@ There are simultaneously too many and not enough GGUF converters in the world.
 ## Features
 
 - **[llama.cpp](https://github.com/ggerganov/llama.cpp) under the hood** - so that part works
+- **Run GGUF** - Launch llama-server, llama-cli, or llama-bench directly against any GGUF file, with hardware auto-fit, preset management, and inline command preview
 - **Download** - automatically download models and their auxiliary files from HuggingFace
 - **Convert** - safetensors and PyTorch models to GGUF format
 - **Quantize** - to multiple formats at once
@@ -18,7 +19,6 @@ There are simultaneously too many and not enough GGUF converters in the world.
 
 ### Advanced Features
 
-- **Run GGUF** - Launch llama-server, llama-cli, or llama-bench directly against any GGUF file, with hardware auto-fit, preset management, and inline command preview
 - **Single or split files mode** - Generate single or split files for intermediates and quants
 - **Split/Merge Shards** - Split, merge, or resplit GGUF and safetensors files with custom shard sizes
 - **Importance Matrix** - Generate or reuse imatrix files for better low-bit quantization (IQ2, IQ3)
