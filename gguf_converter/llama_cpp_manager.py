@@ -337,7 +337,11 @@ class LlamaCppManager:
             if item.is_dir():
                 shutil.rmtree(item, onerror=remove_readonly)
             else:
-                item.unlink()
+                try:
+                    item.unlink()
+                except PermissionError:
+                    os.chmod(item, stat.S_IWRITE)
+                    item.unlink()
 
     def _extract_archive(self, archive_path: Path):
         """
@@ -365,7 +369,11 @@ class LlamaCppManager:
                     if dest.is_dir():
                         shutil.rmtree(dest, onerror=remove_readonly)
                     else:
-                        dest.unlink()
+                        try:
+                            dest.unlink()
+                        except PermissionError:
+                            os.chmod(dest, stat.S_IWRITE)
+                            dest.unlink()
                 shutil.move(str(item), str(dest))
 
             # Remove empty subdirectory
