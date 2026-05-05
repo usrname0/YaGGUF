@@ -90,7 +90,7 @@ All quantization types from llama.cpp are supported. Choose based on your size/q
 ## Installation - Linux
 
 ```bash
-# If you want to select folders via the gui install tkinter (optional):
+# If you want to select folders via the gui, install tkinter (optional):
     sudo apt install python3-tk      # Ubuntu/Debian
     sudo dnf install python3-tkinter # Fedora/RHEL
     sudo pacman -S tk                # Arch
