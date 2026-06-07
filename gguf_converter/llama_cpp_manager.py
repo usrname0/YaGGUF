@@ -34,7 +34,7 @@ class LlamaCppManager:
     Manages llama.cpp resources including binaries and conversion scripts
     """
 
-    LLAMA_CPP_VERSION = "b9012"
+    LLAMA_CPP_VERSION = "b9544"
     RELEASE_URL_TEMPLATE = "https://github.com/ggml-org/llama.cpp/releases/download/{tag}/{filename}"
 
     # Seconds to wait on GitHub API calls before giving up. These run on the
@@ -194,8 +194,10 @@ class LlamaCppManager:
                         names.add(name)
             else:
                 # Page through the assets endpoint until a short/empty page.
-                page = 1
-                while True:
+                # A hard page cap guards against an unbounded loop if a server
+                # ever keeps returning full pages (releases have a few hundred
+                # assets, so 50 pages / 5000 assets is far more than enough).
+                for page in range(1, 51):
                     assets_url = (
                         f"https://api.github.com/repos/ggml-org/llama.cpp/"
                         f"releases/{release_id}/assets?per_page=100&page={page}"
@@ -210,7 +212,6 @@ class LlamaCppManager:
                             names.add(name)
                     if len(page_data) < 100:
                         break
-                    page += 1
         except Exception:
             names = set()
 
