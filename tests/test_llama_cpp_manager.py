@@ -585,9 +585,11 @@ class TestAssetPagination:
             assert timeout == LlamaCppManager.GITHUB_API_TIMEOUT
             if "releases/tags/" in url:
                 return _json_response({"id": 42, "assets": page1[:30]})
-            if "page=1" in url:
+            # Match the page param at the end of the URL; a loose "page=1" in url
+            # check would also match the "per_page=100" substring on every page.
+            if url.endswith("page=1"):
                 return _json_response(page1)
-            if "page=2" in url:
+            if url.endswith("page=2"):
                 return _json_response(page2)
             return _json_response([])
 

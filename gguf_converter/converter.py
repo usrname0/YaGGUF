@@ -146,10 +146,50 @@ class GGUFConverter:
             "\n\nThis often means YaGGUF's 'transformers' package is out of date for "
             "this model. Update it using YaGGUF's own Python environment:\n\n"
             f'  "{sys.executable}" -m pip install -U transformers tokenizers sentencepiece\n\n'
+            "If the model is very new and no released transformers version supports it "
+            "yet, install the latest development version straight from source instead:\n\n"
+            f'  "{sys.executable}" -m pip install -U git+https://github.com/huggingface/transformers.git\n\n'
             "(A plain 'pip install --upgrade transformers' can fail or update the wrong "
             "Python install - using the full interpreter path above targets YaGGUF's venv "
             "directly. You can also use the Update tab.)"
         )
+
+    @staticmethod
+    def _run_capture(cmd: List[str], verbose: bool) -> Tuple[int, str]:
+        """
+        Run a conversion subprocess, returning (returncode, combined_output).
+
+        In non-verbose mode this captures stdout/stderr silently. In verbose
+        mode it streams output to the terminal in real time *and* captures it,
+        so callers can still analyze the output (e.g. for the transformers
+        upgrade hint) even when the user asked for verbose logging. Previously
+        verbose mode inherited the terminal directly and captured nothing, which
+        meant failure hints never fired for verbose runs.
+        """
+        if not verbose:
+            result = subprocess.run(
+                cmd, capture_output=True, text=True, encoding='utf-8', errors='replace'
+            )
+            return result.returncode, (result.stderr or '') + (result.stdout or '')
+
+        # Verbose: stream while capturing. Merge stderr into stdout so terminal
+        # ordering is preserved and a single buffer holds everything.
+        captured: List[str] = []
+        process = subprocess.Popen(
+            cmd,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+            encoding='utf-8',
+            errors='replace',
+            bufsize=1,
+        )
+        assert process.stdout is not None
+        for line in process.stdout:
+            print(line, end='')
+            captured.append(line)
+        process.wait()
+        return process.returncode, ''.join(captured)
 
     def __init__(self, custom_binaries_folder=None, custom_llama_cpp_repo=None):
         """
@@ -456,20 +496,15 @@ class GGUFConverter:
         print(f"{theme['info']}Converting {model_path.name} to GGUF format...{Style.RESET_ALL}")
         print(f"{theme['highlight']}\nRunning: {' '.join(cmd)}{Style.RESET_ALL}\n")
 
-        result = subprocess.run(cmd, capture_output=not verbose, text=True, encoding='utf-8', errors='replace')
+        returncode, error_output = self._run_capture(cmd, verbose)
 
-        if result.returncode != 0:
-            # Combine stdout and stderr since errors can be in either
-            error_output = (result.stderr or '') + (result.stdout or '')
+        if returncode != 0:
             if not error_output.strip():
-                # Verbose mode streams directly to terminal; nothing captured
+                # Nothing captured at all — point the user at the terminal.
                 raise RuntimeError("Conversion failed — see terminal output above for details.")
             error_msg = self._clean_llama_error(error_output.strip())
             hint = self._transformers_upgrade_hint(error_output)
             raise RuntimeError(f"Conversion failed:\n\n{error_msg}{hint}")
-
-        if verbose and result.stdout:
-            print(result.stdout)
 
         # Check if shards were created when splitting was requested
         actual_output_path = output_path
@@ -577,17 +612,13 @@ class GGUFConverter:
 
         print(f"{theme['highlight']}\nRunning: {' '.join(mmproj_cmd)}{Style.RESET_ALL}\n")
 
-        mmproj_result = subprocess.run(mmproj_cmd, capture_output=not verbose, text=True, encoding='utf-8', errors='replace')
+        mmproj_returncode, error_output = self._run_capture(mmproj_cmd, verbose)
 
-        if mmproj_result.returncode != 0:
-            error_output = (mmproj_result.stderr or '') + (mmproj_result.stdout or '')
+        if mmproj_returncode != 0:
             raw_error = error_output.strip() if error_output.strip() else 'Unknown error'
             error_msg = self._clean_llama_error(raw_error)
             hint = self._transformers_upgrade_hint(raw_error)
             raise RuntimeError(f"Vision projector export failed:\n\n{error_msg}{hint}")
-
-        if verbose and mmproj_result.stdout:
-            print(mmproj_result.stdout)
 
         print(f"{theme['success']}\nVision projector exported: {mmproj_output}{Style.RESET_ALL}")
         return mmproj_output, True

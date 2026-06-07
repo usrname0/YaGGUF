@@ -9,10 +9,12 @@ huggingface-hub>=0.34.0,<2.0.0
 hf_xet>=0.1.0  # Xet Storage support for large HuggingFace repos
 colorama>=0.4.6,<1.0.0 # Colored terminal output
 
-# For model conversion (llama.cpp convert_hf_to_gguf.py script)
-transformers>=4.50.0,<5.0.0
-sentencepiece>=0.2.0,<1.0.0
+# For model conversion (llama.cpp convert_hf_to_gguf.py script).
+# transformers/tokenizers/sentencepiece are floor-only on purpose: YaGGUF never imports
+# them directly and they must float to support new architectures.
+transformers>=4.50.0
+sentencepiece>=0.2.0
+tokenizers>=0.21.0
 numpy>=2.0.0,<3.0.0
 gguf>=0.15.0,<1.0.0
-tokenizers>=0.21.0,<1.0.0
 mistral-common>=1.8.0,<2.0.0  # Required for Ministral-3 and newer Mistral models
