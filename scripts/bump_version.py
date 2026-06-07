@@ -99,6 +99,81 @@ def get_current_branch():
         return None
 
 
+def check_git_status():
+    """
+    Check for uncommitted or unsynced changes before proceeding.
+
+    Detects:
+    - Uncommitted changes (modified/staged/untracked files)
+    - Commits ahead of / behind the upstream remote branch
+
+    If anything is found, warns the user and prompts to abort or proceed.
+
+    Returns:
+        True if it's safe to continue (clean, or user chose to proceed),
+        False if the user chose to abort.
+    """
+    root = get_project_root()
+    warnings = []
+
+    # Check for uncommitted changes (staged, unstaged, or untracked)
+    try:
+        status = subprocess.run(
+            ["git", "status", "--porcelain"],
+            capture_output=True,
+            text=True,
+            check=True,
+            cwd=root
+        )
+        dirty = [line for line in status.stdout.splitlines() if line.strip()]
+        if dirty:
+            warnings.append(f"Uncommitted changes ({len(dirty)} file(s)):")
+            for line in dirty[:20]:
+                warnings.append(f"    {line}")
+            if len(dirty) > 20:
+                warnings.append(f"    ... and {len(dirty) - 20} more")
+    except subprocess.CalledProcessError:
+        print(Colors.yellow("Warning: Could not determine git status"))
+
+    # Check whether the local branch is in sync with its upstream
+    try:
+        counts = subprocess.run(
+            ["git", "rev-list", "--left-right", "--count", "@{upstream}...HEAD"],
+            capture_output=True,
+            text=True,
+            check=True,
+            cwd=root
+        )
+        behind_str, _, ahead_str = counts.stdout.strip().partition('\t')
+        behind = int(behind_str) if behind_str.isdigit() else 0
+        ahead = int(ahead_str) if ahead_str.isdigit() else 0
+        if ahead:
+            warnings.append(f"Local branch is ahead of upstream by {ahead} commit(s) (unpushed).")
+        if behind:
+            warnings.append(f"Local branch is behind upstream by {behind} commit(s) (unpulled).")
+    except (subprocess.CalledProcessError, ValueError):
+        # No upstream configured, or not a tracking branch - not necessarily a problem
+        print(Colors.yellow("Note: Could not compare against an upstream branch (no tracking branch set?)"))
+
+    if not warnings:
+        return True
+
+    print()
+    print(Colors.yellow("=" * 60))
+    print(Colors.yellow("WARNING: Working tree is not clean / in sync"))
+    print(Colors.yellow("=" * 60))
+    for line in warnings:
+        print(Colors.yellow(f"  {line}"))
+    print(Colors.yellow("=" * 60))
+    print()
+
+    response = input(f"{Colors.yellow('Proceed anyway?')} [y/N] ")
+    if response.lower() != 'y':
+        print("Aborted")
+        return False
+    return True
+
+
 def get_recent_versions(count=3):
     """
     Get recent YaGGUF version tags from git
@@ -401,6 +476,10 @@ def main():
     )
 
     args = parser.parse_args()
+
+    # Check for uncommitted/unsynced changes before doing anything
+    if not check_git_status():
+        sys.exit(1)
 
     # Run tests first
     if not run_tests():
