@@ -185,7 +185,10 @@ def render_update_tab(converter: "GGUFConverter", config: Dict[str, Any]) -> Non
             backend_values = [value for _, value in available_backends]
             bin_info = st.session_state.converter.llama_cpp_manager._read_bin_info()
             installed_backend = bin_info.get("gpu_backend")
-            saved_backend = installed_backend if installed_backend and installed_backend in backend_values else backend_values[0][1]
+            # Normalise legacy exact CUDA values (e.g. "cuda-13.1") to the major
+            # family ("cuda-13") so a previously saved preference still matches.
+            installed_family = st.session_state.converter.llama_cpp_manager._cuda_family(installed_backend or "")
+            saved_backend = installed_family if installed_family in backend_values else backend_values[0]
             saved_index = backend_values.index(saved_backend)
 
             st.radio(

@@ -107,6 +107,50 @@ class GGUFConverter:
         # Fallback to original if we couldn't extract anything useful
         return error_output
 
+    @staticmethod
+    def _transformers_upgrade_hint(error_output: str) -> str:
+        """
+        If a conversion failure looks like an out-of-date 'transformers' package
+        (newer model architectures often require a newer transformers), return a
+        hint with a venv-aware upgrade command. Otherwise return an empty string.
+
+        We point users at sys.executable (YaGGUF's own interpreter) rather than a
+        bare 'pip' because a plain 'pip install --upgrade transformers' frequently
+        targets the wrong Python environment or fails outright.
+        """
+        lowered = error_output.lower()
+        if "transformers" not in lowered and "recognize this architecture" not in lowered:
+            return ""
+
+        # Only emit the hint when the error actually looks version/architecture
+        # related. Use specific phrases — a bare "version" would match "conversion".
+        signals = [
+            "upgrade",
+            "latest version",
+            "newer version",
+            "version of transformers",
+            "transformers version",
+            "recognize this architecture",
+            "does not recognize",
+            "model type",
+            "no module named",
+            "importerror",
+            "out of date",
+            "outdated",
+            "is not supported",
+        ]
+        if not any(s in lowered for s in signals):
+            return ""
+
+        return (
+            "\n\nThis often means YaGGUF's 'transformers' package is out of date for "
+            "this model. Update it using YaGGUF's own Python environment:\n\n"
+            f'  "{sys.executable}" -m pip install -U transformers tokenizers sentencepiece\n\n'
+            "(A plain 'pip install --upgrade transformers' can fail or update the wrong "
+            "Python install - using the full interpreter path above targets YaGGUF's venv "
+            "directly. You can also use the Update tab.)"
+        )
+
     def __init__(self, custom_binaries_folder=None, custom_llama_cpp_repo=None):
         """
         Initialize the converter and llama.cpp manager
@@ -421,7 +465,8 @@ class GGUFConverter:
                 # Verbose mode streams directly to terminal; nothing captured
                 raise RuntimeError("Conversion failed — see terminal output above for details.")
             error_msg = self._clean_llama_error(error_output.strip())
-            raise RuntimeError(f"Conversion failed:\n\n{error_msg}")
+            hint = self._transformers_upgrade_hint(error_output)
+            raise RuntimeError(f"Conversion failed:\n\n{error_msg}{hint}")
 
         if verbose and result.stdout:
             print(result.stdout)
@@ -538,7 +583,8 @@ class GGUFConverter:
             error_output = (mmproj_result.stderr or '') + (mmproj_result.stdout or '')
             raw_error = error_output.strip() if error_output.strip() else 'Unknown error'
             error_msg = self._clean_llama_error(raw_error)
-            raise RuntimeError(f"Vision projector export failed:\n\n{error_msg}")
+            hint = self._transformers_upgrade_hint(raw_error)
+            raise RuntimeError(f"Vision projector export failed:\n\n{error_msg}{hint}")
 
         if verbose and mmproj_result.stdout:
             print(mmproj_result.stdout)

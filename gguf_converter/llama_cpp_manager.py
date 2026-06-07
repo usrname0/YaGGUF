@@ -37,6 +37,10 @@ class LlamaCppManager:
     LLAMA_CPP_VERSION = "b9012"
     RELEASE_URL_TEMPLATE = "https://github.com/ggml-org/llama.cpp/releases/download/{tag}/{filename}"
 
+    # Seconds to wait on GitHub API calls before giving up. These run on the
+    # Streamlit render thread, so a missing timeout would hang the GUI.
+    GITHUB_API_TIMEOUT = 10
+
     def __init__(self, bin_dir: Optional[Path] = None, custom_binaries_folder: Optional[str] = None):
         """
         Initialize llama.cpp manager
@@ -148,13 +152,72 @@ class LlamaCppManager:
         """
         try:
             api_url = "https://api.github.com/repos/ggml-org/llama.cpp/releases/latest"
-            with urlopen(api_url) as response:
+            with urlopen(api_url, timeout=self.GITHUB_API_TIMEOUT) as response:
                 data = json.loads(response.read().decode())
                 return data['tag_name']
         except Exception as e:
             print(f"{theme['warning']}Warning: Could not fetch latest version: {e}{Style.RESET_ALL}")
             print(f"{theme['info']}Falling back to recommended version: {self.LLAMA_CPP_VERSION}{Style.RESET_ALL}")
             return self.LLAMA_CPP_VERSION
+
+    def _get_release_asset_names(self, tag: str) -> set:
+        """
+        Fetch the set of asset filenames published for a given release tag.
+
+        The assets embedded in the release-by-tag response are paginated by
+        GitHub (30 per page), and llama.cpp releases ship far more assets than
+        that, so we resolve the release id and page through the dedicated assets
+        endpoint to get the complete set. A truncated set would otherwise drop
+        CUDA variants and make valid backends look unavailable.
+
+        Results are cached per-tag on the instance (the manager persists for the
+        session). Returns an empty set on failure so callers can fail open.
+        """
+        if not hasattr(self, '_asset_cache'):
+            self._asset_cache = {}
+        if tag in self._asset_cache:
+            return self._asset_cache[tag]
+
+        names = set()
+        try:
+            api_url = f"https://api.github.com/repos/ggml-org/llama.cpp/releases/tags/{tag}"
+            with urlopen(api_url, timeout=self.GITHUB_API_TIMEOUT) as response:
+                data = json.loads(response.read().decode())
+
+            release_id = data.get('id')
+            if release_id is None:
+                # No id to paginate with — fall back to the embedded (possibly
+                # truncated) assets array rather than nothing.
+                for asset in data.get('assets', []):
+                    name = asset.get('name')
+                    if name:
+                        names.add(name)
+            else:
+                # Page through the assets endpoint until a short/empty page.
+                page = 1
+                while True:
+                    assets_url = (
+                        f"https://api.github.com/repos/ggml-org/llama.cpp/"
+                        f"releases/{release_id}/assets?per_page=100&page={page}"
+                    )
+                    with urlopen(assets_url, timeout=self.GITHUB_API_TIMEOUT) as response:
+                        page_data = json.loads(response.read().decode())
+                    if not page_data:
+                        break
+                    for asset in page_data:
+                        name = asset.get('name')
+                        if name:
+                            names.add(name)
+                    if len(page_data) < 100:
+                        break
+                    page += 1
+        except Exception:
+            names = set()
+
+        # Only cache successful fetches so a transient failure isn't sticky
+        if names:
+            self._asset_cache[tag] = names
+        return names
 
     def _bin_info_path(self) -> Path:
         return self.bin_dir / ".yagguf_bin_info.json"
@@ -177,32 +240,125 @@ class LlamaCppManager:
         except Exception:
             return {"version": None, "gpu_backend": None}
 
-    def get_available_gpu_backends(self) -> list:
+    @staticmethod
+    def _cuda_family(backend: str) -> str:
+        """
+        Normalise a CUDA backend to its major family.
+
+        "cuda-13.3" -> "cuda-13", "cuda-13" -> "cuda-13". Non-CUDA backends
+        (and anything unexpected) are returned unchanged.
+        """
+        if not backend or not backend.startswith("cuda"):
+            return backend
+        import re
+        m = re.match(r'(cuda-\d+)', backend)
+        return m.group(1) if m else backend
+
+    def _resolve_cuda_variant(self, tag: str, backend: str) -> str:
+        """
+        Resolve a CUDA backend selection to the exact patch variant published
+        for `tag` on this platform.
+
+        Accepts a major family like "cuda-13" (what the GUI now stores) or a
+        legacy exact value like "cuda-13.3", and returns the highest available
+        patch for that major (e.g. "cuda-13.3"). This is what lets a saved
+        "CUDA 13.x" preference keep working when llama.cpp bumps 13.1 -> 13.3.
+
+        Returns the input unchanged for non-CUDA backends, or when the release
+        assets can't be inspected (the download/validation step then surfaces
+        any remaining problem).
+        """
+        if not backend or not backend.startswith("cuda"):
+            return backend
+
+        import re
+        major = self._cuda_family(backend).split('-', 1)[1]
+        os_name = self.platform_info['os']
+        arch = self.platform_info['arch']
+        assets = self._get_release_asset_names(tag)
+        if not assets:
+            return backend
+
+        pat = re.compile(rf"^llama-{re.escape(tag)}-bin-{os_name}-(cuda-{major}\.[\d.]+)-{arch}\.")
+        variants = {m.group(1) for a in assets if (m := pat.match(a))}
+        if not variants:
+            return backend
+        # Highest patch within the chosen major (e.g. cuda-13.5 over cuda-13.3)
+        return max(variants, key=lambda v: tuple(int(n) for n in re.findall(r'\d+', v)))
+
+    def _discover_cuda_backends(self, tag: str) -> list:
+        """
+        Return [(label, value), ...] for the CUDA major families actually
+        published for `tag` on this platform's win-x64/arm64 builds.
+
+        Values are major families ("cuda-13") shown as "CUDA 13.x" rather than
+        exact patch versions, so a saved preference survives llama.cpp bumping
+        the bundled toolkit between releases (e.g. cuda-13.1 -> cuda-13.3). The
+        exact patch is resolved at download time by _resolve_cuda_variant().
+        Falls back to a static list when the assets can't be fetched.
+        """
+        import re
+
+        os_name = self.platform_info['os']
+        arch = self.platform_info['arch']
+        assets = self._get_release_asset_names(tag)
+
+        found = []
+        if assets:
+            pat = re.compile(rf"^llama-{re.escape(tag)}-bin-{os_name}-cuda-(\d+)\.[\d.]+-{arch}\.")
+            majors = sorted({m.group(1) for a in assets if (m := pat.match(a))}, key=int)
+            for major in majors:
+                found.append((f"CUDA {major}.x (Nvidia)", f"cuda-{major}"))
+
+        if found:
+            return found
+
+        # Fallback when the release can't be inspected
+        return [
+            ("CUDA 12.x (Nvidia)", "cuda-12"),
+            ("CUDA 13.x (Nvidia)", "cuda-13"),
+        ]
+
+    def get_available_gpu_backends(self, tag: Optional[str] = None) -> list:
         """
         Return list of (label, value) tuples for available GPU backends on this platform.
 
         Labels are human-readable, values are used in llama.cpp release filenames.
+        CUDA entries are discovered from the release assets (defaulting to the
+        latest release) so they track upstream toolkit version changes. The result
+        for the default (latest) lookup is memoized for the session to avoid
+        repeated network calls on Streamlit reruns.
         """
         os_name = self.platform_info['os']
+        if os_name == 'macos':
+            return [("CPU + Metal (built-in)", "cpu")]
+
+        use_cache = tag is None
+        if use_cache and getattr(self, '_backend_list_cache', None) is not None:
+            return self._backend_list_cache
+
+        resolved_tag = tag if tag else self.get_latest_version()
+        cuda_backends = self._discover_cuda_backends(resolved_tag)
+
         if os_name == 'win':
-            return [
-                ("CPU", "cpu"),
-                ("CUDA 12.4 (Nvidia)", "cuda-12.4"),
-                ("CUDA 13.1 (Nvidia)", "cuda-13.1"),
+            backends = [("CPU", "cpu")]
+            backends += cuda_backends
+            backends += [
                 ("Vulkan (Nvidia/AMD/Intel)", "vulkan"),
                 ("HIP / ROCm (AMD)", "hip-radeon"),
                 ("SYCL (Intel)", "sycl"),
             ]
-        elif os_name == 'macos':
-            return [("CPU + Metal (built-in)", "cpu")]
         else:  # ubuntu/linux
-            return [
-                ("CPU", "cpu"),
-                ("CUDA 12.4 (Nvidia)", "cuda-12.4"),
-                ("CUDA 13.1 (Nvidia)", "cuda-13.1"),
+            backends = [("CPU", "cpu")]
+            backends += cuda_backends
+            backends += [
                 ("Vulkan (Nvidia/AMD/Intel)", "vulkan"),
                 ("HIP / ROCm (AMD)", "hip-radeon"),
             ]
+
+        if use_cache:
+            self._backend_list_cache = backends
+        return backends
 
     def update_binaries(self, force: bool = False, version: Optional[str] = None, gpu_backend: str = "cpu") -> Path:
         """
@@ -211,7 +367,10 @@ class LlamaCppManager:
         Args:
             force: Force re-download even if binaries exist at target version
             version: Specific version to download (None = use recommended LLAMA_CPP_VERSION)
-            gpu_backend: Backend variant to download (e.g. "cpu", "cuda-cu12.2.0", "vulkan").
+            gpu_backend: Backend to download. CUDA may be a major family ("cuda-13",
+                         shown as "CUDA 13.x") or a legacy exact value
+                         ("cuda-13.3"); the exact patch is resolved against the
+                         target release. Also accepts "cpu", "vulkan", etc.
                          Only relevant for Windows; ignored on macOS and Linux.
 
         Returns:
@@ -219,6 +378,11 @@ class LlamaCppManager:
         """
         # Use specified version or default to recommended
         tag = version if version else self.LLAMA_CPP_VERSION
+
+        # CUDA selections are stored as a major family (e.g. "cuda-13"); resolve
+        # the exact patch variant published for this release (e.g. "cuda-13.3").
+        requested_family = self._cuda_family(gpu_backend)
+        resolved_backend = self._resolve_cuda_variant(tag, gpu_backend)
 
         # Print banner
         from datetime import datetime
@@ -229,16 +393,19 @@ class LlamaCppManager:
         print(f"{theme['info']}{timestamp.center(80)}{Style.RESET_ALL}")
         print(f"{theme['info']}{banner_line}{Style.RESET_ALL}\n")
 
-        # Check if binaries exist and match the requested version AND backend
+        # Check if binaries exist and match the requested version AND backend.
+        # Compare CUDA backends by major family so a patch bump (13.1 -> 13.3)
+        # within the same selection isn't treated as a different backend.
         if not force and self._binaries_exist():
             installed_version = self.get_installed_version_tag()
             installed_backend = self._read_bin_info().get("gpu_backend")
-            if installed_version == tag and installed_backend == gpu_backend:
-                print(f"{theme['info']}Binaries already at version {tag} ({gpu_backend}){Style.RESET_ALL}")
+            installed_family = self._cuda_family(installed_backend or "")
+            if installed_version == tag and installed_family == requested_family:
+                print(f"{theme['info']}Binaries already at version {tag} ({requested_family}){Style.RESET_ALL}")
                 print(f"{theme['success']}Binaries ready in {self.bin_dir}{Style.RESET_ALL}")
                 return self.bin_dir
-            elif installed_version == tag and installed_backend != gpu_backend:
-                print(f"{theme['info']}Version matches ({tag}) but backend differs: {installed_backend} → {gpu_backend}{Style.RESET_ALL}")
+            elif installed_version == tag and installed_family != requested_family:
+                print(f"{theme['info']}Version matches ({tag}) but backend differs: {installed_backend} → {requested_family}{Style.RESET_ALL}")
             elif installed_version:
                 print(f"{theme['info']}Installed version {installed_version} differs from requested {tag}{Style.RESET_ALL}")
             else:
@@ -250,7 +417,7 @@ class LlamaCppManager:
 
         if os_name == "win":
             ext = "zip"
-            filename = f"llama-{tag}-bin-{os_name}-{gpu_backend}-{arch}.{ext}"
+            filename = f"llama-{tag}-bin-{os_name}-{resolved_backend}-{arch}.{ext}"
         elif os_name == "macos":
             variant = self.platform_info['variant']
             ext = "zip"
@@ -261,6 +428,33 @@ class LlamaCppManager:
             filename = f"llama-{tag}-bin-{os_name}-{variant}.{ext}"
 
         url = self.RELEASE_URL_TEMPLATE.format(tag=tag, filename=filename)
+
+        # Validate the asset exists for this release before touching anything.
+        # llama.cpp changes CUDA toolkit versions between releases (e.g. a stored
+        # cuda-13.1 backend no longer exists in a newer release that ships
+        # cuda-13.3), which would otherwise 404 mid-update.
+        assets = self._get_release_asset_names(tag)
+        if assets and filename not in assets:
+            prefix = f"llama-{tag}-bin-{os_name}-"
+            suffix = f"-{arch}.{ext}" if os_name == "win" else f".{ext}"
+            raw = sorted(
+                a[len(prefix):-len(suffix)]
+                for a in assets
+                if a.startswith(prefix) and a.endswith(suffix)
+            )
+            # Collapse CUDA variants to families to match the GUI labels
+            available = sorted({self._cuda_family(v) for v in raw})
+            hint = (
+                f"\nAvailable backends for {tag}: {', '.join(available)}"
+                if available else ""
+            )
+            raise RuntimeError(
+                f"llama.cpp release {tag} does not provide '{filename}'.\n"
+                f"The '{requested_family}' backend likely isn't available for this "
+                f"version (llama.cpp changes its bundled CUDA toolkit version "
+                f"between releases).{hint}\n"
+                f"Pick an available backend in the GPU Backend selector and try again."
+            )
 
         print(f"{theme['info']}Downloading llama.cpp {tag} for {os_name}-{arch}...{Style.RESET_ALL}")
         print(f"{theme['highlight']}{url}{Style.RESET_ALL}")
@@ -273,10 +467,9 @@ class LlamaCppManager:
                 "Please free up at least 1 GB and try again."
             )
 
-        # Clean up old binaries BEFORE downloading
-        self._cleanup_old_binaries()
-
-        # Download to temporary file
+        # Download FIRST, then remove old binaries — so a failed download (e.g.
+        # 404 on a missing variant) leaves the existing working install intact.
+        self.bin_dir.mkdir(parents=True, exist_ok=True)
         download_path = self.bin_dir / filename
 
         try:
@@ -284,11 +477,21 @@ class LlamaCppManager:
             print()  # New line after progress
             print(f"{theme['info']}Downloaded to {download_path}{Style.RESET_ALL}")
         except Exception as e:
+            # Remove any partial download; keep the previously installed binaries
+            if download_path.exists():
+                try:
+                    download_path.unlink()
+                except OSError:
+                    pass
             print(f"\n{theme['error']}ERROR: Failed to download binaries: {e}{Style.RESET_ALL}")
             raise RuntimeError(
                 f"Failed to download llama.cpp binaries from {url}. "
-                f"Please check your internet connection or download manually."
+                f"Please check your internet connection or download manually. "
+                f"Your existing binaries were left untouched."
             )
+
+        # Download succeeded — now safe to remove old binaries (preserve the archive)
+        self._cleanup_old_binaries(exclude={download_path})
 
         # Extract archive
         print(f"{theme['info']}Extracting {filename}...{Style.RESET_ALL}")
@@ -299,8 +502,8 @@ class LlamaCppManager:
         print(f"{theme['info']}Extraction complete{Style.RESET_ALL}")
 
         # For Windows CUDA builds, also download the CUDA runtime DLLs
-        if os_name == "win" and gpu_backend.startswith("cuda"):
-            cudart_filename = f"cudart-llama-bin-win-{gpu_backend}-{arch}.zip"
+        if os_name == "win" and resolved_backend.startswith("cuda"):
+            cudart_filename = f"cudart-llama-bin-win-{resolved_backend}-{arch}.zip"
             cudart_url = self.RELEASE_URL_TEMPLATE.format(tag=tag, filename=cudart_filename)
             cudart_path = self.bin_dir / cudart_filename
             print(f"{theme['info']}Downloading CUDA runtime DLLs...{Style.RESET_ALL}")
@@ -319,21 +522,35 @@ class LlamaCppManager:
         if not self._check_binary_files_exist():
             raise RuntimeError("Binary extraction succeeded but executables not found")
 
-        self._write_bin_info(tag, gpu_backend)
-        print(f"{theme['success']}Installed binary version: {tag} ({gpu_backend}){Style.RESET_ALL}")
+        # Store the major family as the canonical backend identity so the saved
+        # preference stays stable across patch bumps; show the resolved patch.
+        self._write_bin_info(tag, requested_family)
+        backend_display = (
+            f"{requested_family} → {resolved_backend}"
+            if resolved_backend != requested_family else requested_family
+        )
+        print(f"{theme['success']}Installed binary version: {tag} ({backend_display}){Style.RESET_ALL}")
         print(f"{theme['success']}Binaries ready in {self.bin_dir}{Style.RESET_ALL}")
         return self.bin_dir
 
-    def _cleanup_old_binaries(self):
+    def _cleanup_old_binaries(self, exclude=None):
         """
         Remove all old files and directories from bin_dir before installing new binaries
+
+        Args:
+            exclude: Optional iterable of paths to preserve (e.g. a freshly
+                     downloaded archive that lives inside bin_dir).
         """
         if not self.bin_dir.exists():
             return
 
+        exclude_resolved = {Path(p).resolve() for p in (exclude or set())}
+
         print(f"{theme['info']}Removing old binaries...{Style.RESET_ALL}")
         # Remove everything in bin_dir (files and directories)
         for item in self.bin_dir.iterdir():
+            if item.resolve() in exclude_resolved:
+                continue
             if item.is_dir():
                 shutil.rmtree(item, onerror=remove_readonly)
             else:
@@ -452,9 +669,13 @@ class LlamaCppManager:
                     if not full_version:
                         full_version = output.strip().split('\n')[0]
 
-                    # Extract version tag pattern like "b7574" or just "7574"
+                    # Extract version tag pattern like "b7574" or just "7574".
+                    # Search the "version:" line first — CUDA builds print device
+                    # and driver numbers (e.g. VRAM in MiB) before the version line,
+                    # and matching the whole output would grab one of those instead.
+                    search_text = full_version if full_version else output
                     tag = None
-                    match = re.search(r'\b(b?\d{4,5})\b', output)
+                    match = re.search(r'\b(b?\d{4,6})\b', search_text)
                     if match:
                         version = match.group(1)
                         # Ensure it has the 'b' prefix

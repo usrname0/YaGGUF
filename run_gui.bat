@@ -16,8 +16,8 @@ if not exist venv (
     echo.
     echo Select GPU backend for llama.cpp binaries:
     echo   1. CPU only ^(default^)
-    echo   2. CUDA 12.4 ^(NVIDIA^)
-    echo   3. CUDA 13.1 ^(NVIDIA^)
+    echo   2. CUDA 12.x ^(NVIDIA^)
+    echo   3. CUDA 13.x ^(NVIDIA^)
     echo   4. Vulkan ^(NVIDIA/AMD/Intel^)
     echo   5. HIP / ROCm ^(AMD^)
     echo   6. SYCL ^(Intel^)
@@ -25,8 +25,8 @@ if not exist venv (
     set GPU_BACKEND_CHOICE=1
     set /p GPU_BACKEND_CHOICE=Enter number [1]:
     if "!GPU_BACKEND_CHOICE!"=="1" set GPU_BACKEND=cpu
-    if "!GPU_BACKEND_CHOICE!"=="2" set GPU_BACKEND=cuda-12.4
-    if "!GPU_BACKEND_CHOICE!"=="3" set GPU_BACKEND=cuda-13.1
+    if "!GPU_BACKEND_CHOICE!"=="2" set GPU_BACKEND=cuda-12
+    if "!GPU_BACKEND_CHOICE!"=="3" set GPU_BACKEND=cuda-13
     if "!GPU_BACKEND_CHOICE!"=="4" set GPU_BACKEND=vulkan
     if "!GPU_BACKEND_CHOICE!"=="5" set GPU_BACKEND=hip-radeon
     if "!GPU_BACKEND_CHOICE!"=="6" set GPU_BACKEND=sycl

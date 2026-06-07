@@ -1,3 +1,5 @@
+# CPU-only torch (GPU work is handled by the llama.cpp binaries, not torch)
+--extra-index-url https://download.pytorch.org/whl/cpu
 torch>=2.0.0
 torchvision>=0.15.0
 torchaudio>=2.0.0
