@@ -80,6 +80,7 @@ All quantization types from llama.cpp are supported. Choose based on your size/q
 ## Installation - Windows
 
 ```bash
+# Navigate to any non-system folder like C:\example and open a terminal
 # Clone the repository
     git clone https://github.com/usrname0/YaGGUF.git
     cd YaGGUF
