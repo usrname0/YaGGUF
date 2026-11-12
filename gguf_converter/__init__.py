@@ -2,7 +2,7 @@
 Yet Another GGUF GUI - GGUF tools leveraging llama.cpp
 """
 
-__version__ = "1.2.4"
+__version__ = "1.2.5"
 
 from .converter import GGUFConverter
 
