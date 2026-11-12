@@ -60,7 +60,7 @@ def render_imatrix_settings_tab(converter: "GGUFConverter", config: Dict[str, An
                 if st.button(
                     "Select Folder",
                     key="browse_cal_dir_btn",
-                    use_container_width=True,
+                    width="stretch",
                     help="Select calibration directory"
                 ):
                     current_path = calibration_dir_input.strip()
@@ -77,7 +77,7 @@ def render_imatrix_settings_tab(converter: "GGUFConverter", config: Dict[str, An
             if st.button(
                 "Open Folder",
                 key="check_cal_dir_btn",
-                use_container_width=True,
+                width="stretch",
                 disabled=not cal_dir_exists,
                 help="Open folder in file explorer" if cal_dir_exists else "Directory doesn't exist"
             ):
@@ -163,7 +163,7 @@ def render_imatrix_settings_tab(converter: "GGUFConverter", config: Dict[str, An
             if st.button(
                 "Refresh File List",
                 key="update_cal_files_btn",
-                use_container_width=True,
+                width="stretch",
                 help="Rescan directory for calibration files"
             ):
                 # Save the currently selected value before rerunning
@@ -428,7 +428,7 @@ def render_imatrix_settings_tab(converter: "GGUFConverter", config: Dict[str, An
             )
 
         # Reset button (full width below processing settings sub-columns)
-        if st.button("Reset to Defaults", use_container_width=True, key="reset_imatrix_settings_btn"):
+        if st.button("Reset to Defaults", width="stretch", key="reset_imatrix_settings_btn"):
             # Reset imatrix settings to defaults
             defaults = get_default_config()
             config["imatrix_calibration_file"] = defaults["imatrix_calibration_file"]

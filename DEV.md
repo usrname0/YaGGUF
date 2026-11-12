@@ -45,7 +45,7 @@ llama.cpp publishes two kinds of tags:
 a release tag, and `update_binaries()` / `update_conversion_scripts()` accept either.
 `scripts/bump_version.py` suggests the build of the latest stable release.
 
-GPU backends are stored without toolkit versions (`cuda-13`, `rocm`) because upstream puts
+GPU backends are stored without toolkit versions (`cuda-13`, `rocm`, `openvino`) because upstream puts
 the version in the asset name and changes it between releases (`cuda-13.3` -> `cuda-13.5`,
 `hip-radeon` -> `rocm-10.0`). `_resolve_backend_variant()` matches the stored value to
 whatever the target build publishes.

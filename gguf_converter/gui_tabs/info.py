@@ -85,6 +85,9 @@ def render_info_tab(converter: "GGUFConverter", config: Dict[str, Any]) -> None:
     | IQ2_XXS | Tiny | Minimal | I-Quant | Required | 2-bit extra-extra-small |
     | IQ1_M | Extreme | Poor | I-Quant | Required | 1-bit medium |
     | IQ1_S | Extreme | Poor | I-Quant | Required | 1-bit small |
+    | TQ2_0, TQ1_0 | Tiny | Model-dependent | Specialized | - | Ternarization, for ternary models (BitNet, TriLM) |
+    | MXFP4_MOE | Small | Model-dependent | Specialized | - | MXFP4 for mixture-of-experts models |
+    | Q2_0, Q1_0 | Extreme | Poor | Specialized | - | 2.25 / 1.125 bits per weight |
 
     **Quick Guide:**
     - Bigger is better (more precision)

@@ -7,7 +7,6 @@ with markers to exclude slow and integration tests by default.
 
 import sys
 import subprocess
-import re
 from pathlib import Path
 
 # Add project root to path
@@ -33,20 +32,7 @@ def print_version_info():
     # Get binaries version
     try:
         imatrix_bin = manager.get_imatrix_path()
-        result = subprocess.run(
-            [str(imatrix_bin), "--version"],
-            capture_output=True,
-            text=True,
-            timeout=5
-        )
-        output = result.stderr if result.stderr else result.stdout
-        version = "unknown"
-        for line in output.split("\n"):
-            if line.startswith("version:"):
-                match = re.search(r"\b(b?\d{4,6})\b", line)
-                if match:
-                    version = match.group(1) if match.group(1).startswith("b") else f"b{match.group(1)}"
-                break
+        version = manager.get_binary_version_info(imatrix_bin)["tag"] or "unknown"
         print(f"Binaries version: {version} ({imatrix_bin.parent})")
     except Exception:
         print("Binaries version: unknown")
@@ -57,14 +43,7 @@ def print_version_info():
         script = converter._find_convert_script()
         if script:
             llama_dir = script.parent
-            result = subprocess.run(
-                ["git", "describe", "--tags", "--always"],
-                cwd=llama_dir,
-                capture_output=True,
-                text=True,
-                timeout=5
-            )
-            scripts_ver = result.stdout.strip().split("-")[0] if result.returncode == 0 else "unknown"
+            scripts_ver = manager.get_conversion_scripts_version_info(llama_dir)["tag"] or "unknown"
             print(f"Conversion scripts: {scripts_ver} ({llama_dir})")
         else:
             print("Conversion scripts: not found")

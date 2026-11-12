@@ -325,6 +325,7 @@ class LlamaCppManager:
           "cuda-13.5" -> "cuda-13"      (CUDA keeps its major version)
           "rocm-10.0" -> "rocm"
           "hip-radeon" -> "rocm"        (older name of the Windows ROCm build)
+          "openvino-2026.4.1" -> "openvino"
         Everything else ("cpu", "vulkan", "sycl", ...) is returned unchanged.
         """
         if not backend:
@@ -333,6 +334,8 @@ class LlamaCppManager:
             return cls._cuda_family(backend)
         if backend == "hip-radeon" or backend.startswith("rocm"):
             return "rocm"
+        if backend.startswith("openvino"):
+            return "openvino"
         return backend
 
     def _archive_ext(self) -> str:
@@ -450,6 +453,7 @@ class LlamaCppManager:
                 ("Vulkan (Nvidia/AMD/Intel)", "vulkan"),
                 ("HIP / ROCm (AMD)", "rocm"),
                 ("SYCL (Intel)", "sycl"),
+                ("OpenVINO (Intel)", "openvino"),
             ]
         else:  # ubuntu/linux
             backends = [("CPU", "cpu")]
@@ -457,6 +461,7 @@ class LlamaCppManager:
             backends += [
                 ("Vulkan (Nvidia/AMD/Intel)", "vulkan"),
                 ("HIP / ROCm (AMD)", "rocm"),
+                ("OpenVINO (Intel)", "openvino"),
             ]
 
         if use_cache:
@@ -671,8 +676,11 @@ class LlamaCppManager:
 
         # Flatten: if extracted to a subdirectory, move all files to bin root
         subdirs = [d for d in self.bin_dir.iterdir() if d.is_dir()]
-        if len(subdirs) == 1:
-            # Single subdirectory - likely the llama-* folder
+        # Only flatten a subdirectory that actually holds the binaries. Some
+        # archives are already flat but ship one extra folder (the OpenVINO
+        # build has "openvino-licensing/"), which must be left where it is.
+        if len(subdirs) == 1 and any(subdirs[0].glob('llama-*')):
+            # Single subdirectory - the llama-* folder
             subdir = subdirs[0]
             print(f"{theme['info']}Flattening extracted directory: {subdir.name}{Style.RESET_ALL}")
 
@@ -731,28 +739,42 @@ class LlamaCppManager:
         # Only check if required binary files exist
         return self._check_binary_files_exist()
 
-    def get_installed_version_info(self) -> Dict[str, Optional[str]]:
+    @staticmethod
+    def get_binary_version_info(binary_path) -> Dict[str, Optional[str]]:
         """
-        Get version information of currently installed binaries by running llama-cli --version
+        Get version information for any llama.cpp binary by running it with --version
+
+        This is the single place that parses llama.cpp version output; everything
+        that reports a binary version (GUI, conversion log, dev test header)
+        goes through it.
+
+        Args:
+            binary_path: Path to a llama.cpp binary (llama-cli, llama-imatrix, ...)
 
         Returns:
-            Dict with 'full_version' (complete version string) and 'tag' (e.g., 'b7574')
+            Dict with 'full_version' (the "version: ..." line) and 'tag' (e.g., 'b7574')
             Returns None values if unable to determine
         """
         import subprocess
-        import re
 
         try:
-            cli_path = self.get_binary_path('llama-cli')
-            if not cli_path.exists():
+            if binary_path is None or not Path(binary_path).exists():
                 return {'full_version': None, 'tag': None}
 
-            result = subprocess.run(
-                [str(cli_path), "--version"],
-                capture_output=True,
-                text=True,
-                timeout=5
-            )
+            def run(flag):
+                return subprocess.run(
+                    [str(binary_path), flag],
+                    capture_output=True,
+                    text=True,
+                    encoding='utf-8',
+                    errors='replace',
+                    timeout=10
+                )
+
+            result = run("--version")
+            if result.returncode != 0:
+                # Some binaries only show the version in their help text
+                result = run("--help")
 
             if result.returncode == 0:
                 # Parse version from output (may be in stdout or stderr)
@@ -790,6 +812,20 @@ class LlamaCppManager:
 
         return {'full_version': None, 'tag': None}
 
+    def get_installed_version_info(self) -> Dict[str, Optional[str]]:
+        """
+        Get version information of currently installed binaries by running llama-cli --version
+
+        Returns:
+            Dict with 'full_version' (complete version string) and 'tag' (e.g., 'b7574')
+            Returns None values if unable to determine
+        """
+        try:
+            cli_path = self.get_binary_path('llama-cli')
+        except Exception:
+            return {'full_version': None, 'tag': None}
+        return self.get_binary_version_info(cli_path)
+
     def get_installed_version_tag(self) -> Optional[str]:
         """
         Get the version tag of currently installed binaries
@@ -799,13 +835,20 @@ class LlamaCppManager:
         """
         return self.get_installed_version_info()['tag']
 
-    def get_installed_conversion_scripts_version_info(self) -> Dict[str, Optional[str]]:
+    @classmethod
+    def get_conversion_scripts_version_info(cls, repo_dir) -> Dict[str, Optional[str]]:
         """
-        Get version information of currently installed conversion scripts by checking git
+        Get version information for a llama.cpp checkout by asking git
+
+        This is the single place that works out a conversion scripts version;
+        the GUI, conversion log and dev test header all go through it.
 
         A commit can carry both a build tag (b12110) and a stable release tag
         (v0.9.0). The build tag is the one reported as 'tag' since that's what
         binaries and LLAMA_CPP_VERSION use; the release is shown alongside it.
+
+        Args:
+            repo_dir: Path to a llama.cpp git checkout
 
         Returns:
             Dict with 'full_version' (e.g. "b12110 (v0.9.0)", or git describe output
@@ -814,8 +857,9 @@ class LlamaCppManager:
         """
         import subprocess
 
-        project_root = Path(__file__).parent.parent
-        llama_cpp_dir = project_root / "llama.cpp"
+        if not repo_dir:
+            return {'full_version': None, 'tag': None}
+        llama_cpp_dir = Path(repo_dir)
 
         if not llama_cpp_dir.exists() or not (llama_cpp_dir / ".git").exists():
             return {'full_version': None, 'tag': None}
@@ -826,6 +870,8 @@ class LlamaCppManager:
                 cwd=llama_cpp_dir,
                 capture_output=True,
                 text=True,
+                encoding='utf-8',
+                errors='replace',
                 timeout=5
             )
             out = result.stdout.strip()
@@ -833,7 +879,7 @@ class LlamaCppManager:
 
         try:
             head_tags = (git("tag", "--points-at", "HEAD") or "").split()
-            build_tags = [t for t in head_tags if self._is_build_tag(t)]
+            build_tags = [t for t in head_tags if cls._is_build_tag(t)]
             if build_tags:
                 tag = max(build_tags, key=lambda t: int(t[1:]))
                 releases = [t for t in head_tags if re.fullmatch(r'v\d+(\.\d+)*', t)]
@@ -853,6 +899,14 @@ class LlamaCppManager:
             pass
 
         return {'full_version': None, 'tag': None}
+
+    def get_installed_conversion_scripts_version_info(self) -> Dict[str, Optional[str]]:
+        """
+        Get version information of YaGGUF's own llama.cpp checkout
+        (see get_conversion_scripts_version_info for the return value)
+        """
+        project_root = Path(__file__).parent.parent
+        return self.get_conversion_scripts_version_info(project_root / "llama.cpp")
 
     def get_installed_conversion_scripts_version_tag(self) -> Optional[str]:
         """

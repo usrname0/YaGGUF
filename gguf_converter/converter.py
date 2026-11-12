@@ -28,6 +28,7 @@ class GGUFConverter:
 
     QUANTIZATION_TYPES = [
         "Q4_0", "Q4_1", "Q5_0", "Q5_1", "Q8_0",
+        "Q1_0", "Q2_0",
         "Q2_K", "Q2_K_S",
         "Q3_K", "Q3_K_S", "Q3_K_M", "Q3_K_L",
         "Q4_K", "Q4_K_S", "Q4_K_M",
@@ -36,6 +37,8 @@ class GGUFConverter:
         "IQ1_S", "IQ1_M", "IQ2_XXS", "IQ2_XS", "IQ2_S", "IQ2_M",
         "IQ3_XXS", "IQ3_XS", "IQ3_S", "IQ3_M",
         "IQ4_XS", "IQ4_NL",
+        "TQ1_0", "TQ2_0",
+        "MXFP4_MOE",
         "F16", "BF16", "F32",
     ]
 
@@ -1135,78 +1138,20 @@ class GGUFConverter:
         print(f"{theme['info']}{timestamp.center(80)}{Style.RESET_ALL}")
         print(f"{theme['info']}{banner_line}{Style.RESET_ALL}\n")
 
-        # Print version information from actual binaries that will be used
-        # Helper function to get version from binary
-        def get_binary_version_and_path(binary_path, binary_name=""):
-            try:
-                # Try --version first
-                result = subprocess.run(
-                    [str(binary_path), "--version"],
-                    capture_output=True,
-                    text=True,
-                    encoding='utf-8',
-                    errors='replace',
-                    timeout=5
-                )
-
-                # If --version fails, try --help (some binaries only show version in help)
-                if result.returncode != 0:
-                    result = subprocess.run(
-                        [str(binary_path), "--help"],
-                        capture_output=True,
-                        text=True,
-                        encoding='utf-8',
-                        errors='replace',
-                        timeout=5
-                    )
-
-                if result.returncode == 0:
-                    output = result.stderr if result.stderr else result.stdout
-
-                    # Look for the version: line first (more reliable - avoids GPU model numbers)
-                    version_line = None
-                    for line in output.split('\n'):
-                        if line.startswith('version:'):
-                            version_line = line.strip()
-                            break
-
-                    # Extract version number from the version line or full output
-                    search_text = version_line if version_line else output
-                    match = re.search(r'\b(b?\d{4,6})\b', search_text)
-                    if match:
-                        version = match.group(1)
-                        return (version if version.startswith('b') else f'b{version}'), binary_path
-                    else:
-                        return 'unknown', binary_path
-                else:
-                    return 'unknown', binary_path
-            except Exception:
-                return 'unknown', binary_path
-
-        # Get binary version (check llama-imatrix, assume llama-quantize is same version)
+        # Print version information from the actual binaries and scripts that will be used
+        # (check llama-imatrix, assume llama-quantize is the same version)
         imatrix_bin = self.llama_cpp_manager.get_imatrix_path()
-        binary_version, _ = get_binary_version_and_path(imatrix_bin, "llama-imatrix")
+        binary_version = self.llama_cpp_manager.get_binary_version_info(imatrix_bin)['tag'] or 'unknown'
 
-        # Get conversion scripts version from actual script location that will be used
         try:
             convert_script = self._find_convert_script()
             if convert_script:
                 llama_cpp_dir = convert_script.parent
                 if (llama_cpp_dir / ".git").exists():
-                    result = subprocess.run(
-                        ["git", "describe", "--tags", "--always"],
-                        cwd=llama_cpp_dir,
-                        capture_output=True,
-                        text=True,
-                        encoding='utf-8',
-                        errors='replace',
-                        timeout=5
+                    scripts_version = (
+                        self.llama_cpp_manager.get_conversion_scripts_version_info(llama_cpp_dir)['tag']
+                        or 'unknown'
                     )
-                    if result.returncode == 0 and result.stdout.strip():
-                        full_version = result.stdout.strip()
-                        scripts_version = full_version.split('-')[0] if full_version else 'unknown'
-                    else:
-                        scripts_version = 'unknown'
                 else:
                     scripts_version = 'unknown (not a git repo)'
                 scripts_location = str(llama_cpp_dir)

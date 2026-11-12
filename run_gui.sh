@@ -23,6 +23,7 @@ if [ ! -d "venv" ]; then
         echo "  3. CUDA 13.x (NVIDIA)"
         echo "  4. Vulkan (NVIDIA/AMD/Intel)"
         echo "  5. HIP / ROCm (AMD)"
+        echo "  6. OpenVINO (Intel)"
         echo ""
         read -p "Enter number [1]: " GPU_BACKEND_CHOICE
         GPU_BACKEND_CHOICE=${GPU_BACKEND_CHOICE:-1}
@@ -32,6 +33,7 @@ if [ ! -d "venv" ]; then
             3) GPU_BACKEND="cuda-13" ;;
             4) GPU_BACKEND="vulkan" ;;
             5) GPU_BACKEND="rocm" ;;
+            6) GPU_BACKEND="openvino" ;;
             *) GPU_BACKEND="cpu" ;;
         esac
     fi

@@ -1,0 +1,52 @@
+name: Tests
+
+# Fast test suite on every push and pull request.
+# Skips the slow/integration tests (model downloads, real quantization);
+# those still run locally via scripts/bump_version.py before a release.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: tests-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: |
+            requirements.txt
+            tests/requirements-dev.txt
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt -r tests/requirements-dev.txt
+
+      # CPU binaries + conversion scripts at the pinned LLAMA_CPP_VERSION,
+      # so the requires_binaries smoke tests exercise the real llama.cpp build
+      - name: Download llama.cpp binaries and conversion scripts
+        run: python scripts/check_and_download_binaries.py --backend cpu
+
+      - name: Run fast tests
+        run: python -m pytest -m "not slow and not integration"

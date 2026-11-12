@@ -799,3 +799,94 @@ class TestBackendVariants:
 
         assert urls[0].endswith("/llama-b12110-bin-ubuntu-cuda-13.5-x64.tar.gz")
         assert urls[1].endswith("/cudart-llama-b12110-bin-ubuntu-cuda-13.5-x64.tar.gz")
+
+
+class TestOpenVinoBackend:
+    """OpenVINO builds carry a toolkit version in the asset name, like CUDA/ROCm."""
+
+    def test_family_and_variant_resolution(self):
+        m = _bare_manager()
+        assert m._backend_family("openvino-2026.4.1") == "openvino"
+        with patch.object(m, '_get_release_asset_names', return_value=TestBackendVariants.WIN_NEW):
+            assert m._resolve_backend_variant('b12110', 'openvino') == 'openvino-2026.4.1'
+
+    @pytest.mark.parametrize("os_name", ["win", "ubuntu"])
+    def test_offered_in_backend_list(self, os_name):
+        m = _bare_manager(os_name=os_name)
+        with patch.object(m, '_get_release_asset_names', return_value=set()):
+            backends = m.get_available_gpu_backends(tag='b12110')
+        assert ("OpenVINO (Intel)", "openvino") in backends
+
+
+class TestExtractArchive:
+    """Flattening must only apply to a folder that holds the binaries."""
+
+    def _zip(self, path, names):
+        import zipfile
+        with zipfile.ZipFile(path, 'w') as zf:
+            for name in names:
+                zf.writestr(name, name)
+
+    def test_flat_archive_keeps_extra_folder(self, tmp_path):
+        # Layout of the OpenVINO build: binaries at the root plus one folder
+        m = _bare_manager()
+        m.bin_dir = tmp_path / "bin"
+        m.bin_dir.mkdir()
+        archive = tmp_path / "ov.zip"
+        self._zip(archive, ["LICENSE", "llama-cli.exe", "openvino-licensing/LICENSE"])
+
+        m._extract_archive(archive)
+
+        assert (m.bin_dir / "LICENSE").read_text() == "LICENSE"  # not overwritten
+        assert (m.bin_dir / "openvino-licensing" / "LICENSE").exists()
+
+    def test_nested_archive_is_flattened(self, tmp_path):
+        m = _bare_manager()
+        m.bin_dir = tmp_path / "bin"
+        m.bin_dir.mkdir()
+        archive = tmp_path / "nested.zip"
+        self._zip(archive, ["llama-b1/llama-cli.exe", "llama-b1/ggml.dll"])
+
+        m._extract_archive(archive)
+
+        assert (m.bin_dir / "llama-cli.exe").exists()
+        assert not (m.bin_dir / "llama-b1").exists()
+
+
+class TestSharedVersionHelpers:
+    """The manager is the single source of version detection for any path."""
+
+    def test_binary_version_falls_back_to_help(self, tmp_path):
+        binary = tmp_path / "llama-imatrix.exe"
+        binary.write_text("x")
+        results = [
+            Mock(returncode=1, stdout="", stderr="unknown argument"),
+            Mock(returncode=0, stdout="", stderr="version: 0.9.0-dev (build 12110, commit cd959bae9)\n"),
+        ]
+        with patch('subprocess.run', side_effect=results) as run:
+            info = LlamaCppManager.get_binary_version_info(binary)
+
+        assert info['tag'] == 'b12110'
+        assert [c.args[0][1] for c in run.call_args_list] == ["--version", "--help"]
+
+    def test_binary_version_missing_path(self, tmp_path):
+        assert LlamaCppManager.get_binary_version_info(None) == {'full_version': None, 'tag': None}
+        assert LlamaCppManager.get_binary_version_info(tmp_path / "nope")['tag'] is None
+
+    def test_scripts_version_reports_build_tag_not_release(self, tmp_path):
+        (tmp_path / ".git").mkdir()
+
+        def fake_git(cmd, **kwargs):
+            assert kwargs['cwd'] == tmp_path
+            if cmd[1:] == ["tag", "--points-at", "HEAD"]:
+                return Mock(returncode=0, stdout="b12110\nv0.9.0\n")
+            raise AssertionError(f"unexpected git call: {cmd}")
+
+        with patch('subprocess.run', side_effect=fake_git):
+            info = LlamaCppManager.get_conversion_scripts_version_info(tmp_path)
+
+        assert info == {'full_version': 'b12110 (v0.9.0)', 'tag': 'b12110'}
+
+    def test_scripts_version_not_a_git_repo(self, tmp_path):
+        assert LlamaCppManager.get_conversion_scripts_version_info(tmp_path)['tag'] is None
+        assert LlamaCppManager.get_conversion_scripts_version_info(None)['tag'] is None

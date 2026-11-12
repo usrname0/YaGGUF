@@ -33,7 +33,7 @@ def render_llama_cpp_tab(converter: "GGUFConverter", config: Dict[str, Any]) -> 
 
     st.markdown("""
     YaGGUF automatically downloads llama.cpp binaries and a repo for model conversion scripts.
-    The GPU backend (CPU, CUDA, Vulkan) can be selected on the "Update" tab before downloading.
+    The GPU backend (CPU, CUDA, Vulkan, ...) can be selected on the "Update" tab before downloading.
     You can also opt to use your own specific [llama.cpp](https://github.com/ggml-org/llama.cpp) resources below.
     """)
 
@@ -110,7 +110,7 @@ def render_llama_cpp_tab(converter: "GGUFConverter", config: Dict[str, Any]) -> 
                 if st.button(
                     "Select Folder",
                     key="browse_binaries_folder_btn",
-                    use_container_width=True,
+                    width="stretch",
                     help="Select binaries folder",
                     disabled=not use_custom_binaries
                 ):
@@ -136,7 +136,7 @@ def render_llama_cpp_tab(converter: "GGUFConverter", config: Dict[str, Any]) -> 
             if st.button(
                 "Open Folder",
                 key="check_binaries_folder_btn",
-                use_container_width=True,
+                width="stretch",
                 disabled=not use_custom_binaries or not binaries_folder_exists,
                 help="Open folder in file explorer" if binaries_folder_exists else "Path doesn't exist yet"
             ):
@@ -163,7 +163,7 @@ def render_llama_cpp_tab(converter: "GGUFConverter", config: Dict[str, Any]) -> 
             st.subheader("Binary Detection")
         with col_refresh:
             st.markdown("<br>", unsafe_allow_html=True)  # Align with header
-            if st.button("Refresh", key="refresh_custom_binary_detection", use_container_width=True, disabled=not config.get("use_custom_binaries", False)):
+            if st.button("Refresh", key="refresh_custom_binary_detection", width="stretch", disabled=not config.get("use_custom_binaries", False)):
                 # Clear cached version info
                 if "custom_binary_versions" in st.session_state:
                     del st.session_state.custom_binary_versions
@@ -333,7 +333,7 @@ def render_llama_cpp_tab(converter: "GGUFConverter", config: Dict[str, Any]) -> 
                 if st.button(
                     "Select Folder",
                     key="browse_repo_folder_btn",
-                    use_container_width=True,
+                    width="stretch",
                     help="Select llama.cpp repository folder",
                     disabled=not use_custom_conversion_script
                 ):
@@ -360,7 +360,7 @@ def render_llama_cpp_tab(converter: "GGUFConverter", config: Dict[str, Any]) -> 
             if st.button(
                 "Open Folder",
                 key="check_repo_folder_btn",
-                use_container_width=True,
+                width="stretch",
                 disabled=not use_custom_conversion_script or not repo_path_exists,
                 help="Open folder in file explorer" if repo_path_exists else "Path doesn't exist yet"
             ):
@@ -396,22 +396,11 @@ def render_llama_cpp_tab(converter: "GGUFConverter", config: Dict[str, Any]) -> 
                     st.success("Conversion script found")
 
                     # Try to get version info from git
-                    try:
-                        import subprocess
-                        result = subprocess.run(
-                            ["git", "describe", "--tags", "--always"],
-                            cwd=custom_repo,
-                            capture_output=True,
-                            text=True,
-                            timeout=5
-                        )
-                        if result.returncode == 0 and result.stdout.strip():
-                            version = result.stdout.strip()
-                            st.code(f"version: {version}", language=None)
-                        else:
-                            st.info("Version: Unable to detect (not a git repository)")
-                    except Exception:
-                        st.info("Version: Unable to detect")
+                    version = converter.llama_cpp_manager.get_conversion_scripts_version_info(custom_repo)['full_version']
+                    if version:
+                        st.code(f"version: {version}", language=None)
+                    else:
+                        st.info("Version: Unable to detect (not a git repository)")
 
                     st.markdown(f"- `convert_hf_to_gguf.py`: {script_path}")
                 else:
@@ -430,23 +419,11 @@ def render_llama_cpp_tab(converter: "GGUFConverter", config: Dict[str, Any]) -> 
                     st.success("Conversion script found")
 
                     # Try to get version info from git
-                    try:
-                        import subprocess
-                        llama_cpp_dir = project_root / "llama.cpp"
-                        result = subprocess.run(
-                            ["git", "describe", "--tags", "--always"],
-                            cwd=llama_cpp_dir,
-                            capture_output=True,
-                            text=True,
-                            timeout=5
-                        )
-                        if result.returncode == 0 and result.stdout.strip():
-                            version = result.stdout.strip()
-                            st.code(f"version: {version}", language=None)
-                        else:
-                            st.info("Version: Unable to detect (not a git repository)")
-                    except Exception:
-                        st.info("Version: Unable to detect")
+                    version = converter.llama_cpp_manager.get_installed_conversion_scripts_version_info()['full_version']
+                    if version:
+                        st.code(f"version: {version}", language=None)
+                    else:
+                        st.info("Version: Unable to detect (not a git repository)")
 
                     st.markdown(f"- `convert_hf_to_gguf.py`: {script_path}")
                 else:

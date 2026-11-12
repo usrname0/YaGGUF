@@ -97,6 +97,29 @@ def ensure_llama_cpp_repo(llama_cpp_manager: LlamaCppManager) -> bool:
     return True
 
 
+def describe_installed_binaries(manager: LlamaCppManager) -> str:
+    """
+    One-line startup status for binaries that are already installed
+
+    Reports the version that is actually installed rather than assuming it is
+    the recommended one (the Update tab can install newer or older builds).
+    Startup never changes installed binaries; this is informational only.
+    """
+    recommended = manager.LLAMA_CPP_VERSION
+    installed = manager.get_installed_version_tag()
+
+    if not installed:
+        return f"Binaries installed (version unknown, recommended is {recommended})"
+    if installed == recommended:
+        return f"Binaries installed (version {installed}, the recommended version)"
+
+    try:
+        relation = "newer" if int(installed.lstrip('b')) > int(recommended.lstrip('b')) else "older"
+    except ValueError:
+        relation = "different"
+    return f"Binaries installed (version {installed}, {relation} than recommended {recommended})"
+
+
 def main() -> int:
     """Check binary version and update if needed"""
     parser = argparse.ArgumentParser()
@@ -110,7 +133,7 @@ def main() -> int:
 
     # Check if binaries exist
     if manager._binaries_exist():
-        print(f"Binaries up to date (version {manager.LLAMA_CPP_VERSION})")
+        print(describe_installed_binaries(manager))
     else:
         print("Binaries not installed")
         print()

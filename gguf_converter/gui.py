@@ -147,12 +147,12 @@ def main() -> None:
 
         st.markdown("---")
         st.markdown("**Debug:**")
-        if st.button("Reload UI", use_container_width=True, help="Reload the user interface via st.rerun()"):
+        if st.button("Reload UI", width="stretch", help="Reload the user interface via st.rerun()"):
             st.rerun()
 
         # Test Models button (only shown when dev_mode is enabled)
         if config.get("dev_mode", False):
-            if st.button("Test Models", use_container_width=True, help="Test all GGUF variants in the output directory interactively with llama-server"):
+            if st.button("Test Models", width="stretch", help="Test all GGUF variants in the output directory interactively with llama-server"):
                 script_path = Path(__file__).parent.parent / "tests" / "manual_variant_testing.py"
                 output_dir = config.get("output_dir", "")
                 python_exe = get_python_executable()
@@ -177,7 +177,7 @@ def main() -> None:
 
         # Dev Tests button (only shown when dev_mode is enabled)
         if config.get("dev_mode", False):
-            if st.button("Dev Tests", use_container_width=True, help="Run the full test suite (pytest) in a new terminal window"):
+            if st.button("Dev Tests", width="stretch", help="Run the full test suite (pytest) in a new terminal window"):
                 import platform as _platform
                 project_root = Path(__file__).parent.parent
                 system = _platform.system()
@@ -211,7 +211,7 @@ def main() -> None:
         
         st.markdown("---")
         st.markdown("**Reset:**")
-        if st.button("Reset to defaults", use_container_width=True, help="Reset all settings to default values"):
+        if st.button("Reset to defaults", width="stretch", help="Reset all settings to default values"):
             st.session_state.config = reset_config()
             st.session_state.reset_count += 1
             if "download_just_completed" in st.session_state:
@@ -219,7 +219,7 @@ def main() -> None:
             st.session_state.model_path_input = ""
             if "pending_model_path" in st.session_state:
                 del st.session_state.pending_model_path
-            keys_to_delete = [k for k in st.session_state.keys() if isinstance(k, str) and k.startswith(('trad_', 'k_', 'i_'))]
+            keys_to_delete = [k for k in st.session_state.keys() if isinstance(k, str) and k.startswith(('trad_', 'k_', 'i_', 'special_'))]
             for key in keys_to_delete:
                 del st.session_state[key]
             if "iq_checkbox_states" in st.session_state:

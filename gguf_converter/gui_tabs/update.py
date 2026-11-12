@@ -213,7 +213,7 @@ def render_update_tab(converter: "GGUFConverter", config: Dict[str, Any]) -> Non
                 options=backend_labels,
                 index=saved_index,
                 key="gpu_backend_selector",
-                help="Select the GPU backend for llama.cpp. Takes effect when downloading binaries. CPU works everywhere; CUDA/Vulkan require compatible hardware."
+                help="Select the GPU backend for llama.cpp. Takes effect when downloading binaries. CPU works everywhere; the others require compatible hardware and drivers."
             )
             selected_backend = backend_values[backend_labels.index(st.session_state.get("gpu_backend_selector", backend_labels[saved_index]))]
         else:
@@ -339,7 +339,7 @@ def render_update_tab(converter: "GGUFConverter", config: Dict[str, Any]) -> Non
 
             if TKINTER_AVAILABLE:
                 with col_browse:  # type: ignore[union-attr]
-                    if st.button("Select", key="browse_binaries_folder_btn", use_container_width=True, help="Select binaries folder"):
+                    if st.button("Select", key="browse_binaries_folder_btn", width="stretch", help="Select binaries folder"):
                         binaries_folder_clean = strip_quotes(binaries_folder)
                         initial_dir = binaries_folder_clean if binaries_folder_clean and Path(binaries_folder_clean).exists() else None
                         selected_folder = browse_folder(initial_dir)
@@ -359,7 +359,7 @@ def render_update_tab(converter: "GGUFConverter", config: Dict[str, Any]) -> Non
                 if st.button(
                     "Open",
                     key="check_binaries_folder_btn",
-                    use_container_width=True,
+                    width="stretch",
                     disabled=not binaries_folder_exists,
                     help="Open folder in file explorer" if binaries_folder_exists else "Path doesn't exist yet"
                 ):
@@ -545,7 +545,7 @@ def render_update_tab(converter: "GGUFConverter", config: Dict[str, Any]) -> Non
 
             if TKINTER_AVAILABLE:
                 with col_repo_browse:  # type: ignore[union-attr]
-                    if st.button("Select", key="browse_repo_folder_btn", use_container_width=True, help="Select llama.cpp repository folder"):
+                    if st.button("Select", key="browse_repo_folder_btn", width="stretch", help="Select llama.cpp repository folder"):
                         repo_path_clean = strip_quotes(repo_path)
                         initial_dir = repo_path_clean if repo_path_clean and Path(repo_path_clean).exists() else None
                         selected_folder = browse_folder(initial_dir)
@@ -567,7 +567,7 @@ def render_update_tab(converter: "GGUFConverter", config: Dict[str, Any]) -> Non
                 if st.button(
                     "Open",
                     key="check_repo_folder_btn",
-                    use_container_width=True,
+                    width="stretch",
                     disabled=not repo_path_exists,
                     help="Open folder in file explorer" if repo_path_exists else "Path doesn't exist yet"
                 ):

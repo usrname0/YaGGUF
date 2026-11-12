@@ -21,6 +21,7 @@ if not exist venv (
     echo   4. Vulkan ^(NVIDIA/AMD/Intel^)
     echo   5. HIP / ROCm ^(AMD^)
     echo   6. SYCL ^(Intel^)
+    echo   7. OpenVINO ^(Intel^)
     echo.
     set GPU_BACKEND_CHOICE=1
     set /p GPU_BACKEND_CHOICE=Enter number [1]:
@@ -30,6 +31,7 @@ if not exist venv (
     if "!GPU_BACKEND_CHOICE!"=="4" set GPU_BACKEND=vulkan
     if "!GPU_BACKEND_CHOICE!"=="5" set GPU_BACKEND=rocm
     if "!GPU_BACKEND_CHOICE!"=="6" set GPU_BACKEND=sycl
+    if "!GPU_BACKEND_CHOICE!"=="7" set GPU_BACKEND=openvino
     if not defined GPU_BACKEND set GPU_BACKEND=cpu
     echo.
     call scripts\setup_windows.bat

@@ -144,7 +144,7 @@ def render_split_merge_tab(converter, config: Dict[str, Any]):
                 if st.button(
                     "Select Folder",
                     key="browse_split_merge_model_folder_btn",
-                    use_container_width=True,
+                    width="stretch",
                     help="Select model directory"
                 ):
                     input_dir_clean = strip_quotes(input_dir)
@@ -162,7 +162,7 @@ def render_split_merge_tab(converter, config: Dict[str, Any]):
             if st.button(
                 "Open Folder",
                 key="check_split_merge_model_folder_btn",
-                use_container_width=True,
+                width="stretch",
                 disabled=not input_dir_exists,
                 help="Open folder in file explorer" if input_dir_exists else "Path doesn't exist yet"
             ):
@@ -248,7 +248,7 @@ def render_split_merge_tab(converter, config: Dict[str, Any]):
         button_col = cols[1] if has_browse else cols[-1]
         with button_col:
             st.markdown("<br>", unsafe_allow_html=True)  # Align with selectbox
-            if st.button("Refresh File List", key="refresh_split_merge_model_list", use_container_width=True):
+            if st.button("Refresh File List", key="refresh_split_merge_model_list", width="stretch"):
                 st.rerun()
 
         # Output directory with Select Folder and Open Folder buttons
@@ -273,7 +273,7 @@ def render_split_merge_tab(converter, config: Dict[str, Any]):
                 if st.button(
                     "Select Folder",
                     key="browse_split_merge_output_folder_btn",
-                    use_container_width=True,
+                    width="stretch",
                     help="Select output directory"
                 ):
                     output_dir_clean = strip_quotes(output_dir)
@@ -291,7 +291,7 @@ def render_split_merge_tab(converter, config: Dict[str, Any]):
             if st.button(
                 "Open Folder",
                 key="check_split_merge_output_folder_btn",
-                use_container_width=True,
+                width="stretch",
                 disabled=not output_dir_exists,
                 help="Open output folder in file explorer" if output_dir_exists else "Output folder doesn't exist yet"
             ):
@@ -527,7 +527,7 @@ def render_split_merge_tab(converter, config: Dict[str, Any]):
             button_enabled = selected_file_info and selected_file_info['type'] == 'split'
             button_help = "Select split files to merge" if not button_enabled else None
 
-            if st.button("Merge Shards", type="primary", use_container_width=True, disabled=not button_enabled, help=button_help):
+            if st.button("Merge Shards", type="primary", width="stretch", disabled=not button_enabled, help=button_help):
                 if not input_dir:
                     st.error("Please specify an input directory")
                 elif not output_dir:
@@ -618,7 +618,7 @@ def render_split_merge_tab(converter, config: Dict[str, Any]):
             else:
                 button_help = None
 
-            if st.button("Split File", type="primary", use_container_width=True, disabled=not button_enabled, help=button_help):
+            if st.button("Split File", type="primary", width="stretch", disabled=not button_enabled, help=button_help):
                 if not input_dir:
                     st.error("Please specify an input directory")
                 elif not output_dir:
@@ -712,7 +712,7 @@ def render_split_merge_tab(converter, config: Dict[str, Any]):
             else:
                 button_help = None
 
-            if st.button("Resplit Shards", type="primary", use_container_width=True, disabled=not button_enabled, help=button_help):
+            if st.button("Resplit Shards", type="primary", width="stretch", disabled=not button_enabled, help=button_help):
                 if not input_dir:
                     st.error("Please specify an input directory")
                 elif not output_dir:

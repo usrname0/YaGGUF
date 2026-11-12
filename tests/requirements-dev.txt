@@ -2,7 +2,7 @@
 # Install with: pip install -r requirements-dev.txt
 
 # Testing
-pytest>=8.0.0,<9.0.0
+pytest>=8.0.0,<10.0.0
 pytest-mock>=3.14.0,<4.0.0
 
 # For split/merge safetensors functionality (optional, needed for tests)

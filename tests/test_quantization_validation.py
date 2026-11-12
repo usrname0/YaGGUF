@@ -204,3 +204,14 @@ def test_quantization_list_order_logical():
     assert q4_0_idx < q4_k_idx, "Legacy quants should come before K-quants"
     assert q4_k_idx < iq2_xxs_idx, "K-quants should come before IQ quants"
     assert iq2_xxs_idx < f16_idx, "IQ quants should come before float formats"
+
+
+def test_specialized_quants_present():
+    """
+    Test that the specialized llama-quantize types are available
+
+    These exist in llama-quantize since b12110: plain low-bit (Q1_0, Q2_0),
+    ternary (TQ1_0, TQ2_0) and MXFP4 for mixture-of-experts models.
+    """
+    for quant in ["Q1_0", "Q2_0", "TQ1_0", "TQ2_0", "MXFP4_MOE"]:
+        assert quant in GGUFConverter.QUANTIZATION_TYPES,             f"{quant} should be in QUANTIZATION_TYPES"

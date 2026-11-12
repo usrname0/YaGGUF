@@ -67,7 +67,7 @@ def render_convert_tab(
                 if st.button(
                     "Select Folder",
                     key="browse_model_folder_btn",
-                    use_container_width=True,
+                    width="stretch",
                     help="Select model directory"
                 ):
                     model_path_clean = strip_quotes(model_path)
@@ -89,7 +89,7 @@ def render_convert_tab(
             if st.button(
                 "Open Folder",
                 key="check_model_folder_btn",
-                use_container_width=True,
+                width="stretch",
                 disabled=not model_path_exists,
                 help="Open folder in file explorer" if model_path_exists else "Path doesn't exist yet"
             ):
@@ -263,7 +263,7 @@ def render_convert_tab(
         button_col = cols[1] if has_browse else cols[-1]
         with button_col:
             st.markdown("<br>", unsafe_allow_html=True)  # Align with selectbox
-            if st.button("Refresh File List", key="update_model_files_list", use_container_width=True):
+            if st.button("Refresh File List", key="update_model_files_list", width="stretch"):
                 # Save the current selection before rerunning
                 current_selection = st.session_state.get(f"intermediate_source_dropdown_{st.session_state.reset_count}")
                 if current_selection:
@@ -357,7 +357,7 @@ def render_convert_tab(
                 if st.button(
                     "Select Folder",
                     key="browse_output_folder_btn",
-                    use_container_width=True,
+                    width="stretch",
                     help="Select output directory"
                 ):
                     output_dir_clean = strip_quotes(output_dir)
@@ -375,7 +375,7 @@ def render_convert_tab(
             if st.button(
                 "Open Folder",
                 key="check_output_folder_btn",
-                use_container_width=True,
+                width="stretch",
                 disabled=not output_dir_exists,
                 help="Open folder in file explorer" if output_dir_exists else "Path doesn't exist yet"
             ):
@@ -838,7 +838,7 @@ def render_convert_tab(
             button_col = cols[1] if has_browse else cols[-1]
             with button_col:
                 st.markdown("<br>", unsafe_allow_html=True)  # Align with selectbox
-                if st.button("Refresh File List", key="update_imatrix_file_list", use_container_width=True):
+                if st.button("Refresh File List", key="update_imatrix_file_list", width="stretch"):
                     # Save the current selection before rerunning
                     current_selection = st.session_state.get(f"imatrix_dropdown_{st.session_state.reset_count}")
                     if current_selection:
@@ -900,7 +900,7 @@ def render_convert_tab(
                 name_button_col = name_cols[1] if name_has_browse else name_cols[-1]
                 with name_button_col:
                     st.markdown("<br>", unsafe_allow_html=True)  # Align with input
-                    if st.button("Set to default", key="set_default_imatrix_name", use_container_width=True):
+                    if st.button("Set to default", key="set_default_imatrix_name", width="stretch"):
                         # Clear field to use default "model.imatrix"
                         config["imatrix_generate_name"] = ""
                         save_config(config)
@@ -1213,6 +1213,30 @@ def render_convert_tab(
                     on_change=save_quant_selection(qtype, widget_key) if not is_disabled else None
                 )
 
+        # Specialized types: only useful for particular kinds of model
+        st.markdown("**Specialized Quants:**")
+        special_quants = {
+            "TQ2_0": "2.06 bpw ternarization (for ternary models such as BitNet / TriLM)",
+            "TQ1_0": "1.69 bpw ternarization (for ternary models such as BitNet / TriLM)",
+            "MXFP4_MOE": "MXFP4 for mixture-of-experts models",
+            "Q2_0": "2.25 bpw quantization (group 64)",
+            "Q1_0": "1.125 bpw quantization",
+        }
+        special_checkboxes = {}
+        special_cols = st.columns(3)
+        for idx, (qtype, tooltip) in enumerate(special_quants.items()):
+            with special_cols[idx % 3]:
+                checkbox_value = config.get("other_quants", {}).get(qtype, False)
+                widget_key = f"special_{qtype}"
+
+                special_checkboxes[qtype] = st.checkbox(
+                    qtype,
+                    value=checkbox_value,
+                    help=tooltip,
+                    key=widget_key,
+                    on_change=save_quant_selection(qtype, widget_key)
+                )
+
     # Collect selected quantization types
     selected_quants = []
 
@@ -1233,10 +1257,13 @@ def render_convert_tab(
     for qtype, checked in i_checkboxes.items():
         if checked:
             selected_quants.append(qtype)
+    for qtype, checked in special_checkboxes.items():
+        if checked:
+            selected_quants.append(qtype)
 
     # Convert button
     st.markdown("---")
-    if st.button("Start Conversion", type="primary", use_container_width=True):
+    if st.button("Start Conversion", type="primary", width="stretch"):
         # Check if there's an imatrix auto-switch warning - block conversion if so
         if "imatrix_fallback_warning" in st.session_state:
             warning_data = st.session_state.imatrix_fallback_warning
@@ -1277,6 +1304,7 @@ def render_convert_tab(
                 all_quant_selections.update(st.session_state.iq_checkbox_states)
             else:
                 all_quant_selections.update(i_checkboxes)
+            all_quant_selections.update(special_checkboxes)
 
             # Remove intermediate format from saved selections (tracked separately)
             if intermediate_type in all_quant_selections:

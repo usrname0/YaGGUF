@@ -438,9 +438,13 @@ def get_venv_python():
     return None
 
 
-def run_tests():
+def run_tests(fast=False):
     """
     Run test suite before version bump using venv Python
+
+    Args:
+        fast: Skip the slow/integration tests (model downloads, real
+              quantization). The fast tests are what CI runs on every push.
 
     Returns:
         True if tests pass, False otherwise
@@ -460,9 +464,14 @@ def run_tests():
         python_cmd = sys.executable
         print(Colors.yellow(f"Warning: venv not found, using {python_cmd}"))
 
+    pytest_cmd = [python_cmd, "-m", "pytest", "tests/", "-v"]
+    if fast:
+        pytest_cmd += ["-m", "not slow and not integration"]
+        print(Colors.yellow("--fast: skipping slow and integration tests"))
+
     try:
         result = subprocess.run(
-            [python_cmd, "-m", "pytest", "tests/", "-v"],
+            pytest_cmd,
             cwd=get_project_root(),
             capture_output=False
         )
@@ -489,6 +498,12 @@ def main():
         formatter_class=argparse.RawDescriptionHelpFormatter
     )
 
+    parser.add_argument(
+        "--fast",
+        action="store_true",
+        help="Skip the slow/integration tests (model downloads, real quantization). "
+             "Use the full suite when bumping the llama.cpp version."
+    )
     args = parser.parse_args()
 
     # Check for uncommitted/unsynced changes before doing anything
@@ -496,7 +511,7 @@ def main():
         sys.exit(1)
 
     # Run tests first
-    if not run_tests():
+    if not run_tests(fast=args.fast):
         sys.exit(1)
 
     # Get current branch

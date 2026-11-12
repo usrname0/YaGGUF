@@ -678,32 +678,9 @@ def get_binary_version_from_path(binary_path: Optional[Path]) -> Optional[str]:
     Returns:
         str: Version string or None if unable to get version
     """
-    if binary_path is None:
-        return None
+    from .llama_cpp_manager import LlamaCppManager
 
-    try:
-        result = subprocess.run(
-            [str(binary_path), "--version"],
-            capture_output=True,
-            text=True,
-            timeout=10
-        )
-
-        if result.returncode == 0:
-            # Parse version from output (may be in stdout or stderr)
-            output = result.stderr if result.stderr else result.stdout
-            if output:
-                # Extract just the version line
-                for line in output.split('\n'):
-                    if line.startswith('version:'):
-                        return line.strip()
-                # If no version line found, return first non-empty line
-                first_line = output.strip().split('\n')[0]
-                if first_line:
-                    return first_line
-        return None
-    except Exception:
-        return None
+    return LlamaCppManager.get_binary_version_info(binary_path)['full_version']
 
 
 def display_binary_version_status(converter: Any) -> None:

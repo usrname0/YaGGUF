@@ -46,7 +46,7 @@ def render_imatrix_stats_tab(converter: "GGUFConverter", config: Dict[str, Any])
             if st.button(
                 "Select Folder",
                 key="browse_imatrix_output_dir_btn",
-                use_container_width=True,
+                width="stretch",
                 help="Select output directory"
             ):
                 stats_dir_clean = strip_quotes(stats_output_dir)
@@ -64,7 +64,7 @@ def render_imatrix_stats_tab(converter: "GGUFConverter", config: Dict[str, Any])
         if st.button(
             "Open Folder",
             key="check_imatrix_output_dir_btn",
-            use_container_width=True,
+            width="stretch",
             disabled=not stats_dir_exists,
             help="Open folder in file explorer" if stats_dir_exists else "Path doesn't exist yet"
         ):
@@ -107,7 +107,7 @@ def render_imatrix_stats_tab(converter: "GGUFConverter", config: Dict[str, Any])
         if st.button(
             "Refresh File List",
             key="update_imatrix_files_btn",
-            use_container_width=True,
+            width="stretch",
             help="Rescan directory for imatrix files"
         ):
             st.toast("Updated imatrix file list")
@@ -127,7 +127,7 @@ def render_imatrix_stats_tab(converter: "GGUFConverter", config: Dict[str, Any])
     if saved_model in gguf_files:
         model_default_index = gguf_files.index(saved_model)
 
-    if st.button("Show Statistics", use_container_width=True, key="show_stats_btn"):
+    if st.button("Show Statistics", width="stretch", key="show_stats_btn"):
         # Strip quotes from paths
         imatrix_stats_path_clean = strip_quotes(imatrix_stats_path)
 

@@ -107,7 +107,7 @@ def _save_preset_dialog(config: Dict[str, Any]) -> None:
     name = st.text_input("Preset name", placeholder="My preset", key="run_preset_name_dialog")
     c1, c2 = st.columns(2)
     with c1:
-        if st.button("Save", use_container_width=True, type="primary"):
+        if st.button("Save", width="stretch", type="primary"):
             stripped = name.strip()
             if stripped:
                 params = _collect_params(config)
@@ -117,7 +117,7 @@ def _save_preset_dialog(config: Dict[str, Any]) -> None:
             else:
                 st.warning("Enter a preset name.")
     with c2:
-        if st.button("Cancel", use_container_width=True):
+        if st.button("Cancel", width="stretch"):
             st.rerun()
 
 
@@ -175,7 +175,7 @@ def render_run_gguf_tab(converter: "GGUFConverter", config: Dict[str, Any]) -> N
                 if st.button(
                     "Select Folder",
                     key="run_browse_folder_btn",
-                    use_container_width=True,
+                    width="stretch",
                 ):
                     selected = browse_folder(model_path_clean if model_path_exists else None)
                     if selected:
@@ -189,7 +189,7 @@ def render_run_gguf_tab(converter: "GGUFConverter", config: Dict[str, Any]) -> N
             if st.button(
                 "Open Folder",
                 key="run_open_folder_btn",
-                use_container_width=True,
+                width="stretch",
                 disabled=not model_path_exists,
                 help="Open folder in file explorer" if model_path_exists else "Path doesn't exist yet",
             ):
@@ -283,7 +283,7 @@ def render_run_gguf_tab(converter: "GGUFConverter", config: Dict[str, Any]) -> N
             if st.button(
                 "Estimate fit for selected model",
                 key="run_fit_calc_btn",
-                use_container_width=True,
+                width="stretch",
                 disabled=not selected_file_path,
                 help="Run llama-fit-params to calculate optimal -ngl and -c values for your hardware.",
             ):
@@ -313,7 +313,7 @@ def render_run_gguf_tab(converter: "GGUFConverter", config: Dict[str, Any]) -> N
                             apply_disabled = cur_auto_fit
                             apply_label = "(Auto)" if cur_auto_fit else "Apply"
                             apply_help = "Switch to Manual mode to apply these values manually." if cur_auto_fit else None
-                            if st.button(apply_label, key="run_fit_apply_btn", use_container_width=True, disabled=apply_disabled, help=apply_help):
+                            if st.button(apply_label, key="run_fit_apply_btn", width="stretch", disabled=apply_disabled, help=apply_help):
                                 st.session_state["pending_fit_apply"] = (fit_ngl, fit_ctx_val)
                                 st.rerun()
                     else:
@@ -368,7 +368,7 @@ def render_run_gguf_tab(converter: "GGUFConverter", config: Dict[str, Any]) -> N
             if st.button(
                 "Launch llama-server",
                 key="run_launch_server_btn",
-                use_container_width=True,
+                width="stretch",
                 disabled=not selected_file_path,
                 help="Start llama-server in a new terminal window",
             ):
@@ -391,7 +391,7 @@ def render_run_gguf_tab(converter: "GGUFConverter", config: Dict[str, Any]) -> N
             if st.button(
                 "Launch llama-cli",
                 key="run_launch_cli_btn",
-                use_container_width=True,
+                width="stretch",
                 disabled=not selected_file_path,
                 help="Start an interactive chat session in a new terminal window",
             ):
@@ -412,7 +412,7 @@ def render_run_gguf_tab(converter: "GGUFConverter", config: Dict[str, Any]) -> N
             if st.button(
                 "Launch llama-bench",
                 key="run_launch_bench_btn",
-                use_container_width=True,
+                width="stretch",
                 disabled=not selected_file_path,
                 help="Run benchmarks in a new terminal window",
             ):
@@ -443,7 +443,7 @@ def render_run_gguf_tab(converter: "GGUFConverter", config: Dict[str, Any]) -> N
             presets = load_presets()
             preset_names = list(presets.keys())
 
-            if st.button("Save as...", key="run_preset_save_btn", use_container_width=True):
+            if st.button("Save as...", key="run_preset_save_btn", width="stretch"):
                 _save_preset_dialog(config)
 
             st.markdown("---")
@@ -452,22 +452,22 @@ def render_run_gguf_tab(converter: "GGUFConverter", config: Dict[str, Any]) -> N
             with dc1:
                 st.markdown("*(defaults)*")
             with dc2:
-                if st.button("Load", key="run_preset_load_defaults", use_container_width=True):
+                if st.button("Load", key="run_preset_load_defaults", width="stretch"):
                     st.session_state.pending_preset_load = "__defaults__"
                     st.rerun()
             with dc3:
-                st.button("Delete", key="run_preset_delete_defaults", disabled=True, use_container_width=True)
+                st.button("Delete", key="run_preset_delete_defaults", disabled=True, width="stretch")
 
             for i, name in enumerate(preset_names):
                 pc1, pc2, pc3 = st.columns([4, 1, 1])
                 with pc1:
                     st.markdown(name)
                 with pc2:
-                    if st.button("Load", key=f"run_preset_load_{i}", use_container_width=True):
+                    if st.button("Load", key=f"run_preset_load_{i}", width="stretch"):
                         st.session_state.pending_preset_load = presets[name]
                         st.rerun()
                 with pc3:
-                    if st.button("Delete", key=f"run_preset_delete_{i}", use_container_width=True):
+                    if st.button("Delete", key=f"run_preset_delete_{i}", width="stretch"):
                         delete_preset(name)
                         st.toast(f"Preset '{name}' deleted.")
                         st.rerun()

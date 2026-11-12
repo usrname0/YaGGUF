@@ -106,7 +106,7 @@ def render_downloader_tab(converter: "GGUFConverter", config: Dict[str, Any]) ->
         if st.button(
             "View Repo",
             key="view_repo_download_btn",
-            use_container_width=True,
+            width="stretch",
             disabled=not repo_id_populated,
             help="Open HuggingFace repo in browser" if repo_id_populated else "Enter a repo ID first"
         ):
@@ -165,7 +165,7 @@ def render_downloader_tab(converter: "GGUFConverter", config: Dict[str, Any]) ->
             if st.button(
                 "Select Folder",
                 key="browse_download_folder_btn",
-                use_container_width=True,
+                width="stretch",
                 help="Select download directory"
             ):
                 download_dir_check = strip_quotes(download_dir)
@@ -225,7 +225,7 @@ def render_downloader_tab(converter: "GGUFConverter", config: Dict[str, Any]) ->
         if st.button(
             "Open Folder",
             key="check_download_folder_btn",
-            use_container_width=True,
+            width="stretch",
             disabled=not folder_exists,
             help="Open folder in file explorer" if folder_exists else "Path doesn't exist yet"
         ):
@@ -275,7 +275,7 @@ def render_downloader_tab(converter: "GGUFConverter", config: Dict[str, Any]) ->
 
                 with col_buttons:
                     st.markdown("<br>", unsafe_allow_html=True)  # Spacer to align with input
-                    if st.button("Delete Token", key="hf_logout_btn", use_container_width=True):
+                    if st.button("Delete Token", key="hf_logout_btn", width="stretch"):
                         hf_logout()
                         # Keep expander open to show login UI
                         st.session_state.show_hf_login = True
@@ -329,7 +329,7 @@ def render_downloader_tab(converter: "GGUFConverter", config: Dict[str, Any]) ->
 
                 with col_buttons:
                     st.markdown("<br>", unsafe_allow_html=True)  # Spacer to align with input
-                    if st.button("Save Token", key="hf_login_btn", use_container_width=True):
+                    if st.button("Save Token", key="hf_login_btn", width="stretch"):
                         save_hf_token()
                         st.rerun()
 
@@ -339,7 +339,7 @@ def render_downloader_tab(converter: "GGUFConverter", config: Dict[str, Any]) ->
                 if msg_type == "error":
                     st.error(msg_text)
 
-    if st.button("Download", use_container_width=True):
+    if st.button("Download", width="stretch"):
         # Clear any previous download info and auth UI
         st.session_state.downloaded_model_path = None
         st.session_state.show_hf_login = False
@@ -424,7 +424,7 @@ def render_downloader_tab(converter: "GGUFConverter", config: Dict[str, Any]) ->
         with col_path:
             st.code(st.session_state.downloaded_model_path, language=None)
         with col_set_path:
-            if st.button("Set as model path", key="set_model_path_btn", use_container_width=True, help="Set this as the model path in Convert & Quantize tab"):
+            if st.button("Set as model path", key="set_model_path_btn", width="stretch", help="Set this as the model path in Convert & Quantize tab"):
                 path_to_set = st.session_state.downloaded_model_path
                 config["model_path"] = path_to_set
                 save_config(config)
