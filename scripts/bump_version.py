@@ -229,16 +229,30 @@ def get_recent_versions(count=3):
 
 def get_latest_llama_version():
     """
-    Get the latest llama.cpp release tag from GitHub
+    Get the build tag of the latest stable llama.cpp release from GitHub
+
+    GitHub's "latest" release is a stable tag like "v0.9.0" which carries no
+    binaries, only a nightly-tag.txt naming the build ("b12110") made from the
+    same commit. LLAMA_CPP_VERSION is always a build tag, so resolve to that.
 
     Returns:
-        Latest release tag (e.g., "b7493") or None if fetch fails
+        Build tag (e.g., "b12110") or None if fetch fails
     """
     try:
         api_url = "https://api.github.com/repos/ggml-org/llama.cpp/releases/latest"
         with urlopen(api_url) as response:
             data = json.loads(response.read().decode())
-            return data['tag_name']
+            release_tag = data['tag_name']
+        if re.fullmatch(r'b\d+', release_tag):
+            return release_tag
+
+        nightly_url = f"https://github.com/ggml-org/llama.cpp/releases/download/{release_tag}/nightly-tag.txt"
+        with urlopen(nightly_url) as response:
+            build_tag = response.read().decode().strip()
+        if not re.fullmatch(r'b\d+', build_tag):
+            raise ValueError(f"unexpected nightly-tag.txt content for {release_tag}: {build_tag[:40]!r}")
+        print(f"  Latest stable release: {Colors.green(release_tag)} (build {build_tag})")
+        return build_tag
     except Exception as e:
         print(Colors.yellow(f"Warning: Could not fetch latest llama.cpp version: {e}"))
         return None
@@ -544,6 +558,12 @@ def main():
 
     if not new_llama:
         print(Colors.red("Error: llama.cpp version required"))
+        return
+
+    if not re.fullmatch(r'b\d+', new_llama):
+        # Stable release tags (v0.9.0) have no binaries attached; the pin must
+        # be the build tag listed in that release's nightly-tag.txt.
+        print(Colors.red(f"Error: '{new_llama}' is not a build tag (expected e.g. b12110)"))
         return
 
     # Prompt for YaGGUF version

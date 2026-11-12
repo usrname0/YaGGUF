@@ -31,3 +31,25 @@ test pass on the downloader. This is the accepted cost of importing hub's API di
 (`converter.py::_transformers_upgrade_hint`) points users at a git-source install
 (`pip install -U git+https://github.com/huggingface/transformers.git`) as a fallback. With
 floor-only pins this is rarely needed, but it covers the gap before a release lands.
+
+## llama.cpp Versions and Asset Names
+
+llama.cpp publishes two kinds of tags:
+
+- **Stable releases** like `v0.9.0`. This is what GitHub reports as "latest". They carry no
+  binaries, only a `nightly-tag.txt` asset naming the build made from the same commit.
+- **Builds** like `b12110` (marked pre-release). These carry the binaries, and the number is
+  what `llama-cli --version` prints (`version: 0.9.0-dev (build 12110, commit ...)`).
+
+`LLAMA_CPP_VERSION` is always a **build tag**. `LlamaCppManager.resolve_build_tag()` converts
+a release tag, and `update_binaries()` / `update_conversion_scripts()` accept either.
+`scripts/bump_version.py` suggests the build of the latest stable release.
+
+GPU backends are stored without toolkit versions (`cuda-13`, `rocm`) because upstream puts
+the version in the asset name and changes it between releases (`cuda-13.3` -> `cuda-13.5`,
+`hip-radeon` -> `rocm-10.0`). `_resolve_backend_variant()` matches the stored value to
+whatever the target build publishes.
+
+After bumping the pin, check that the flags YaGGUF passes still exist: upstream removes
+them without aliases (b12110 dropped `llama-cli -cnv`, which made the Run GGUF tab's CLI
+launch fail with "invalid argument").

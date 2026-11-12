@@ -182,9 +182,11 @@ class TestBuildCliCmd:
         assert cmd[0] == "llama-cli"
         assert cmd[1:3] == ["-m", "/models/test.gguf"]
 
-    def test_cnv_always_present(self):
+    def test_cnv_not_passed(self):
+        # llama-cli dropped -cnv (conversation is its only mode) and now
+        # exits with "invalid argument: -cnv"
         cmd = build_cli_cmd("llama-cli", "m.gguf", _server_params())
-        assert "-cnv" in cmd
+        assert "-cnv" not in cmd
 
     def test_no_server_args(self):
         cmd = build_cli_cmd("llama-cli", "m.gguf", _server_params())

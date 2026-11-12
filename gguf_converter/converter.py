@@ -1172,7 +1172,7 @@ class GGUFConverter:
 
                     # Extract version number from the version line or full output
                     search_text = version_line if version_line else output
-                    match = re.search(r'\b(b?\d{4,5})\b', search_text)
+                    match = re.search(r'\b(b?\d{4,6})\b', search_text)
                     if match:
                         version = match.group(1)
                         return (version if version.startswith('b') else f'b{version}'), binary_path

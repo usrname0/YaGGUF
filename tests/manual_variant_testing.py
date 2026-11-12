@@ -432,7 +432,7 @@ This script will:
             # Extract version number
             if version_line:
                 import re
-                match = re.search(r'\b(b?\d{4,5})\b', version_line)
+                match = re.search(r'\b(b?\d{4,6})\b', version_line)
                 if match:
                     version = match.group(1)
                     if not version.startswith('b'):

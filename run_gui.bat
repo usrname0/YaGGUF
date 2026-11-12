@@ -28,7 +28,7 @@ if not exist venv (
     if "!GPU_BACKEND_CHOICE!"=="2" set GPU_BACKEND=cuda-12
     if "!GPU_BACKEND_CHOICE!"=="3" set GPU_BACKEND=cuda-13
     if "!GPU_BACKEND_CHOICE!"=="4" set GPU_BACKEND=vulkan
-    if "!GPU_BACKEND_CHOICE!"=="5" set GPU_BACKEND=hip-radeon
+    if "!GPU_BACKEND_CHOICE!"=="5" set GPU_BACKEND=rocm
     if "!GPU_BACKEND_CHOICE!"=="6" set GPU_BACKEND=sycl
     if not defined GPU_BACKEND set GPU_BACKEND=cpu
     echo.

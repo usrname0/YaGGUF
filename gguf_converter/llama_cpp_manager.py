@@ -8,6 +8,7 @@ import zipfile
 import tarfile
 import shutil
 import json
+import re
 import stat
 from pathlib import Path
 from typing import Optional, Dict
@@ -34,7 +35,7 @@ class LlamaCppManager:
     Manages llama.cpp resources including binaries and conversion scripts
     """
 
-    LLAMA_CPP_VERSION = "b9544"
+    LLAMA_CPP_VERSION = "b12110"
     RELEASE_URL_TEMPLATE = "https://github.com/ggml-org/llama.cpp/releases/download/{tag}/{filename}"
 
     # Seconds to wait on GitHub API calls before giving up. These run on the
@@ -92,7 +93,7 @@ class LlamaCppManager:
         elif system == 'darwin':
             os_name = 'macos'
             variant = arch
-            ext = 'zip'
+            ext = 'tar.gz'
             filename = f"llama-{self.LLAMA_CPP_VERSION}-bin-{os_name}-{variant}.{ext}"
         else:
             raise RuntimeError(f"Unsupported platform: {system}")
@@ -114,7 +115,12 @@ class LlamaCppManager:
             percent = min(downloaded * 100.0 / total_size, 100)
             mb_downloaded = downloaded / (1024 * 1024)
             mb_total = total_size / (1024 * 1024)
-            print(f"\rDownloading: {percent:.1f}% ({mb_downloaded:.1f}/{mb_total:.1f} MB)", end='')
+            line = f"\rDownloading: {percent:.1f}% ({mb_downloaded:.1f}/{mb_total:.1f} MB)"
+            # urlretrieve calls this every 8 KB (tens of thousands of times for
+            # a CUDA download); only print when the visible text changes.
+            if line != getattr(self, '_last_progress_line', None):
+                self._last_progress_line = line
+                print(line, end='')
 
     def _check_disk_space(self, required_bytes: int, path: Optional[Path] = None) -> bool:
         """
@@ -145,10 +151,16 @@ class LlamaCppManager:
 
     def get_latest_version(self) -> str:
         """
-        Get the latest llama.cpp release tag from GitHub
+        Get the latest stable llama.cpp release tag from GitHub
+
+        llama.cpp publishes two kinds of tags:
+          - stable releases, e.g. "v0.9.0" (what GitHub reports as "latest").
+            These carry no binaries, only a nightly-tag.txt naming the build.
+          - builds, e.g. "b12110" (pre-releases). These carry the binaries.
+        Use resolve_build_tag() to turn the result into the build tag.
 
         Returns:
-            Latest release tag (e.g., "b7493")
+            Latest release tag (e.g., "v0.9.0")
         """
         try:
             api_url = "https://api.github.com/repos/ggml-org/llama.cpp/releases/latest"
@@ -159,6 +171,55 @@ class LlamaCppManager:
             print(f"{theme['warning']}Warning: Could not fetch latest version: {e}{Style.RESET_ALL}")
             print(f"{theme['info']}Falling back to recommended version: {self.LLAMA_CPP_VERSION}{Style.RESET_ALL}")
             return self.LLAMA_CPP_VERSION
+
+    @staticmethod
+    def _is_build_tag(tag: str) -> bool:
+        """True for llama.cpp build tags like "b9544" (the ones with binaries)."""
+        return bool(tag) and re.fullmatch(r'b\d+', tag) is not None
+
+    def resolve_build_tag(self, tag: str) -> str:
+        """
+        Resolve any llama.cpp tag to the build tag ("bNNNNN") it corresponds to.
+
+        Build tags are returned unchanged. Stable release tags ("v0.9.0") are
+        resolved through the nightly-tag.txt asset attached to that release,
+        which names the build made from the same commit.
+
+        Raises:
+            RuntimeError: if a release tag can't be resolved
+        """
+        if self._is_build_tag(tag):
+            return tag
+
+        if not hasattr(self, '_build_tag_cache'):
+            self._build_tag_cache = {}
+        if tag in self._build_tag_cache:
+            return self._build_tag_cache[tag]
+
+        url = self.RELEASE_URL_TEMPLATE.format(tag=tag, filename="nightly-tag.txt")
+        try:
+            with urlopen(url, timeout=self.GITHUB_API_TIMEOUT) as response:
+                build_tag = response.read().decode().strip()
+        except Exception as e:
+            raise RuntimeError(
+                f"Could not determine which llama.cpp build belongs to release {tag} "
+                f"({url}): {e}"
+            )
+        if not self._is_build_tag(build_tag):
+            raise RuntimeError(
+                f"Unexpected content in nightly-tag.txt for llama.cpp release {tag}: {build_tag[:40]!r}"
+            )
+
+        self._build_tag_cache[tag] = build_tag
+        return build_tag
+
+    def describe_version(self, tag: str) -> str:
+        """Human-readable version, e.g. "v0.9.0 (build b12110)" or "b9544"."""
+        try:
+            build_tag = self.resolve_build_tag(tag)
+        except RuntimeError:
+            return tag
+        return tag if build_tag == tag else f"{tag} (build {build_tag})"
 
     def _get_release_asset_names(self, tag: str) -> set:
         """
@@ -251,68 +312,104 @@ class LlamaCppManager:
         """
         if not backend or not backend.startswith("cuda"):
             return backend
-        import re
         m = re.match(r'(cuda-\d+)', backend)
         return m.group(1) if m else backend
 
-    def _resolve_cuda_variant(self, tag: str, backend: str) -> str:
+    @classmethod
+    def _backend_family(cls, backend: str) -> str:
         """
-        Resolve a CUDA backend selection to the exact patch variant published
-        for `tag` on this platform.
+        Normalise a backend to the version-independent value the GUI stores.
 
-        Accepts a major family like "cuda-13" (what the GUI now stores) or a
-        legacy exact value like "cuda-13.3", and returns the highest available
-        patch for that major (e.g. "cuda-13.3"). This is what lets a saved
-        "CUDA 13.x" preference keep working when llama.cpp bumps 13.1 -> 13.3.
-
-        Returns the input unchanged for non-CUDA backends, or when the release
-        assets can't be inspected (the download/validation step then surfaces
-        any remaining problem).
+        llama.cpp puts toolkit versions in asset names and changes them between
+        releases, so preferences are stored without them:
+          "cuda-13.5" -> "cuda-13"      (CUDA keeps its major version)
+          "rocm-10.0" -> "rocm"
+          "hip-radeon" -> "rocm"        (older name of the Windows ROCm build)
+        Everything else ("cpu", "vulkan", "sycl", ...) is returned unchanged.
         """
-        if not backend or not backend.startswith("cuda"):
+        if not backend:
             return backend
+        if backend.startswith("cuda"):
+            return cls._cuda_family(backend)
+        if backend == "hip-radeon" or backend.startswith("rocm"):
+            return "rocm"
+        return backend
 
-        import re
-        major = self._cuda_family(backend).split('-', 1)[1]
+    def _archive_ext(self) -> str:
+        return "zip" if self.platform_info['os'] == 'win' else "tar.gz"
+
+    def _archive_filename(self, tag: str, variant: str) -> str:
+        """
+        Release asset name for a build tag and exact backend variant.
+
+        Windows names every variant ("win-cpu-x64"); Linux and macOS leave the
+        CPU build unnamed ("ubuntu-x64") and macOS ships nothing else.
+        """
         os_name = self.platform_info['os']
         arch = self.platform_info['arch']
-        assets = self._get_release_asset_names(tag)
-        if not assets:
-            return backend
+        if os_name == 'macos' or (os_name != 'win' and variant == 'cpu'):
+            middle = arch
+        else:
+            middle = f"{variant}-{arch}"
+        return f"llama-{tag}-bin-{os_name}-{middle}.{self._archive_ext()}"
 
-        pat = re.compile(rf"^llama-{re.escape(tag)}-bin-{os_name}-(cuda-{major}\.[\d.]+)-{arch}\.")
-        variants = {m.group(1) for a in assets if (m := pat.match(a))}
-        if not variants:
+    def _available_variants(self, tag: str) -> set:
+        """
+        Exact backend variants published for `tag` on this platform, e.g.
+        {"cpu", "cuda-12.4", "cuda-13.5", "vulkan", "rocm-10.0"}.
+        Empty when the release assets can't be inspected.
+        """
+        os_name = self.platform_info['os']
+        arch = self.platform_info['arch']
+        pat = re.compile(
+            rf"^llama-{re.escape(tag)}-bin-{os_name}-(?:(.+)-)?{arch}\.{re.escape(self._archive_ext())}$"
+        )
+        return {
+            m.group(1) or "cpu"
+            for a in self._get_release_asset_names(tag)
+            if (m := pat.match(a))
+        }
+
+    def _resolve_backend_variant(self, tag: str, backend: str) -> str:
+        """
+        Resolve a backend selection to the exact variant published for `tag`
+        on this platform.
+
+        Accepts a stored family ("cuda-13", "rocm") or a legacy exact value
+        ("cuda-13.1", "hip-radeon") and returns the matching published variant,
+        picking the highest version when several exist (e.g. "cuda-13.5"). This
+        is what keeps a saved preference working when llama.cpp bumps or
+        renames a toolkit between releases.
+
+        Returns the input unchanged when nothing matches or the release assets
+        can't be inspected (the download/validation step then surfaces any
+        remaining problem).
+        """
+        if not backend:
             return backend
-        # Highest patch within the chosen major (e.g. cuda-13.5 over cuda-13.3)
-        return max(variants, key=lambda v: tuple(int(n) for n in re.findall(r'\d+', v)))
+        family = self._backend_family(backend)
+        matches = [v for v in self._available_variants(tag) if self._backend_family(v) == family]
+        if not matches:
+            return backend
+        return max(matches, key=lambda v: tuple(int(n) for n in re.findall(r'\d+', v)))
 
     def _discover_cuda_backends(self, tag: str) -> list:
         """
         Return [(label, value), ...] for the CUDA major families actually
-        published for `tag` on this platform's win-x64/arm64 builds.
+        published for `tag` on this platform.
 
         Values are major families ("cuda-13") shown as "CUDA 13.x" rather than
         exact patch versions, so a saved preference survives llama.cpp bumping
         the bundled toolkit between releases (e.g. cuda-13.1 -> cuda-13.3). The
-        exact patch is resolved at download time by _resolve_cuda_variant().
+        exact patch is resolved at download time by _resolve_backend_variant().
         Falls back to a static list when the assets can't be fetched.
         """
-        import re
-
-        os_name = self.platform_info['os']
-        arch = self.platform_info['arch']
-        assets = self._get_release_asset_names(tag)
-
-        found = []
-        if assets:
-            pat = re.compile(rf"^llama-{re.escape(tag)}-bin-{os_name}-cuda-(\d+)\.[\d.]+-{arch}\.")
-            majors = sorted({m.group(1) for a in assets if (m := pat.match(a))}, key=int)
-            for major in majors:
-                found.append((f"CUDA {major}.x (Nvidia)", f"cuda-{major}"))
-
-        if found:
-            return found
+        majors = sorted(
+            {m.group(1) for v in self._available_variants(tag) if (m := re.fullmatch(r'cuda-(\d+)\.[\d.]+', v))},
+            key=int,
+        )
+        if majors:
+            return [(f"CUDA {major}.x (Nvidia)", f"cuda-{major}") for major in majors]
 
         # Fallback when the release can't be inspected
         return [
@@ -339,6 +436,11 @@ class LlamaCppManager:
             return self._backend_list_cache
 
         resolved_tag = tag if tag else self.get_latest_version()
+        try:
+            # Stable release tags (v0.9.0) carry no binaries; inspect the build
+            resolved_tag = self.resolve_build_tag(resolved_tag)
+        except RuntimeError:
+            pass  # _discover_cuda_backends falls back to a static list
         cuda_backends = self._discover_cuda_backends(resolved_tag)
 
         if os_name == 'win':
@@ -346,7 +448,7 @@ class LlamaCppManager:
             backends += cuda_backends
             backends += [
                 ("Vulkan (Nvidia/AMD/Intel)", "vulkan"),
-                ("HIP / ROCm (AMD)", "hip-radeon"),
+                ("HIP / ROCm (AMD)", "rocm"),
                 ("SYCL (Intel)", "sycl"),
             ]
         else:  # ubuntu/linux
@@ -354,7 +456,7 @@ class LlamaCppManager:
             backends += cuda_backends
             backends += [
                 ("Vulkan (Nvidia/AMD/Intel)", "vulkan"),
-                ("HIP / ROCm (AMD)", "hip-radeon"),
+                ("HIP / ROCm (AMD)", "rocm"),
             ]
 
         if use_cache:
@@ -367,24 +469,18 @@ class LlamaCppManager:
 
         Args:
             force: Force re-download even if binaries exist at target version
-            version: Specific version to download (None = use recommended LLAMA_CPP_VERSION)
-            gpu_backend: Backend to download. CUDA may be a major family ("cuda-13",
-                         shown as "CUDA 13.x") or a legacy exact value
-                         ("cuda-13.3"); the exact patch is resolved against the
-                         target release. Also accepts "cpu", "vulkan", etc.
-                         Only relevant for Windows; ignored on macOS and Linux.
+            version: Specific version to download (None = use recommended LLAMA_CPP_VERSION).
+                     Either a build tag ("b9544") or a stable release tag
+                     ("v0.9.0"), which is resolved to its build.
+            gpu_backend: Backend to download. A stored family ("cuda-13", shown
+                         as "CUDA 13.x", or "rocm") or a legacy exact value
+                         ("cuda-13.3", "hip-radeon"); the exact variant is
+                         resolved against the target release. Also accepts
+                         "cpu", "vulkan", etc. Ignored on macOS (Metal built in).
 
         Returns:
             Path to bin directory containing executables
         """
-        # Use specified version or default to recommended
-        tag = version if version else self.LLAMA_CPP_VERSION
-
-        # CUDA selections are stored as a major family (e.g. "cuda-13"); resolve
-        # the exact patch variant published for this release (e.g. "cuda-13.3").
-        requested_family = self._cuda_family(gpu_backend)
-        resolved_backend = self._resolve_cuda_variant(tag, gpu_backend)
-
         # Print banner
         from datetime import datetime
         timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -394,13 +490,31 @@ class LlamaCppManager:
         print(f"{theme['info']}{timestamp.center(80)}{Style.RESET_ALL}")
         print(f"{theme['info']}{banner_line}{Style.RESET_ALL}\n")
 
+        # Use specified version or default to recommended. Binaries are only
+        # published under build tags, so a stable release tag (v0.9.0) is
+        # resolved to the build made from it (b12110).
+        requested_version = version if version else self.LLAMA_CPP_VERSION
+        tag = self.resolve_build_tag(requested_version)
+        if tag != requested_version:
+            print(f"{theme['info']}llama.cpp {requested_version} is build {tag}{Style.RESET_ALL}")
+
+        os_name = self.platform_info['os']
+        arch = self.platform_info['arch']
+        if os_name == 'macos':
+            gpu_backend = "cpu"  # single build, Metal included
+
+        # Backends are stored without toolkit versions (e.g. "cuda-13", "rocm");
+        # resolve the exact variant published for this build (e.g. "cuda-13.5").
+        requested_family = self._backend_family(gpu_backend)
+        resolved_backend = self._resolve_backend_variant(tag, gpu_backend)
+
         # Check if binaries exist and match the requested version AND backend.
         # Compare CUDA backends by major family so a patch bump (13.1 -> 13.3)
         # within the same selection isn't treated as a different backend.
         if not force and self._binaries_exist():
             installed_version = self.get_installed_version_tag()
             installed_backend = self._read_bin_info().get("gpu_backend")
-            installed_family = self._cuda_family(installed_backend or "")
+            installed_family = self._backend_family(installed_backend or "")
             if installed_version == tag and installed_family == requested_family:
                 print(f"{theme['info']}Binaries already at version {tag} ({requested_family}){Style.RESET_ALL}")
                 print(f"{theme['success']}Binaries ready in {self.bin_dir}{Style.RESET_ALL}")
@@ -412,39 +526,18 @@ class LlamaCppManager:
             else:
                 print(f"{theme['info']}Unable to determine installed version, downloading {tag}...{Style.RESET_ALL}")
 
-        # Update filename to use the specified version
-        os_name = self.platform_info['os']
-        arch = self.platform_info['arch']
-
-        if os_name == "win":
-            ext = "zip"
-            filename = f"llama-{tag}-bin-{os_name}-{resolved_backend}-{arch}.{ext}"
-        elif os_name == "macos":
-            variant = self.platform_info['variant']
-            ext = "zip"
-            filename = f"llama-{tag}-bin-{os_name}-{variant}.{ext}"
-        else:  # linux/ubuntu
-            variant = self.platform_info['variant']
-            ext = "tar.gz"
-            filename = f"llama-{tag}-bin-{os_name}-{variant}.{ext}"
-
+        ext = self._archive_ext()
+        filename = self._archive_filename(tag, resolved_backend)
         url = self.RELEASE_URL_TEMPLATE.format(tag=tag, filename=filename)
 
         # Validate the asset exists for this release before touching anything.
-        # llama.cpp changes CUDA toolkit versions between releases (e.g. a stored
+        # llama.cpp changes toolkit versions between releases (e.g. a stored
         # cuda-13.1 backend no longer exists in a newer release that ships
         # cuda-13.3), which would otherwise 404 mid-update.
         assets = self._get_release_asset_names(tag)
         if assets and filename not in assets:
-            prefix = f"llama-{tag}-bin-{os_name}-"
-            suffix = f"-{arch}.{ext}" if os_name == "win" else f".{ext}"
-            raw = sorted(
-                a[len(prefix):-len(suffix)]
-                for a in assets
-                if a.startswith(prefix) and a.endswith(suffix)
-            )
-            # Collapse CUDA variants to families to match the GUI labels
-            available = sorted({self._cuda_family(v) for v in raw})
+            # Collapse variants to families to match the GUI labels
+            available = sorted({self._backend_family(v) for v in self._available_variants(tag)})
             hint = (
                 f"\nAvailable backends for {tag}: {', '.join(available)}"
                 if available else ""
@@ -452,8 +545,8 @@ class LlamaCppManager:
             raise RuntimeError(
                 f"llama.cpp release {tag} does not provide '{filename}'.\n"
                 f"The '{requested_family}' backend likely isn't available for this "
-                f"version (llama.cpp changes its bundled CUDA toolkit version "
-                f"between releases).{hint}\n"
+                f"version on {os_name}-{arch} (llama.cpp changes its bundled "
+                f"toolkit versions between releases).{hint}\n"
                 f"Pick an available backend in the GPU Backend selector and try again."
             )
 
@@ -502,21 +595,25 @@ class LlamaCppManager:
         download_path.unlink()
         print(f"{theme['info']}Extraction complete{Style.RESET_ALL}")
 
-        # For Windows CUDA builds, also download the CUDA runtime DLLs
-        if os_name == "win" and resolved_backend.startswith("cuda"):
-            cudart_filename = f"cudart-llama-bin-win-{resolved_backend}-{arch}.zip"
+        # CUDA builds also need the CUDA runtime libraries, shipped separately.
+        # Windows names the archive without the build tag, Linux with it.
+        if resolved_backend.startswith("cuda"):
+            if os_name == "win":
+                cudart_filename = f"cudart-llama-bin-win-{resolved_backend}-{arch}.zip"
+            else:
+                cudart_filename = f"cudart-llama-{tag}-bin-{os_name}-{resolved_backend}-{arch}.{ext}"
             cudart_url = self.RELEASE_URL_TEMPLATE.format(tag=tag, filename=cudart_filename)
             cudart_path = self.bin_dir / cudart_filename
-            print(f"{theme['info']}Downloading CUDA runtime DLLs...{Style.RESET_ALL}")
+            print(f"{theme['info']}Downloading CUDA runtime libraries...{Style.RESET_ALL}")
             print(f"{theme['highlight']}{cudart_url}{Style.RESET_ALL}")
             try:
                 urlretrieve(cudart_url, cudart_path, reporthook=self._progress_hook)
                 print()
                 self._extract_archive(cudart_path)
                 cudart_path.unlink()
-                print(f"{theme['info']}CUDA runtime DLLs extracted{Style.RESET_ALL}")
+                print(f"{theme['info']}CUDA runtime libraries extracted{Style.RESET_ALL}")
             except Exception as e:
-                print(f"{theme['warning']}Warning: Could not download CUDA runtime DLLs: {e}{Style.RESET_ALL}")
+                print(f"{theme['warning']}Warning: Could not download CUDA runtime libraries: {e}{Style.RESET_ALL}")
                 print(f"{theme['warning']}CUDA may not work correctly without these files.{Style.RESET_ALL}")
 
         # Verify binaries exist
@@ -676,7 +773,12 @@ class LlamaCppManager:
                     # and matching the whole output would grab one of those instead.
                     search_text = full_version if full_version else output
                     tag = None
-                    match = re.search(r'\b(b?\d{4,6})\b', search_text)
+                    # Newer builds print "version: 0.9.0-dev (build 12110, commit ...)",
+                    # older ones "version: 9544 (98d5e8ba8)".
+                    match = (
+                        re.search(r'\bbuild (\d+)\b', search_text)
+                        or re.search(r'\b(b?\d{4,6})\b', search_text)
+                    )
                     if match:
                         version = match.group(1)
                         # Ensure it has the 'b' prefix
@@ -701,8 +803,13 @@ class LlamaCppManager:
         """
         Get version information of currently installed conversion scripts by checking git
 
+        A commit can carry both a build tag (b12110) and a stable release tag
+        (v0.9.0). The build tag is the one reported as 'tag' since that's what
+        binaries and LLAMA_CPP_VERSION use; the release is shown alongside it.
+
         Returns:
-            Dict with 'full_version' (git describe output) and 'tag' (version tag like 'b7574')
+            Dict with 'full_version' (e.g. "b12110 (v0.9.0)", or git describe output
+            when HEAD isn't on a build tag) and 'tag' (version tag like 'b7574')
             Returns None values if unable to determine
         """
         import subprocess
@@ -713,23 +820,35 @@ class LlamaCppManager:
         if not llama_cpp_dir.exists() or not (llama_cpp_dir / ".git").exists():
             return {'full_version': None, 'tag': None}
 
-        try:
-            # Get the version tag using git describe
+        def git(*args) -> Optional[str]:
             result = subprocess.run(
-                ["git", "describe", "--tags", "--always"],
+                ["git", *args],
                 cwd=llama_cpp_dir,
                 capture_output=True,
                 text=True,
                 timeout=5
             )
+            out = result.stdout.strip()
+            return out if result.returncode == 0 and out else None
 
-            if result.returncode == 0 and result.stdout.strip():
-                full_version = result.stdout.strip()
-
-                # Extract just the tag portion (e.g., "b7574" from "b7574-123-gabcdef")
-                tag = full_version.split('-')[0] if full_version else None
-
+        try:
+            head_tags = (git("tag", "--points-at", "HEAD") or "").split()
+            build_tags = [t for t in head_tags if self._is_build_tag(t)]
+            if build_tags:
+                tag = max(build_tags, key=lambda t: int(t[1:]))
+                releases = [t for t in head_tags if re.fullmatch(r'v\d+(\.\d+)*', t)]
+                full_version = f"{tag} ({releases[-1]})" if releases else tag
                 return {'full_version': full_version, 'tag': tag}
+
+            # Not exactly on a build tag: describe relative to the nearest one,
+            # falling back to whatever git can say (release tag or commit hash)
+            full_version = (
+                git("describe", "--tags", "--match", "b[0-9]*")
+                or git("describe", "--tags", "--always")
+            )
+            if full_version:
+                # Extract just the tag portion (e.g., "b7574" from "b7574-123-gabcdef")
+                return {'full_version': full_version, 'tag': full_version.split('-')[0]}
         except Exception:
             pass
 
@@ -897,7 +1016,8 @@ class LlamaCppManager:
 
         Args:
             force: Force update even if already at target version
-            version: Specific version to checkout (None = use recommended LLAMA_CPP_VERSION)
+            version: Specific version to checkout (None = use recommended LLAMA_CPP_VERSION).
+                     Either a build tag ("b9544") or a stable release tag ("v0.9.0").
 
         Returns:
             Dict with 'status' ('success', 'already_updated', 'not_found', 'error')
@@ -920,6 +1040,15 @@ class LlamaCppManager:
 
         # Determine target version
         target_version = version if version else self.LLAMA_CPP_VERSION
+        try:
+            # Normalise stable release tags (v0.9.0) to their build tag (b12110)
+            # so scripts and binaries are tracked under the same identifier.
+            build_tag = self.resolve_build_tag(target_version)
+            if build_tag != target_version:
+                print(f"{theme['info']}llama.cpp {target_version} is build {build_tag}{Style.RESET_ALL}")
+                target_version = build_tag
+        except RuntimeError:
+            pass  # Both are git tags; the release tag checks out just as well
 
         # Check if llama.cpp directory exists
         if not llama_cpp_dir.exists():
@@ -940,7 +1069,7 @@ class LlamaCppManager:
                 version_info = self.get_installed_conversion_scripts_version_info()
                 current_version = version_info['full_version']
 
-                if current_version and target_version in current_version:
+                if current_version and (version_info['tag'] == target_version or target_version in current_version):
                     print(f"{theme['info']}Conversion scripts already at version {target_version}{Style.RESET_ALL}")
                     print(f"{theme['success']}Conversion scripts ready in {llama_cpp_dir}{Style.RESET_ALL}")
                     return {

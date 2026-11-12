@@ -430,21 +430,21 @@ class TestCudaResolution:
             "llama-b9999-bin-win-cuda-13.5-x64.zip",
         }
         with patch.object(m, '_get_release_asset_names', return_value=assets):
-            assert m._resolve_cuda_variant('b9999', 'cuda-13') == 'cuda-13.5'
+            assert m._resolve_backend_variant('b9999', 'cuda-13') == 'cuda-13.5'
 
     def test_legacy_exact_value_heals_to_current_patch(self):
         # User saved cuda-13.1, but the new release only ships cuda-13.3
         m = _bare_manager()
         assets = {"llama-b9544-bin-win-cuda-13.3-x64.zip"}
         with patch.object(m, '_get_release_asset_names', return_value=assets):
-            assert m._resolve_cuda_variant('b9544', 'cuda-13.1') == 'cuda-13.3'
+            assert m._resolve_backend_variant('b9544', 'cuda-13.1') == 'cuda-13.3'
 
     def test_non_cuda_and_offline_pass_through(self):
         m = _bare_manager()
         with patch.object(m, '_get_release_asset_names', return_value=set()):
-            assert m._resolve_cuda_variant('b9544', 'cpu') == 'cpu'
+            assert m._resolve_backend_variant('b9544', 'cpu') == 'cpu'
             # Offline (no assets): can't resolve, return input unchanged
-            assert m._resolve_cuda_variant('b9544', 'cuda-13') == 'cuda-13'
+            assert m._resolve_backend_variant('b9544', 'cuda-13') == 'cuda-13'
 
     def test_available_backends_memoized_for_latest(self):
         m = _bare_manager()
@@ -558,6 +558,23 @@ class TestVersionParsing:
 
         assert info['tag'] == 'b9544'  # not b32606
 
+    def test_parses_semver_style_version_line(self, tmp_path):
+        # Format printed by builds since llama.cpp adopted vX.Y.Z releases
+        m = _bare_manager()
+        cli = tmp_path / "llama-cli.exe"
+        cli.write_text("x")
+
+        fake = Mock(returncode=0, stdout="", stderr=(
+            "version: 0.9.0-dev (build 12110, commit cd959bae9)\n"
+            "built with Clang 19.1.5 for Windows x86_64\n"
+        ))
+        with patch.object(m, 'get_binary_path', return_value=cli), \
+             patch('subprocess.run', return_value=fake):
+            info = m.get_installed_version_info()
+
+        assert info['tag'] == 'b12110'
+        assert info['full_version'] == "version: 0.9.0-dev (build 12110, commit cd959bae9)"
+
 
 def _json_response(payload):
     """A urlopen() context-manager stand-in whose .read() yields JSON bytes."""
@@ -606,3 +623,179 @@ class TestAssetPagination:
             assert m._get_release_asset_names("b9544") == set()
         # Transient failure must not be cached
         assert "b9544" not in getattr(m, "_asset_cache", {})
+
+
+def _text_response(text):
+    """A urlopen() context-manager stand-in whose .read() yields text bytes."""
+    cm = Mock()
+    cm.__enter__ = Mock(return_value=Mock(read=Mock(return_value=text.encode())))
+    cm.__exit__ = Mock(return_value=False)
+    return cm
+
+
+class TestBuildTagResolution:
+    """Stable release tags (v0.9.0) must resolve to the build tag with binaries."""
+
+    def test_build_tag_passes_through_without_network(self):
+        m = _bare_manager()
+        with patch("gguf_converter.llama_cpp_manager.urlopen", side_effect=AssertionError("no network")):
+            assert m.resolve_build_tag("b9544") == "b9544"
+
+    def test_release_tag_resolved_via_nightly_tag_file(self):
+        m = _bare_manager()
+        with patch("gguf_converter.llama_cpp_manager.urlopen",
+                   return_value=_text_response("b12110\n")) as uo:
+            assert m.resolve_build_tag("v0.9.0") == "b12110"
+            assert m.resolve_build_tag("v0.9.0") == "b12110"
+        # Cached after the first lookup
+        assert uo.call_count == 1
+        assert uo.call_args[0][0].endswith("/releases/download/v0.9.0/nightly-tag.txt")
+        assert m.describe_version("v0.9.0") == "v0.9.0 (build b12110)"
+        assert m.describe_version("b9544") == "b9544"
+
+    def test_unresolvable_release_raises(self):
+        m = _bare_manager()
+        with patch("gguf_converter.llama_cpp_manager.urlopen", side_effect=OSError("404")):
+            with pytest.raises(RuntimeError):
+                m.resolve_build_tag("v0.9.0")
+        with patch("gguf_converter.llama_cpp_manager.urlopen",
+                   return_value=_text_response("<html>not a tag</html>")):
+            with pytest.raises(RuntimeError):
+                m.resolve_build_tag("v0.9.0")
+
+    def test_update_binaries_downloads_from_build_tag(self, tmp_path):
+        # The exact failure from the field: "latest" is v0.9.0, whose release has
+        # no binaries. The download must come from build b12110 instead.
+        m = _bare_manager()
+        m.bin_dir = tmp_path / "bin"
+        m.bin_dir.mkdir()
+        assets = {
+            "llama-b12110-bin-win-cpu-x64.zip",
+            "llama-b12110-bin-win-cuda-12.4-x64.zip",
+            "llama-b12110-bin-win-cuda-13.5-x64.zip",
+        }
+        urls = []
+
+        def fake_retrieve(url, path, reporthook=None):
+            urls.append(url)
+            Path(path).write_text("zip")
+
+        def fake_assets(tag):
+            return assets if tag == "b12110" else {"nightly-tag.txt"}
+
+        with patch.object(m, '_binaries_exist', return_value=False), \
+             patch.object(m, '_get_release_asset_names', side_effect=fake_assets), \
+             patch.object(m, '_check_disk_space', return_value=True), \
+             patch.object(m, '_cleanup_old_binaries'), \
+             patch.object(m, '_extract_archive'), \
+             patch.object(m, '_check_binary_files_exist', return_value=True), \
+             patch.object(m, '_write_bin_info') as write_info, \
+             patch("gguf_converter.llama_cpp_manager.urlopen", return_value=_text_response("b12110\n")), \
+             patch('gguf_converter.llama_cpp_manager.urlretrieve', side_effect=fake_retrieve):
+            m.update_binaries(version='v0.9.0', gpu_backend='cuda-13')
+
+        assert urls[0].endswith("/releases/download/b12110/llama-b12110-bin-win-cuda-13.5-x64.zip")
+        assert urls[1].endswith("/releases/download/b12110/cudart-llama-bin-win-cuda-13.5-x64.zip")
+        # Recorded under the build tag, which is what the binary itself reports
+        write_info.assert_called_once_with("b12110", "cuda-13")
+
+    def test_backend_list_inspects_build_not_release(self):
+        m = _bare_manager()
+        seen = []
+
+        def fake_assets(tag):
+            seen.append(tag)
+            return {"llama-b12110-bin-win-cuda-13.5-x64.zip"} if tag == "b12110" else {"nightly-tag.txt"}
+
+        with patch.object(m, 'get_latest_version', return_value='v0.9.0'), \
+             patch.object(m, '_get_release_asset_names', side_effect=fake_assets), \
+             patch("gguf_converter.llama_cpp_manager.urlopen", return_value=_text_response("b12110")):
+            backends = m.get_available_gpu_backends()
+
+        assert seen == ["b12110"]
+        assert ("CUDA 13.x (Nvidia)", "cuda-13") in backends
+        assert ("CUDA 12.x (Nvidia)", "cuda-12") not in backends
+
+
+class TestBackendVariants:
+    """Asset naming differs per platform and changes between releases."""
+
+    WIN_OLD = {
+        "llama-b9544-bin-win-cpu-x64.zip",
+        "llama-b9544-bin-win-cpu-arm64.zip",
+        "llama-b9544-bin-win-hip-radeon-x64.zip",
+        "llama-b9544-bin-win-vulkan-x64.zip",
+    }
+    WIN_NEW = {
+        "llama-b12110-bin-win-cpu-x64.zip",
+        "llama-b12110-bin-win-rocm-10.0-x64.zip",
+        "llama-b12110-bin-win-sycl-x64.zip",
+        "llama-b12110-bin-win-openvino-2026.4.1-x64.zip",
+        "llama-b12110-ui.tar.gz",
+    }
+    LINUX_NEW = {
+        "llama-b12110-bin-ubuntu-x64.tar.gz",
+        "llama-b12110-bin-ubuntu-arm64.tar.gz",
+        "llama-b12110-bin-ubuntu-26.04-s390x.tar.gz",
+        "llama-b12110-bin-ubuntu-cuda-13.5-x64.tar.gz",
+        "llama-b12110-bin-ubuntu-vulkan-x64.tar.gz",
+        "llama-b12110-bin-ubuntu-rocm-10.0-x64.tar.gz",
+        "cudart-llama-b12110-bin-ubuntu-cuda-13.5-x64.tar.gz",
+    }
+
+    def test_family_normalisation(self):
+        m = _bare_manager()
+        assert m._backend_family("cuda-13.5") == "cuda-13"
+        assert m._backend_family("rocm-10.0") == "rocm"
+        assert m._backend_family("hip-radeon") == "rocm"
+        assert m._backend_family("vulkan") == "vulkan"
+        assert m._backend_family("cpu") == "cpu"
+
+    def test_rocm_resolves_across_the_upstream_rename(self):
+        m = _bare_manager()
+        with patch.object(m, '_get_release_asset_names', return_value=self.WIN_OLD):
+            assert m._resolve_backend_variant('b9544', 'rocm') == 'hip-radeon'
+        with patch.object(m, '_get_release_asset_names', return_value=self.WIN_NEW):
+            assert m._resolve_backend_variant('b12110', 'rocm') == 'rocm-10.0'
+            # A preference saved under the old name keeps working
+            assert m._resolve_backend_variant('b12110', 'hip-radeon') == 'rocm-10.0'
+
+    def test_available_variants_per_platform(self):
+        win = _bare_manager()
+        with patch.object(win, '_get_release_asset_names', return_value=self.WIN_NEW):
+            assert win._available_variants('b12110') == {"cpu", "rocm-10.0", "sycl", "openvino-2026.4.1"}
+        linux = _bare_manager(os_name='ubuntu')
+        with patch.object(linux, '_get_release_asset_names', return_value=self.LINUX_NEW):
+            assert linux._available_variants('b12110') == {"cpu", "cuda-13.5", "vulkan", "rocm-10.0"}
+
+    def test_archive_filenames(self):
+        assert _bare_manager()._archive_filename('b1', 'cpu') == "llama-b1-bin-win-cpu-x64.zip"
+        assert _bare_manager()._archive_filename('b1', 'cuda-13.5') == "llama-b1-bin-win-cuda-13.5-x64.zip"
+        linux = _bare_manager(os_name='ubuntu')
+        assert linux._archive_filename('b1', 'cpu') == "llama-b1-bin-ubuntu-x64.tar.gz"
+        assert linux._archive_filename('b1', 'vulkan') == "llama-b1-bin-ubuntu-vulkan-x64.tar.gz"
+        mac = _bare_manager(os_name='macos', arch='arm64')
+        assert mac._archive_filename('b1', 'cpu') == "llama-b1-bin-macos-arm64.tar.gz"
+
+    def test_linux_downloads_selected_backend(self, tmp_path):
+        m = _bare_manager(os_name='ubuntu')
+        m.bin_dir = tmp_path / "bin"
+        m.bin_dir.mkdir()
+        urls = []
+
+        def fake_retrieve(url, path, reporthook=None):
+            urls.append(url)
+            Path(path).write_text("tar")
+
+        with patch.object(m, '_binaries_exist', return_value=False), \
+             patch.object(m, '_get_release_asset_names', return_value=self.LINUX_NEW), \
+             patch.object(m, '_check_disk_space', return_value=True), \
+             patch.object(m, '_cleanup_old_binaries'), \
+             patch.object(m, '_extract_archive'), \
+             patch.object(m, '_check_binary_files_exist', return_value=True), \
+             patch.object(m, '_write_bin_info'), \
+             patch('gguf_converter.llama_cpp_manager.urlretrieve', side_effect=fake_retrieve):
+            m.update_binaries(version='b12110', gpu_backend='cuda-13')
+
+        assert urls[0].endswith("/llama-b12110-bin-ubuntu-cuda-13.5-x64.tar.gz")
+        assert urls[1].endswith("/cudart-llama-b12110-bin-ubuntu-cuda-13.5-x64.tar.gz")

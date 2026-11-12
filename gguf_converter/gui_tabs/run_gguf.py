@@ -71,7 +71,8 @@ def build_cli_cmd(binary_path: str, model_file: str, params: Dict[str, Any]) -> 
     if params.get("mmproj_enabled") and params.get("mmproj_path"):
         cmd += ["--mmproj", params["mmproj_path"]]
     _append_sampling_args(cmd, params)
-    cmd += ["-cnv"]
+    # No -cnv: llama-cli is conversation-only now and rejects the flag
+    # ("invalid argument: -cnv") as of b12110.
     return cmd
 
 

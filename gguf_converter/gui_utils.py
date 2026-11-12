@@ -728,7 +728,7 @@ def display_binary_version_status(converter: Any) -> None:
         expected_numeric = expected_version.lstrip('b')
         if expected_numeric not in binary_info["version"]:
             # Extract numeric version from installed version for comparison
-            installed_match = re.search(r'b?(\d{4,5})', binary_info["version"])
+            installed_match = re.search(r'b?(\d{4,6})', binary_info["version"])
             if installed_match:
                 installed_numeric = int(installed_match.group(1))
                 expected_num = int(expected_numeric)
@@ -824,7 +824,7 @@ def display_conversion_scripts_version_status(converter: Any) -> None:
             st.info("You are on the latest YaGGUF-tested conversion scripts")
         else:
             # Extract numeric version from installed version for comparison
-            installed_match = re.search(r'b?(\d{4,5})', scripts_info["version"])
+            installed_match = re.search(r'b?(\d{4,6})', scripts_info["version"])
             if installed_match:
                 installed_numeric = int(installed_match.group(1))
                 expected_num = int(expected_numeric)
@@ -1110,7 +1110,11 @@ def detect_all_model_files(model_path: Path) -> Dict[str, Dict[str, Any]]:
     return detected_files
 
 
-def show_processing_overlay(message: str = "Processing...") -> Any:
+def show_processing_overlay(
+    message: str = "Processing...",
+    hint: str = "Please wait - do not close this tab",
+    block_reconnect_ui: bool = False,
+) -> Any:
     """
     Display a full-screen overlay that blocks all user interaction.
 
@@ -1120,6 +1124,14 @@ def show_processing_overlay(message: str = "Processing...") -> Any:
 
     Args:
         message: Text to display on the overlay (default: "Processing...")
+        hint: Secondary line under the spinner/message (default warns against
+            closing the tab).
+        block_reconnect_ui: When True, also hide Streamlit's native connection
+            status indicator and "Connection error" reconnect dialog, and lift
+            the overlay above them. Use this for operations that intentionally
+            kill the server (update + restart), where the native dialog would
+            otherwise scare users into refreshing instead of waiting for the
+            terminal to finish.
 
     Returns:
         A Streamlit empty container that can be cleared via .empty() to remove
@@ -1137,8 +1149,23 @@ def show_processing_overlay(message: str = "Processing...") -> Any:
         z-index to sit above Streamlit widgets. The pointer-events:all ensures
         clicks are captured by the overlay rather than passing through.
     """
+    # Max 32-bit z-index so the overlay also covers Streamlit's reconnect dialog
+    # (which uses far smaller internal z-index values). Plain overlays keep the
+    # original value so behaviour is unchanged for in-process operations.
+    z_index = 2147483647 if block_reconnect_ui else 1000001
+
+    # When the server is about to exit, suppress Streamlit's own reconnect UI so
+    # users see only our "please wait" overlay. Selectors are best-effort across
+    # Streamlit versions; the high z-index above is the primary defence.
+    reconnect_css = """
+        [data-testid="stStatusWidget"],
+        [data-testid="stConnectionStatus"] {
+            display: none !important;
+        }
+    """ if block_reconnect_ui else ""
     overlay_html = f"""
     <style>
+        {reconnect_css}
         .yagguf-processing-overlay {{
             position: fixed !important;
             top: 0 !important;
@@ -1146,7 +1173,7 @@ def show_processing_overlay(message: str = "Processing...") -> Any:
             width: 100vw !important;
             height: 100vh !important;
             background-color: rgba(14, 17, 23, 0.85) !important;
-            z-index: 1000001 !important;
+            z-index: {z_index} !important;
             display: flex !important;
             flex-direction: column;
             justify-content: center;
@@ -1185,7 +1212,7 @@ def show_processing_overlay(message: str = "Processing...") -> Any:
     <div class="yagguf-processing-overlay">
         <div class="yagguf-processing-spinner"></div>
         <div class="yagguf-processing-message">{message}</div>
-        <div class="yagguf-processing-hint">Please wait - do not close this tab</div>
+        <div class="yagguf-processing-hint">{hint}</div>
     </div>
     """
     placeholder = st.empty()

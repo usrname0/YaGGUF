@@ -31,7 +31,7 @@ if [ ! -d "venv" ]; then
             2) GPU_BACKEND="cuda-12" ;;
             3) GPU_BACKEND="cuda-13" ;;
             4) GPU_BACKEND="vulkan" ;;
-            5) GPU_BACKEND="hip-radeon" ;;
+            5) GPU_BACKEND="rocm" ;;
             *) GPU_BACKEND="cpu" ;;
         esac
     fi

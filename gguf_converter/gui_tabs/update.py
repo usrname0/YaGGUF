@@ -18,7 +18,12 @@ from ..theme import THEME as theme
 
 def strip_ansi_codes(text: str) -> str:
     """
-    Strip ANSI color/style escape codes from text for clean GUI display.
+    Clean captured terminal output for GUI display.
+
+    Strips ANSI color/style escape codes and applies carriage returns the way a
+    terminal would: a progress line rewritten with "\\r" keeps only its final
+    state. Without this a large download leaves thousands of progress updates
+    (megabytes of text) in the output, which freezes the browser when rendered.
 
     Args:
         text: String potentially containing ANSI escape sequences
@@ -26,7 +31,8 @@ def strip_ansi_codes(text: str) -> str:
     Returns:
         Clean string with all ANSI codes removed
     """
-    return re.sub(r'\x1b\[[0-9;]*m', '', text)
+    text = re.sub(r'\x1b\[[0-9;]*m', '', text)
+    return "\n".join(line.rsplit('\r', 1)[-1] for line in text.split('\n'))
 
 from ..gui_utils import (
     get_current_version, check_git_updates_available,
@@ -34,7 +40,8 @@ from ..gui_utils import (
     display_binary_version_status, get_conversion_scripts_info,
     display_conversion_scripts_version_status,
     strip_quotes, open_folder, browse_folder, save_config,
-    get_binary_version_from_path, TKINTER_AVAILABLE, get_platform_path
+    get_binary_version_from_path, TKINTER_AVAILABLE, get_platform_path,
+    show_processing_overlay
 )
 
 if TYPE_CHECKING:
@@ -132,13 +139,20 @@ def render_update_tab(converter: "GGUFConverter", config: Dict[str, Any]) -> Non
 
         # Display update message if present, otherwise show version comparison
         if st.session_state.yagguf_update_message:
-            st.info(st.session_state.yagguf_update_message)
-
             # If there's a pending update, execute it after displaying the message
             if 'pending_update' in st.session_state:
                 pending = st.session_state.pending_update
 
-                # Give Streamlit time to send the message to browser before exiting
+                # Full-screen overlay (with native reconnect dialog suppressed)
+                # reassures the user to wait for the terminal rather than acting
+                # on Streamlit's "connection lost" popup once the server exits.
+                show_processing_overlay(
+                    st.session_state.yagguf_update_message,
+                    hint="See terminal for progress. The GUI will restart automatically - do not close this tab.",
+                    block_reconnect_ui=True,
+                )
+
+                # Give Streamlit time to send the overlay to the browser before exiting
                 import time
                 time.sleep(1.0)
 
@@ -159,6 +173,9 @@ def render_update_tab(converter: "GGUFConverter", config: Dict[str, Any]) -> Non
 
                 # Exit Streamlit - this releases the port
                 os._exit(0)
+            else:
+                # Message set but update already kicked off - just show the note
+                st.info(st.session_state.yagguf_update_message)
         else:
             # Check if updates are available
             update_status = check_git_updates_available()
@@ -175,7 +192,7 @@ def render_update_tab(converter: "GGUFConverter", config: Dict[str, Any]) -> Non
     col_bin1, col_bin2 = st.columns(2)
     with col_bin1:
         st.subheader("Update: Llama.cpp Binaries")
-        st.markdown("Update the `llama.cpp` binaries. Choose **Recommended** for the tested version bundled with YaGGUF, or **Latest** for the newest llama.cpp release.")
+        st.markdown("Update the `llama.cpp` binaries. Choose **Recommended** for the tested version bundled with YaGGUF, or **Latest** for the newest stable llama.cpp release.")
         st.markdown("[View llama.cpp on GitHub](https://github.com/ggml-org/llama.cpp)")
 
         # GPU backend selector (platform-specific options)
@@ -185,9 +202,9 @@ def render_update_tab(converter: "GGUFConverter", config: Dict[str, Any]) -> Non
             backend_values = [value for _, value in available_backends]
             bin_info = st.session_state.converter.llama_cpp_manager._read_bin_info()
             installed_backend = bin_info.get("gpu_backend")
-            # Normalise legacy exact CUDA values (e.g. "cuda-13.1") to the major
-            # family ("cuda-13") so a previously saved preference still matches.
-            installed_family = st.session_state.converter.llama_cpp_manager._cuda_family(installed_backend or "")
+            # Normalise legacy exact values (e.g. "cuda-13.1", "hip-radeon") to the
+            # stored family ("cuda-13", "rocm") so a saved preference still matches.
+            installed_family = st.session_state.converter.llama_cpp_manager._backend_family(installed_backend or "")
             saved_backend = installed_family if installed_family in backend_values else backend_values[0]
             saved_index = backend_values.index(saved_backend)
 
@@ -233,7 +250,7 @@ def render_update_tab(converter: "GGUFConverter", config: Dict[str, Any]) -> Non
             with redirect_stdout(tee):  # type: ignore[arg-type]
                 try:
                     latest_version = st.session_state.converter.llama_cpp_manager.get_latest_version()
-                    print(f"{theme['info']}Latest version: {latest_version}{Style.RESET_ALL}")
+                    print(f"{theme['info']}Latest version: {st.session_state.converter.llama_cpp_manager.describe_version(latest_version)}{Style.RESET_ALL}")
                     st.session_state.converter.llama_cpp_manager.update_binaries(version=latest_version, gpu_backend=selected_backend)
                     st.toast("Binaries updated successfully!")
                     success = True
@@ -394,7 +411,7 @@ def render_update_tab(converter: "GGUFConverter", config: Dict[str, Any]) -> Non
     col_scripts1, col_scripts2 = st.columns(2)
     with col_scripts1:
         st.subheader("Update: Llama.cpp Conversion Scripts")
-        st.markdown("Update the `llama.cpp` repository that contains the `convert_hf_to_gguf.py` script. Choose **Recommended** for the tested version matching YaGGUF binaries, or **Latest** for the newest conversion scripts.")
+        st.markdown("Update the `llama.cpp` repository that contains the `convert_hf_to_gguf.py` script. Choose **Recommended** for the tested version matching YaGGUF binaries, or **Latest** for the newest stable llama.cpp release.")
         st.markdown("[View llama.cpp on GitHub](https://github.com/ggml-org/llama.cpp)")
 
         if st.button("Update Conversion Scripts - Recommended Version"):
@@ -433,8 +450,8 @@ def render_update_tab(converter: "GGUFConverter", config: Dict[str, Any]) -> Non
             with redirect_stdout(tee):  # type: ignore[arg-type]
                 try:
                     latest_version = st.session_state.converter.llama_cpp_manager.get_latest_version()
-                    print(f"{theme['info']}Latest version: {latest_version}{Style.RESET_ALL}")
-                    result = st.session_state.converter.llama_cpp_manager.update_conversion_scripts(version=latest_version)
+                    print(f"{theme['info']}Latest version: {st.session_state.converter.llama_cpp_manager.describe_version(latest_version)}{Style.RESET_ALL}")
+                    result =st.session_state.converter.llama_cpp_manager.update_conversion_scripts(version=latest_version)
                     if result['status'] in ['success', 'already_updated']:
                         st.toast("Conversion scripts updated successfully!")
                         success = True
@@ -595,9 +612,16 @@ def render_update_tab(converter: "GGUFConverter", config: Dict[str, Any]) -> Non
                 restart_script = Path(__file__).parent.parent.parent / "scripts" / "update_dependencies_and_restart.sh"
 
             if restart_script.exists():
-                st.info("See terminal for update progress... Please wait.")
+                # Full-screen overlay (with native reconnect dialog suppressed)
+                # reassures the user to wait for the terminal rather than acting
+                # on Streamlit's "connection lost" popup once the server exits.
+                show_processing_overlay(
+                    "Updating dependencies...",
+                    hint="See terminal for progress. The GUI will restart automatically - do not close this tab.",
+                    block_reconnect_ui=True,
+                )
 
-                # Give Streamlit time to send the message to browser before exiting
+                # Give Streamlit time to send the overlay to the browser before exiting
                 import time
                 time.sleep(0.5)
 

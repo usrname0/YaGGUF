@@ -43,7 +43,7 @@ def print_version_info():
         version = "unknown"
         for line in output.split("\n"):
             if line.startswith("version:"):
-                match = re.search(r"\b(b?\d{4,5})\b", line)
+                match = re.search(r"\b(b?\d{4,6})\b", line)
                 if match:
                     version = match.group(1) if match.group(1).startswith("b") else f"b{match.group(1)}"
                 break
